@@ -37,7 +37,7 @@ if __name__ == '__main__':
     # OSC interface
     osc = OscInterface(oscPortIN, oscPortOUT, mpv)
 
-    # RUN
+    # RUN 
     while osc.isRunning() and mpv.isRunning() and isRunning:
         time.sleep(1)
 
