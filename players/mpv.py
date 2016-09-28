@@ -2,14 +2,14 @@ from __future__ import print_function
 from termcolor import colored
 import socket
 import threading
+from base import BasePlayer
 
-class MpvInterface:
+class MpvPlayer(BasePlayer):
 
     def __init__(self, socketPath):
 
         self.name = "MPV"
         self.nameP = colored(self.name,'magenta')
-        self.stopEvent = threading.Event()
 
         # Connect to Socket
         self.sock = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
@@ -20,14 +20,14 @@ class MpvInterface:
 
         except socket.error, msg:
             print (self.nameP, msg)
-            self.stopEvent.set()
+            self.quit()
 
         # MPV Receive thread
-        self.recvThread = threading.Thread(target=self.receive)
+        self.recvThread = threading.Thread(target=self._receive)
         self.recvThread.start()
 
     # MPV Receive ipc THREAD
-    def receive(self):
+    def _receive(self):
 
         # Receive
         while not self.stopEvent.is_set():
@@ -47,22 +47,38 @@ class MpvInterface:
             # Socket error: exit
             except (socket.error, AssertionError) as e:
                 print(self.nameP, "Socket Error:",e)
-                self.stop()
+                self._quit()
 
         return
 
 
     # MPV Send ipc
-    def send(self, msg):
+    def _send(self, msg):
         self.sock.send(msg+'\n')
 
-    # Stop
-    def stop(self):
-        self.stopEvent.set()
-        if self.recvThread.isAlive():
-            self.recvThread.join()
+    # Quit
+    def quit(self):
+        super(MpvPlayer, self).quit()
+        if hasattr(self, 'recvThread'):
+            if self.recvThread.isAlive():
+                self.recvThread.join()
         self.sock.close()
         print(self.nameP, "stopped")
 
-    def isRunning(self):
-        return not self.stopEvent.is_set()
+    def validExt(self, file):
+        return True
+
+    def play(self, path):
+        self._send('{ "command": ["loadfile", "'+path+'"] }')
+
+    def stop(self):
+        self._send('{ "command": ["stop"] }')
+
+    def pause(self):
+        self._send('{ "command": ["set_property", "pause", true] }')
+
+    def resume(self):
+        self._send('{ "command": ["set_property", "pause", false] }')
+
+    def seekTo(self, milli):
+        print(self.nameP, "seek to", milli)

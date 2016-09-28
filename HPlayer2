@@ -7,8 +7,8 @@ import sys
 import signal
 from termcolor import colored
 
+from python.player import PlayerAbstract
 from python.osc import OscInterface
-from python.mpv import MpvInterface
 
 mpvPath = '/tmp/mpvsocket'
 oscPortIN = 4000
@@ -31,20 +31,21 @@ if __name__ == '__main__':
     nameP = colored(name,'green')
     print(nameP,"started. Welcome !");
 
-    # MPV interface
-    mpv = MpvInterface(mpvPath)
+    # PLAYER Abstraction
+    player = PlayerAbstract(name='j0nny', playerType='mpv')
 
     # OSC interface
-    osc = OscInterface(oscPortIN, oscPortOUT, mpv)
+    osc = OscInterface(oscPortIN, oscPortOUT, player)
 
-    # RUN 
-    while osc.isRunning() and mpv.isRunning() and isRunning:
+
+    # RUN
+    while osc.isRunning() and player.isRunning() and isRunning:
         time.sleep(1)
 
     # STOP
     print(nameP,"is closing..")
-    mpv.stop()
-    osc.stop()
+    if player.isRunning(): player.quit()
+    if osc.isRunning(): osc.quit()
 
     print(nameP,"stopped. Goodbye !");
     print()

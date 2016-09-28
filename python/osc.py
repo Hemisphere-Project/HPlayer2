@@ -13,14 +13,15 @@ class OscInterface:
 
         self.portIn = portIn
         self.portOut = portOut
+        self.player = player
 
         # OSC Server thread
-        self.recvThread = threading.Thread(target=self.receive, args=(player,))
+        self.recvThread = threading.Thread(target=self.receive)
         self.recvThread.start()
 
 
     # OSC receiver THREAD
-    def receive(self, player):
+    def receive(self):
 
         # OSC: Bind server
         try:
@@ -41,7 +42,7 @@ class OscInterface:
 
         @osc("/play")
         def play(path, args, types):
-            player.send('{ "command": ["loadfile", "'+args[0]+'"] }\n')
+            self.player.play(args[0])
 
         @osc("/playloop")
         def playloop(path, args, types):
@@ -60,15 +61,15 @@ class OscInterface:
 
         @osc("/stop")
         def stop(path, args, types):
-            player.send('{ "command": ["stop"] }')
+            self.player.stop()
 
         @osc("/pause")
         def pause():
-            player.send('{ "command": ["set_property", "pause", true] }')
+            self.player.pause()
 
         @osc("/resume")
         def resume():
-            player.send('{ "command": ["set_property", "pause", false] }')
+            self.player.resume()
 
         @osc("/next")
         def next(path, args, types):
@@ -142,7 +143,7 @@ class OscInterface:
         return
 
     # Stop
-    def stop(self):
+    def quit(self):
         self.stopEvent.set()
         if self.recvThread.isAlive():
             self.recvThread.join()
