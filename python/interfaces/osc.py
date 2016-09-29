@@ -5,11 +5,13 @@ import threading
 
 class OscInterface:
 
+    running = threading.Event()
+    running.set()
+
     def  __init__(self, portIn, portOut, player):
 
-        self.name = "OSC"
+        self.name = "OSC "+player.name
         self.nameP = colored(self.name,'blue')
-        self.stopEvent = threading.Event()
 
         self.portIn = portIn
         self.portOut = portOut
@@ -30,12 +32,13 @@ class OscInterface:
 
         except liblo.ServerError, e:
             print(self.nameP,  "OSC Error:", e)
-            self.stop()
+            self.isRunning(False)
 
         # OSC trigger decorator
         def osc(path, argsTypes=None):
             def handler(func):
-                oscServer.add_method(path, argsTypes, func)
+                if self.isRunning():
+                    oscServer.add_method(path, argsTypes, func)
                 return func
             return handler
 
@@ -128,7 +131,7 @@ class OscInterface:
 
         @osc("/quit")
         def quit(path, args, types):
-            self.stop()
+            self.isRunning(False)
 
         @osc(None, None)
         def fallback(path, args, types, src):
@@ -137,17 +140,18 @@ class OscInterface:
                 print (nameP, "argument of type", t, ":", a)
 
         # loop and dispatch messages every 100ms
-        while not self.stopEvent.is_set():
+        while self.isRunning():
             oscServer.recv(100)
 
         return
 
     # Stop
     def quit(self):
-        self.stopEvent.set()
-        if self.recvThread.isAlive():
-            self.recvThread.join()
+        self.isRunning(False)
+        self.recvThread.join()
         print(self.nameP, "stopped")
 
-    def isRunning(self):
-        return not self.stopEvent.is_set()
+    def isRunning(self, state=None):
+        if state is not None:
+            self.running.set() if state else self.running.clear()
+        return self.running.is_set()

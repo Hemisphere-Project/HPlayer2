@@ -4,20 +4,23 @@ import threading
 
 class BasePlayer(object):
 
-    stopEvent = threading.Event()
+    running = threading.Event()
+    running.set()
 
-    def __init__(self):
-        self.name = "Dummy IFACE"
+    def __init__(self, name):
+        self.name = "DUMMY "+name
         self.nameP = colored(self.name,'magenta')
 
     def onMediaEnd(self, callback):
         self.onEndCllbck = callback
 
-    def quit(self):
-        self.stopEvent.set()
+    def isRunning(self, state=None):
+        if state is not None:
+            self.running.set() if state else self.running.clear()
+        return self.running.is_set()
 
-    def isRunning(self):
-        return not self.stopEvent.is_set()
+    def quit(self):
+        self.isRunning(False)
 
     def validExt(self, file):
         return True
