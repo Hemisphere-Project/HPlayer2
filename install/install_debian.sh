@@ -8,7 +8,9 @@ sudo apt install git libtool build-essential pkg-config autoconf -y
 sudo apt install liblua5.1-0-dev libluajit-5.1-dev -y
 sudo apt install libvdpau-dev libva-dev libxv-dev libjpeg-dev libxkbcommon-dev libxinerama-dev -y
 sudo apt install libxrandr-dev libgles2-mesa-dev libgles1-mesa-dev libv4l-dev libxss-dev libgl1-mesa-dev -y
+sudo apt install libgl2-mesa-dev -y
 sudo apt install libcaca-dev libsdl2-dev libasound2-dev
+
 # hplayer2 dependencies
 
 
