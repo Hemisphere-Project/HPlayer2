@@ -1,6 +1,6 @@
 from __future__ import print_function
 from termcolor import colored
-import socket, threading, subprocess, time
+import socket, threading, subprocess, time, os
 from base import BasePlayer
 
 class MpvPlayer(BasePlayer):
@@ -11,8 +11,9 @@ class MpvPlayer(BasePlayer):
         self.nameP = colored(self.name,'magenta')
 
         # Subprocess
+        base_path = os.path.dirname(os.path.realpath(__file__))
         self.process = subprocess.Popen(
-                            ['mpv', '--input-ipc-server='+socketPath+'', '--idle=yes', '--no-osc', '--script=lua/welcome.lua', '--msg-level=ipc=v'],
+                            [base_path+'/../../bin/mpv', '--input-ipc-server='+socketPath+'', '--idle=yes', '--no-osc', '--script=lua/welcome.lua', '--msg-level=ipc=v'],
                             stdout=subprocess.PIPE, stdin=subprocess.PIPE,
                             bufsize = 1, universal_newlines = True)
 
@@ -43,7 +44,7 @@ class MpvPlayer(BasePlayer):
     # MPV Process stdout THREAD
     def _read(self):
 
-        while not self.process.poll():
+        while not self.process.poll() and self.isRunning():
             out = self.process.stdout.readline()
             if out.strip():
                 #print(self.nameP, "subproc says", out.strip())
@@ -92,8 +93,9 @@ class MpvPlayer(BasePlayer):
     def quit(self):
         self.isRunning(False)
         self.sock.close()
-        if not self.process.poll():
+        try:
             self.process.terminate()
+        except: pass
         self.procThread.join()
         self.recvThread.join()
         print(self.nameP, "stopped")

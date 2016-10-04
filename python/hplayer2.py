@@ -1,5 +1,5 @@
 from __future__ import print_function
-import time, signal
+import time, signal, sys
 from termcolor import colored
 
 from player import PlayerAbstract
