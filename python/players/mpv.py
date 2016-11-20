@@ -1,6 +1,6 @@
 from __future__ import print_function
 from termcolor import colored
-import socket, threading, subprocess, time, os
+import socket, threading, subprocess, time, os, json
 from base import BasePlayer
 
 class MpvPlayer(BasePlayer):
@@ -13,7 +13,13 @@ class MpvPlayer(BasePlayer):
         # Subprocess
         base_path = os.path.dirname(os.path.realpath(__file__))
         self.process = subprocess.Popen(
-                            [base_path+'/../../bin/mpv', '--input-ipc-server='+socketPath+'', '--idle=yes', '--no-osc', '--script=lua/welcome.lua', '--msg-level=ipc=v'],
+                            [base_path+'/../../bin/mpv', '--input-ipc-server='+socketPath+'',
+                                '--idle=yes', '--no-osc', '--script=lua/welcome.lua', '--msg-level=ipc=v'
+                                ,'--force-window=yes'
+                                ,'--window-scale=0.5'
+                                #, '--fs'
+                                ,'--keep-open'
+                                ],
                             stdout=subprocess.PIPE, stdin=subprocess.PIPE,
                             bufsize = 1, universal_newlines = True)
 
@@ -57,6 +63,10 @@ class MpvPlayer(BasePlayer):
     # MPV ipc receive THREAD
     def _receive(self):
 
+        # Listener
+        self._send('{ "command": ["observe_property", 1, "eof-reached"] }')
+        self._send('{ "command": ["observe_property", 2, "core-idle"] }')
+
         # Receive
         while self.isRunning():
 
@@ -66,6 +76,24 @@ class MpvPlayer(BasePlayer):
                 assert len(msg) != 0, "disconnected from MPV process"
 
                 # Message received
+                for event in msg.rstrip().split("\n"):
+                    try:
+                        mpvsays = json.loads(event)
+                    except:
+                        #print(self.nameP, "IPC invalid json:", event)
+                        pass
+
+                    if 'name' in mpvsays:
+                        if mpvsays['name'] == 'eof-reached' and mpvsays['data'] == True:
+                            self.trigger('end')
+                            pass
+                        elif mpvsays['name'] == 'core-idle':
+                            self._status['isPlaying'] = not mpvsays['data']
+                        else:
+                            pass
+                            #print(self.nameP, "IPC event:", mpvsays['event'])
+
+
                 #print(self.nameP, "IPC says:", msg.rstrip())
 
             # Timeout: retry
@@ -104,7 +132,10 @@ class MpvPlayer(BasePlayer):
         return True
 
     def play(self, path):
+
+        print(self.nameP, "play", path)
         self._send('{ "command": ["loadfile", "'+path+'"] }')
+        self._send('{ "command": ["set_property", "pause", false] }')
 
     def stop(self):
         self._send('{ "command": ["stop"] }')

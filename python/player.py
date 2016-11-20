@@ -6,10 +6,11 @@ from players.base import BasePlayer
 from players.mpv import MpvPlayer
 
 from interfaces.osc import OscInterface
+from interfaces.http import HttpInterface
 
 class PlayerAbstract:
 
-    def __init__(self, name=None, player=None):
+    def __init__(self, name=None, player=None, basepath=None):
 
         self.name = name if name else 'unknown'
         self.nameP = colored('PLAYER '+self.name,'cyan')
@@ -20,7 +21,7 @@ class PlayerAbstract:
         self.random = False
         self.zoom = 100
 
-        self.basepath = '~/media/'
+        self.basepath = basepath if basepath else '~/media/'
         self.playlist = []
         self.currentIndex = -1
 
@@ -34,16 +35,11 @@ class PlayerAbstract:
 
         # Interfaces
         self.interfaces = []
-        # for iface in interfaces:
-        #     if iface == 'osc':
-        #         self.interfaces.append( OscInterface(oscPortIN, oscPortOUT, player1) )
-        #     else:
-        #         print(self.nameP, 'unknown interface',iface)
-        #
-        #
-        #     self.interfaces.append()
 
-        self.player.onMediaEnd(self.next)
+        # play the whole directory
+        self.player.on('end', self.next)
+
+        print(self.nameP, "started - basepath:", self.basepath)
 
 
     def addInterface(self, iface, args=[]):
@@ -52,7 +48,16 @@ class PlayerAbstract:
             if len(args) < 2:
                 print(self.nameP, 'OSC interface needs in and out port arguments')
             else:
-                self.interfaces.append( OscInterface(args[0], args[1], self) )
+                self.interfaces.append( OscInterface(self, args[0], args[1]) )
+                return self.interfaces[-1]
+
+        elif iface == 'http':
+            if len(args) < 0:
+                print(self.nameP, 'HTTP interface needs ..')
+            else:
+                self.interfaces.append( HttpInterface(self) )
+                return self.interfaces[-1]
+
         else:
             print(self.nameP, 'unknown interface',iface)
 
@@ -62,6 +67,11 @@ class PlayerAbstract:
             iface.quit()
         self.player.quit()
 
+    def on(self, event, callback):
+        self.player.on(event, callback)
+
+    def trigger(self, event):
+        self.player.trigger(event)
 
     def isRunning(self):
         for iface in self.interfaces:
@@ -90,6 +100,8 @@ class PlayerAbstract:
             elif os.path.isfile(self.basepath+entry):
                 if self.player.validExt(entry):
                     newlist.append(self.basepath+entry)
+            else:
+                print(self.nameP, "can't find", entry, "- skipping..")
 
         with self.lock:
             self.playlist = newlist
@@ -103,11 +115,16 @@ class PlayerAbstract:
 
 
     def play_index(self, index):
+        error = False
         with self.lock:
             if index >= 0 and index < len(self.playlist):
                 self.player.play(self.playlist[index])
             else:
-                self.stop()
+                print(self.nameP, "no file to play..")
+                error = True
+
+        if error:
+            self.stop()
 
 
     def stop(self):
@@ -134,3 +151,9 @@ class PlayerAbstract:
 
     def seekTo(self, milli):
         self.player.seekTo(milli)
+
+    def status(self):
+        return self.player.status()
+
+    def isPlaying(self):
+        return self.player.status()['isPlaying']

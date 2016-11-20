@@ -19,11 +19,12 @@ def signal_handler(signal, frame):
 signal.signal(signal.SIGINT, signal_handler)
 
 
-def CreatePlayer(name, player):
+def CreatePlayer(name, player, basepath):
     if name in players:
         print(nameP,"player",name,"already exists")
     else:
-        players[name] = PlayerAbstract(name=name, player=player)
+        players[name] = PlayerAbstract(name=name, player=player, basepath=basepath)
+    return players[name]
 
 def Player(name):
     if name not in players:
@@ -47,15 +48,27 @@ if __name__ == '__main__':
     print('\n'+nameP,"started. Welcome !");
 
     # Add PLAYER
-    CreatePlayer(name='j0nny', player='mpv')
-    Player('j0nny').addInterface('osc', [oscPortIN, oscPortOUT])
+    player = CreatePlayer(name='j0nny', player='mpv', basepath='/media/usb/')
+    player.addInterface('osc', [oscPortIN, oscPortOUT])
+    player.addInterface('http')
 
-    # Add PLAYER
-    CreatePlayer(name='r4ymond', player='mpv')
-    Player('r4ymond').addInterface('osc', [oscPortIN+100, oscPortOUT+100])
+    # GADAGNE logic
+    #defaultFile = 'cut.mp4'
+    fails = True
+    defaultFile = '2015-11-01-ink.mp4'
+    push1File = '2015-09-04-smoke.mp4'
+    player.on('end', lambda: Player('j0nny').play(defaultFile) )
+    player.on('push1', lambda: Player('j0nny').play(push1File) )
+
 
     # RUN
     while isRunning():
+
+        # GADAGNE logic
+        if Player('j0nny').isPlaying(): fails=False
+        elif fails: Player('j0nny').play(defaultFile)
+        else: fails=True
+
         time.sleep(1)
 
     # STOP

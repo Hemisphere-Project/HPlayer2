@@ -1,25 +1,22 @@
 from __future__ import print_function
 from termcolor import colored
+from interfaces.base import BaseInterface
 import liblo
-import threading
 
-class OscInterface:
 
-    running = threading.Event()
-    running.set()
+class OscInterface (BaseInterface):
 
-    def  __init__(self, portIn, portOut, player):
+    def  __init__(self, player, portIn, portOut):
+
+        super(OscInterface, self).__init__(player)
 
         self.name = "OSC "+player.name
         self.nameP = colored(self.name,'blue')
 
         self.portIn = portIn
         self.portOut = portOut
-        self.player = player
 
-        # OSC Server thread
-        self.recvThread = threading.Thread(target=self.receive)
-        self.recvThread.start()
+        self.start()
 
 
     # OSC receiver THREAD
@@ -144,14 +141,3 @@ class OscInterface:
             oscServer.recv(100)
 
         return
-
-    # Stop
-    def quit(self):
-        self.isRunning(False)
-        self.recvThread.join()
-        print(self.nameP, "stopped")
-
-    def isRunning(self, state=None):
-        if state is not None:
-            self.running.set() if state else self.running.clear()
-        return self.running.is_set()
