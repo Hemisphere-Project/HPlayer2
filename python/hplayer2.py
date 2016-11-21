@@ -56,10 +56,14 @@ if __name__ == '__main__':
     #defaultFile = 'cut.mp4'
     fails = True
     defaultFile = '2015-11-01-ink.mp4'
-    push1File = '2015-09-04-smoke.mp4'
+    #push1File = '2015-09-04-smoke.mp4'
+    push1File = 'cut.mp4'
+    push2File = 'cut2.mp4'
+    push3File = 'cut3.mp4'
     player.on('end', lambda: Player('j0nny').play(defaultFile) )
     player.on('push1', lambda: Player('j0nny').play(push1File) )
-
+    player.on('push2', lambda: Player('j0nny').play(push2File) )
+    player.on('push3', lambda: Player('j0nny').play(push3File) )
 
     # RUN
     while isRunning():

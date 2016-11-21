@@ -38,6 +38,7 @@ class HttpInterface (BaseInterface):
                 return u'It is me again at {0} with {1}'.format(args, kwargs)
 
         cherrypy.server.socket_port = 8080
+        cherrypy.server.socket_host = '0.0.0.0'
         #cherrypy.server.socket_host = optional hostname
         cherrypy.tree.mount(HelloWorld(player), "/", None)
 
