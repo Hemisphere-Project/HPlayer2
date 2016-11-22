@@ -17,6 +17,11 @@ sudo apt install libcaca-dev libsdl2-dev libasound2-dev -y
 # hplayer2 dependencies
 sudo apt install python-termcolor python-liblo python-cherrypy -y
 
+# GPIO RPi
+if [[ $(uname -m) = armv* ]]; then
+	sudo apt-get install python-rpi.gpio -y
+fi
+
 #######
 # BUILD
 #######
