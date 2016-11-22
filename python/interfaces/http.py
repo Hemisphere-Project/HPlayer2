@@ -33,41 +33,23 @@ class HttpInterface (BaseInterface):
                 return "stop"
 
             @cherrypy.expose
+            def pause(self):
+                self.player.pause()
+                return "pause"
+
+            @cherrypy.expose
+            def resume(self):
+                self.player.resume()
+                return "resume"
+
+            @cherrypy.expose
             def event(self, *args, **kwargs):
                 self.player.trigger(args[0])
-                return u'It is me again at {0} with {1}'.format(args, kwargs)
+                return u'Event {0} triggered with {1}'.format(args[0], kwargs)
 
         cherrypy.server.socket_port = 8080
         cherrypy.server.socket_host = '0.0.0.0'
-        #cherrypy.server.socket_host = optional hostname
         cherrypy.tree.mount(HelloWorld(player), "/", None)
-
-        #
-        # @app.route("/")
-        # def hello():
-        #     return "Hello World!"
-        #
-        # @app.route("/play", methods='POST')
-        # def play():
-        #     media = request.form['media']
-        #     self.player.play(media)
-        #     return "play "+media
-        #
-        # @app.route("/stop", methods='POST')
-        # def stop(path, args, types):
-        #     self.player.stop()
-        #
-        # @app.route("/pause", methods='POST')
-        # def pause():
-        #     self.player.pause()
-        #
-        # @app.route("/resume", methods='POST')
-        # def resume():
-        #     self.player.resume()
-        #
-        # @app.route("/quit", methods='POST')
-        # def quit(path, args, types):
-        #     self.isRunning(False)
 
         self.start()
 
@@ -80,6 +62,7 @@ class HttpInterface (BaseInterface):
 
         while self.isRunning() and cherrypy.engine.state == cherrypy.engine.states.STARTED:
             sleep(0.1)
+
         cherrypy.engine.exit()
         cherrypy.server.stop()
         self.isRunning(False)

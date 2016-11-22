@@ -7,7 +7,7 @@
 const char* ssid     = "interweb";
 const char* password = "superspeed37";
  
-const char* host = "192.168.0.39";
+const char* host = "192.168.0.24";
 const int httpPort = 8080;
 
 const int pin1 = 12;

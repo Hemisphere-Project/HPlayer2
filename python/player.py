@@ -7,6 +7,7 @@ from players.mpv import MpvPlayer
 
 from interfaces.osc import OscInterface
 from interfaces.http import HttpInterface
+from interfaces.gpio import GpioInterface
 
 class PlayerAbstract:
 
@@ -56,6 +57,13 @@ class PlayerAbstract:
                 print(self.nameP, 'HTTP interface needs ..')
             else:
                 self.interfaces.append( HttpInterface(self) )
+                return self.interfaces[-1]
+
+        elif iface == 'gpio':
+            if len(args) < 1:
+                print(self.nameP, 'GPIO interface needs pinouts')
+            else:
+                self.interfaces.append( GpioInterface(self, args) )
                 return self.interfaces[-1]
 
         else:

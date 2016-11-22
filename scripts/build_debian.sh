@@ -15,7 +15,8 @@ sudo apt install libxrandr-dev libgles2-mesa-dev libgles1-mesa-dev libv4l-dev li
 sudo apt install libcaca-dev libsdl2-dev libasound2-dev -y
 
 # hplayer2 dependencies
-sudo apt install python-termcolor python-liblo python-cherrypy -y
+sudo apt install usbmount python-pip python-termcolor python-liblo -y
+sudo pip install cherrypy
 
 # GPIO RPi
 if [[ $(uname -m) = armv* ]]; then
