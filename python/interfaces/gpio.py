@@ -4,9 +4,11 @@ from time import sleep
 from interfaces.base import BaseInterface
 import RPi.GPIO as GPIO
 
-DEBOUNCE = 200
+DEBOUNCE = 50
 
 class GpioInterface (BaseInterface):
+
+    state = {}
 
     def  __init__(self, player, pins):
 
@@ -17,8 +19,7 @@ class GpioInterface (BaseInterface):
 
         self.pins = pins
         GPIO.setmode(GPIO.BCM)
-        for pin in pins:
-            GPIO.setup(pin, GPIO.IN, pull_up_down = GPIO.PUD_UP)
+        GPIO.setup(pins, GPIO.IN, pull_up_down = GPIO.PUD_UP)
 
         self.start()
 
@@ -27,7 +28,20 @@ class GpioInterface (BaseInterface):
     def receive(self):
 
         print(self.nameP, "starting GPIO listener")
-        GPIO.add_event_detect(24, GPIO.FALLING, callback=lambda:self.player.trigger('gpio'+str(24)), bouncetime=DEBOUNCE)
+
+        def clbck(pin):
+            #print(self.nameP, "channel", channel, "triggered")
+            if not GPIO.input(pin):
+                if not self.state[pin]:
+                    self.player.trigger('gpio'+str(pin))
+                self.state[pin] = True
+            else:
+                self.state[pin] = False
+
+        for pin in self.pins:
+            #print(self.nameP, "channel", pin, "watched")
+            self.state[pin] = False
+            GPIO.add_event_detect(pin, GPIO.BOTH, callback=clbck, bouncetime=DEBOUNCE)
 
         while self.isRunning():
             sleep(0.1)

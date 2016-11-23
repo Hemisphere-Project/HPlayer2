@@ -53,10 +53,10 @@ class PlayerAbstract:
                 return self.interfaces[-1]
 
         elif iface == 'http':
-            if len(args) < 0:
-                print(self.nameP, 'HTTP interface needs ..')
+            if len(args) < 1:
+                print(self.nameP, 'HTTP interface needs port')
             else:
-                self.interfaces.append( HttpInterface(self) )
+                self.interfaces.append( HttpInterface(self, args) )
                 return self.interfaces[-1]
 
         elif iface == 'gpio':
@@ -90,11 +90,11 @@ class PlayerAbstract:
 
     def load(self, playlist=None):
 
-        if type(playlist) is str:
-            playlist = [playlist]
-
         if not playlist:
             playlist = self.basepath
+
+        if not type(playlist) is list:
+            playlist = [playlist]
 
         newlist = []
         for entry in playlist:

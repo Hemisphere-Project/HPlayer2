@@ -21,11 +21,14 @@ class BasePlayer(object):
 
     def on(self, event, callback):
         if callback:
-            self._events[event] = callback
+            if not type(event) is list:
+                event = [event]
+            for e in event:
+                self._events[e] = callback
 
     def trigger(self, event):
         if event in self._events:
-            print(self.nameP, event)
+            print(self.nameP, "event:", event)
             self._events[event]()
 
     def isRunning(self, state=None):

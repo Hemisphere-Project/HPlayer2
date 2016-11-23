@@ -6,7 +6,7 @@ import cherrypy
 
 class HttpInterface (BaseInterface):
 
-    def  __init__(self, player):
+    def  __init__(self, player, params):
 
         super(HttpInterface, self).__init__(player)
 
@@ -47,9 +47,10 @@ class HttpInterface (BaseInterface):
                 self.player.trigger(args[0])
                 return u'Event {0} triggered with {1}'.format(args[0], kwargs)
 
-        cherrypy.server.socket_port = 8080
+        cherrypy.server.socket_port = params[0]
         cherrypy.server.socket_host = '0.0.0.0'
-        cherrypy.tree.mount(HelloWorld(player), "/", None)
+        cherrypy.log.screen = False
+        cherrypy.tree.mount(HelloWorld(player), "/", {'/':{}})
 
         self.start()
 

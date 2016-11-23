@@ -7,6 +7,8 @@ from player import PlayerAbstract
 oscPortIN = 4000
 oscPortOUT = 4001
 
+httpPort = 8080
+
 runningFlag = True
 
 players = {}
@@ -47,34 +49,42 @@ if __name__ == '__main__':
     nameP = colored(name,'green')
     print('\n'+nameP,"started. Welcome !");
 
-    # Add PLAYER
-    player = CreatePlayer(name='j0nny', player='mpv', basepath='/media/usb/')
-    player.addInterface('osc', [oscPortIN, oscPortOUT])
-    player.addInterface('http')
+    # PLAYER
+    player = CreatePlayer(name='gadagne', player='mpv', basepath='/media/usb/')
+
+    # Interfaces
+    # player.addInterface('osc', [oscPortIN, oscPortOUT])
+    player.addInterface('http', [httpPort])
+    player.addInterface('gpio', [16,19,20,21,26])
 
     # GADAGNE logic
     #defaultFile = 'cut.mp4'
-    fails = True
-    defaultFile = '2015-11-01-ink.mp4'
-    #push1File = '2015-09-04-smoke.mp4'
-    push1File = 'cut.mp4'
-    push2File = 'cut2.mp4'
-    push3File = 'cut3.mp4'
+    fails = 100
+    defaultFile = 'bike.mp4'
+    push1File = 'jellies.mp4'
+    push2File = 'rocks.mp4'
+    push3File = 'sintel.mp4'
 
-    player.on('end', lambda: Player('j0nny').play(defaultFile) )
-    player.on('push1', lambda: Player('j0nny').play(push1File) )
-    player.on('push2', lambda: Player('j0nny').play(push2File) )
-    player.on('push3', lambda: Player('j0nny').play(push3File) )
+    # Loop default file
+    player.on('end', lambda: player.play(defaultFile) )
 
-    player.on('gpio24', lambda: Player('j0nny').play(push1File) )
+    # HTTP + GPIO events
+    player.on(['push1', 'gpio20'], lambda: player.play(push1File) )
+    player.on(['push2', 'gpio21'], lambda: player.play(push2File) )
+    player.on(['push3', 'gpio26'], lambda: player.play(push3File) )
+
 
     # RUN
     while isRunning():
 
         # GADAGNE logic
-        if Player('j0nny').isPlaying(): fails=False
-        elif fails: Player('j0nny').play(defaultFile)
-        else: fails=True
+        if player.isPlaying():
+            fails=0
+        elif fails>5:
+            print(nameP,"reset to Default Video");
+            player.play(defaultFile)
+        else:
+            fails+=1
 
         time.sleep(1)
 
