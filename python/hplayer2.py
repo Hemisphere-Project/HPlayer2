@@ -58,12 +58,11 @@ if __name__ == '__main__':
     player.addInterface('gpio', [16,19,20,21,26])
 
     # GADAGNE logic
-    #defaultFile = 'cut.mp4'
     fails = 100
-    defaultFile = 'bike.mp4'
-    push1File = 'jellies.mp4'
-    push2File = 'rocks.mp4'
-    push3File = 'sintel.mp4'
+    defaultFile = 'media0.mp4'
+    push1File = 'media1.mp4'
+    push2File = 'media2.mp4'
+    push3File = 'media3.mp4'
 
     # Loop default file
     player.on('end', lambda: player.play(defaultFile) )

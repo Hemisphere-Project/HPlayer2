@@ -30,7 +30,7 @@ class PlayerAbstract:
 
         # Real player
         if player == 'mpv':
-            self.player = MpvPlayer(self.name, '/tmp/hplayer-'+self.name)
+            self.player = MpvPlayer(self.name, '/var/tmp/hplayer-'+self.name)
         else:
             self.player = BasePlayer(self.name)
 

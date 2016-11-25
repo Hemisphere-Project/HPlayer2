@@ -37,7 +37,7 @@ class MpvPlayer(BasePlayer):
                 break
             except socket.error, msg:
                 if retry == 1:
-                    print (self.nameP, msg)
+                    print (self.nameP, "socket error:", msg)
                     self.isRunning(False)
                 else:
                     time.sleep(0.1)
