@@ -1,0 +1,12 @@
+[Unit]
+DefaultDependencies=no
+After=local-fs.target
+
+[Service]
+StandardInput=tty
+StandardOutput=tty
+ExecStart=/usr/bin/fbi -d /dev/fb0\
+  --once --noverbose --autozoom /home/pi/splash.png
+
+[Install]
+WantedBy=sysinit.target
