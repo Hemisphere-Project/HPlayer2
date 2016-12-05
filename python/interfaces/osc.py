@@ -1,20 +1,24 @@
 from __future__ import print_function
 from termcolor import colored
-from interfaces.base import BaseInterface
+from base import BaseInterface
 import liblo
 
 
 class OscInterface (BaseInterface):
 
-    def  __init__(self, player, portIn, portOut):
+    def  __init__(self, player, args):
+
+        if len(args) < 2:
+            print(self.nameP, 'OSC interface needs in and out port arguments')
+            return
 
         super(OscInterface, self).__init__(player)
 
         self.name = "OSC "+player.name
         self.nameP = colored(self.name,'blue')
 
-        self.portIn = portIn
-        self.portOut = portOut
+        self.portIn = args[0]
+        self.portOut = args[1]
 
         self.start()
 

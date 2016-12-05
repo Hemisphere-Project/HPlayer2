@@ -1,19 +1,27 @@
 from __future__ import print_function
 from termcolor import colored
-import socket, threading, subprocess, time, os, json
+import socket, threading, subprocess, os, json
+from time import sleep
 from base import BasePlayer
 
 class MpvPlayer(BasePlayer):
 
-    def __init__(self, name, socketPath):
+    def __init__(self, name=None):
+
+        name = name.replace(" ", "_")
+        if not name:
+            import time
+            name = time.time()
 
         self.name = "MPV "+name
         self.nameP = colored(self.name,'magenta')
 
+        socketpath = '/tmp/hplayer-' + name
+
         # Subprocess
-        base_path = os.path.dirname(os.path.realpath(__file__))
+        script_path = os.path.dirname(os.path.realpath(__file__))
         self.process = subprocess.Popen(
-                            [base_path+'/../../bin/mpv', '--input-ipc-server='+socketPath+'',
+                            [script_path+'/../../bin/mpv', '--input-ipc-server=' + socketpath + '',
                                 '--idle=yes', '--no-osc', '--script=lua/welcome.lua', '--msg-level=ipc=v', '--quiet'
                                 ,'--force-window=yes'
                                 ,'--window-scale=0.5'
@@ -31,16 +39,16 @@ class MpvPlayer(BasePlayer):
         self.sock = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
         for retry in xrange(10, 0, -1):
             try:
-                self.sock.connect(socketPath)
+                self.sock.connect(socketpath)
                 self.sock.settimeout(0.1)
-                print(self.nameP, "connected to MPV at", socketPath)
+                print(self.nameP, "connected to MPV at", socketpath)
                 break
             except socket.error, msg:
                 if retry == 1:
                     print (self.nameP, "socket error:", msg)
                     self.isRunning(False)
                 else:
-                    time.sleep(0.1)
+                    sleep(0.1)
 
         # Socket Receive thread
         self.recvThread = threading.Thread(target=self._receive)
@@ -114,11 +122,11 @@ class MpvPlayer(BasePlayer):
         self.sock.send(msg+'\n')
 
     ########################
-    # OVERLOAD Base Player #
+    # OVERLOAD Abstract Player #
     ########################
 
     # Quit
-    def quit(self):
+    def _quit(self):
         self.isRunning(False)
         self.sock.close()
         try:
@@ -128,23 +136,19 @@ class MpvPlayer(BasePlayer):
         self.recvThread.join()
         print(self.nameP, "stopped")
 
-    def validExt(self, file):
-        return True
-
-    def play(self, path):
-
+    def _play(self, path):
         print(self.nameP, "play", path)
         self._send('{ "command": ["loadfile", "'+path+'"] }')
         self._send('{ "command": ["set_property", "pause", false] }')
 
-    def stop(self):
+    def _stop(self):
         self._send('{ "command": ["stop"] }')
 
-    def pause(self):
+    def _pause(self):
         self._send('{ "command": ["set_property", "pause", true] }')
 
-    def resume(self):
+    def _resume(self):
         self._send('{ "command": ["set_property", "pause", false] }')
 
-    def seekTo(self, milli):
+    def _seekTo(self, milli):
         print(self.nameP, "seek to", milli)

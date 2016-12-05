@@ -1,17 +1,20 @@
 from __future__ import print_function
 from termcolor import colored
 from time import sleep
-from interfaces.base import BaseInterface
+from base import BaseInterface
 import cherrypy
 
 class HttpInterface (BaseInterface):
 
-    def  __init__(self, player, params):
+    def  __init__(self, player, args):
+
+        if len(args) < 1:
+            print(self.nameP, 'HTTP interface needs a port')
 
         super(HttpInterface, self).__init__(player)
 
         self.name = "HTTP "+player.name
-        self.nameP = colored(self.name,'blue')
+        self.nameP = colored(self.name, 'blue')
 
         class HelloWorld(object):
 
@@ -47,13 +50,12 @@ class HttpInterface (BaseInterface):
                 self.player.trigger(args[0])
                 return u'Event {0} triggered with {1}'.format(args[0], kwargs)
 
-        cherrypy.server.socket_port = params[0]
+        cherrypy.server.socket_port = args[0]
         cherrypy.server.socket_host = '0.0.0.0'
         cherrypy.log.screen = False
         cherrypy.tree.mount(HelloWorld(player), "/", {'/':{}})
 
         self.start()
-
 
     # HTTP receiver THREAD
     def receive(self):
