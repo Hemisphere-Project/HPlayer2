@@ -15,7 +15,7 @@ sudo apt install libxrandr-dev libgles2-mesa-dev libgles1-mesa-dev libv4l-dev li
 sudo apt install libcaca-dev libsdl2-dev libasound2-dev -y
 
 # hplayer2 dependencies
-sudo apt install usbmount python-pip python-termcolor python-liblo -y
+sudo apt install python-pip python-termcolor python-liblo -y
 sudo pip install cherrypy
 
 # GPIO RPi
