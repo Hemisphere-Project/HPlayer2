@@ -16,7 +16,9 @@ Download the project, install dependencies, build mpv for your plateform
 
 xBian version (Ubuntu, Debian, Raspbian):
 
-  wget -O - https://raw.githubusercontent.com/Hemisphere-Project/HPlayer2/master/scripts/remote_install.sh | bash
+```
+wget -O - https://raw.githubusercontent.com/Hemisphere-Project/HPlayer2/master/scripts/remote_install.sh | bash
+```
 
 Beware that it will take some time, especially on Raspberry Pi, since MPV is recompiled on spot.
 
@@ -25,7 +27,9 @@ Beware that it will take some time, especially on Raspberry Pi, since MPV is rec
 
 Go the HPlayer2 directory and run it:
 
-  ./hplayer2
+```
+./hplayer2
+```
 
 For now, it might not work out of the box.
 You can tweak the behaviour by editing python/hplayer2.py
