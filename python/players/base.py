@@ -4,8 +4,7 @@ import os
 import threading
 from termcolor import colored
 
-from python import interfaces
-
+import interfaces
 
 class BasePlayer(object):
 
