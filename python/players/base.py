@@ -156,6 +156,7 @@ class BasePlayer(object):
 
     # STOP Playback
     def stop(self):
+        print(self.nameP, "stop")
         with self._lock:
             self._stop()
             self._currentIndex = -1
