@@ -32,6 +32,7 @@ class BasePlayer(object):
 
     def __init__(self):
         self.nameP = colored(self.name,'magenta')
+        self.on('end', self.next)
 
     def setBasePath(self, basepath):
         self.basepath = basepath if basepath else "~/media/"
@@ -175,7 +176,7 @@ class BasePlayer(object):
             self._currentIndex += 1
             if self._currentIndex >= len(self._playlist) and self._status['loop']:
                 self._currentIndex = 0
-            self.play(self._currentIndex)
+        self.play(self._currentIndex)
 
     # PREVIOUS item in playlist
     def prev(self):

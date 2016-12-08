@@ -15,6 +15,7 @@ class MpvPlayer(BasePlayer):
 
         self.name = "MPV "+name
         self.nameP = colored(self.name,'magenta')
+        self.on('end', self.next)
 
         socketpath = '/tmp/hplayer-' + name
 
@@ -53,6 +54,7 @@ class MpvPlayer(BasePlayer):
         # Socket Receive thread
         self.recvThread = threading.Thread(target=self._receive)
         self.recvThread.start()
+
 
 
     # MPV Process stdout THREAD
