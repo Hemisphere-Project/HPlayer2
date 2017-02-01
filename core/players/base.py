@@ -209,8 +209,9 @@ class BasePlayer(object):
 
         # Play file at index
         error = False
+        nomedia = False
         with self._lock:
-            if arg >= 0 and arg < len(self._playlist):
+            if arg >= 0 and arg < len(self._playlist) and os.path.isfile(self._playlist[arg]):
                 self._currentIndex = arg
                 self._status['media'] = self._playlist[arg]
                 # print(self.nameP, "PLAY ", self._status['media'])
@@ -219,8 +220,12 @@ class BasePlayer(object):
                 self._status['media'] = None
                 print(self.nameP, "Empty playlist..")
                 error = True
+                nomedia = True
+                
         if error:
             self.stop()
+        if nomedia:
+        	self.trigger('nomedia')
 
     # STOP Playback
     def stop(self):
@@ -229,6 +234,7 @@ class BasePlayer(object):
         with self._lock:
             self._stop()
             self._currentIndex = -1
+        self.trigger('stop')
 
     # PAUSE Playback
     def pause(self):
