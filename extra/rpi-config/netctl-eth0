@@ -1,0 +1,26 @@
+Description='A basic ethernet connection'
+Interface=eth0
+Connection=ethernet
+
+###
+### Note: les # indique les ligne en commentaire (non prise en compte)
+### Attention: ne décommenter qu'un seul des 2 blocs (STATIC KXKM ou DHCP)
+###
+
+###
+### STATIC KXKM
+### Force la connection ethernet en static.
+### Changer Address pour fixer l'IP 
+### Pour simuler un ipod: 2.0.0.79 + numero du pod
+### Penser à changer egalement le fichier /boot/config/hostname
+###
+IP=static
+Address=('2.0.0.91/16')
+Gateway='2.0.0.1'
+DNS=('2.0.0.1')
+
+###
+### DHCP
+### Ethernet en DHCP (IP fournie par le routeur)
+### 
+#IP=dhcp

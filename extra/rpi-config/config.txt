@@ -1,0 +1,25 @@
+# See /boot/overlays/README for all available options
+
+###
+### Paramètres génériques
+###
+gpu_mem=256
+initramfs initramfs-linux.img followkernel
+#disable_splash=1
+dtparam=audio=on
+disable_overscan=1
+
+###
+### VIDEO (HDMI forcé, en 1080p)
+### Commenter les 2 lignes pour mettre en selection auto
+### et permettre la sortie analogique si aucun cable HDMI branché
+###
+hdmi_group=2
+hdmi_mode=82
+
+###
+### AUDIO
+### 1: Analog / 2: HDMI
+### Commenter la ligne pour mettre en selection auto
+###
+hdmi_drive=1

@@ -1,0 +1,12 @@
+[Unit]
+Description=App launcher
+DefaultDependencies=no
+
+[Service]
+Type=simple
+ExecStart=/kxkm/launcher.sh
+Restart=always
+RestartSec=2
+
+[Install]
+WantedBy=multi-user.target
