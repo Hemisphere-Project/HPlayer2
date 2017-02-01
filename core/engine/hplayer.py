@@ -56,8 +56,14 @@ def run():
     print('\n' + nameP, "started. Welcome !");
     print('\n' + nameP, "Device IP on eth0  is", network.get_ip('eth0'));
     print(nameP, "Device IP on wlan0 is", network.get_ip('wlan0'));
+    sys.stdout.flush()
+
+    # RUN event
+    for p in players():
+        p.trigger('app-run')
 
     while runningFlag and running():
+        sys.stdout.flush()
         sleep(0.5)
 
     # STOP

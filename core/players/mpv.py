@@ -23,7 +23,7 @@ class MpvPlayer(BasePlayer):
         script_path = os.path.dirname(os.path.realpath(__file__))
         self.process = subprocess.Popen(
                             [script_path+'/../../bin/mpv', '--input-ipc-server=' + socketpath + '',
-                                '--idle=yes', '--no-osc', '--script=lua/welcome.lua', '--msg-level=ipc=v', '--quiet'
+                                '--idle=yes', '--no-osc', '--msg-level=ipc=v', '--quiet'
                                 #,'--force-window=yes'
                                 #,'--window-scale=0.5'
                                 , '--fs'
