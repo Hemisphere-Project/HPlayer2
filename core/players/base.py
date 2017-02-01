@@ -2,6 +2,7 @@ from __future__ import print_function
 
 import os
 import threading
+import glob
 from termcolor import colored
 
 import interfaces
@@ -16,6 +17,10 @@ class BasePlayer(object):
     name = "DUMMY Player"
     basepath = ["/media/usb/"]
 
+    log = {
+        'events':   False
+    }
+
     _playlist = []
     _currentIndex = -1
     _validExt = '*'
@@ -24,7 +29,7 @@ class BasePlayer(object):
     _interfaces = {}
     _overlays = {}
     _status = {
-        'volume':       50,
+        'volume':       100,
         'mute':         False,
         'loop':         True,
         'flip':         False,
@@ -90,18 +95,33 @@ class BasePlayer(object):
             elif os.path.isfile(entry):
                 if self.validExt(entry):
                     liste.append(entry)
+            # full path file with WILDCARD
+            elif entry[0] == '/' and len(glob.glob(entry)) > 0:
+                for e in glob.glob(entry):
+                    if os.path.isfile(e):
+                        liste.extend(e)
+
+            # check each base path
             else:
-                # check each base path
                 for base in self.basepath:
+                    fullpath = os.path.join(base,entry)
                     # relative path directory -> add content recursively
-                    if os.path.isdir(os.path.join(base,entry)):
-                        liste.extend(self.buildList(os.path.join(base,entry)))
+                    if os.path.isdir(fullpath):
+                        liste.extend(self.buildList(fullpath))
                         break
                     # relative path file -> add content recursively
-                    elif os.path.isfile(os.path.join(base,entry)):
+                    elif os.path.isfile(fullpath):
                         if self.validExt(entry):
-                            liste.append(os.path.join(base,entry))
+                            liste.append(fullpath)
                             break
+                    # relative path file with WILDCARD
+                    elif len(glob.glob(fullpath)) > 0:
+                        for e in glob.glob(fullpath):
+                            if os.path.isfile(e) and self.validExt(e):
+                                liste.append(e)
+                        break
+
+        liste = sorted(liste)
         return liste
 
     #
@@ -118,8 +138,9 @@ class BasePlayer(object):
 
     # EVENT Trigger callback
     def trigger(self, event, args=None):
+        if self.log['events']:
+            print(self.nameP, "event:", event, "/ args:", args)
         if event in self._events:
-            print(self.nameP, "event:", event)
             if args:
                 self._events[event](args)
             else:
@@ -196,7 +217,7 @@ class BasePlayer(object):
                 self._play(self._playlist[arg])
             else:
                 self._status['media'] = None
-                print(self.nameP, "no file to play..")
+                print(self.nameP, "Empty playlist..")
                 error = True
         if error:
             self.stop()

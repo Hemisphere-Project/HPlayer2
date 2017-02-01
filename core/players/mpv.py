@@ -166,6 +166,8 @@ class MpvPlayer(BasePlayer):
 
     def _applyFlip(self):
         if not self._status['flip']:
-            self._send('{ "command": ["vf", "add", "mirror"] }')
+            # self._send('{ "command": ["vf", "add", "mirror"] }')
+            pass
         else:
-            self._send('{ "command": ["vf", "del", "mirror"] }')
+            # self._send('{ "command": ["vf", "del", "mirror"] }')
+            pass
