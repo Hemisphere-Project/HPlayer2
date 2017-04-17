@@ -20,14 +20,15 @@ class BasePlayer(object):
     _validExt = '*'
 
     _events = {}
-    _interfaces = []
+    _interfaces = {}
     _status = {
         'volume':       50,
         'mute':         False,
         'loop':         True,
         'random':       False,
         'isPlaying':    False,
-        'isPaused':     False
+        'isPaused':     False,
+        'media':        None
     }
 
     def __init__(self):
@@ -39,8 +40,13 @@ class BasePlayer(object):
 
     def addInterface(self, iface, args=[]):
         InterfaceClass = interfaces.getInterface(iface)
-        self._interfaces.append(InterfaceClass(self, args))
-        return self._interfaces[-1]
+        self._interfaces[iface] = InterfaceClass(self, args)
+        return self._interfaces[iface]
+
+    def iface(self, name):
+        if name in self._interfaces.keys():
+            return self._interfaces[name]
+        return None
 
     #
     # Player TOOLS
@@ -86,10 +92,13 @@ class BasePlayer(object):
                 self._events[e] = callback
 
     # EVENT Trigger callback
-    def trigger(self, event):
+    def trigger(self, event, args=None):
         if event in self._events:
             print(self.nameP, "event:", event)
-            self._events[event]()
+            if args:
+                self._events[event](args)
+            else:
+                self._events[event]()
 
     #
     # Player STATUS
@@ -101,7 +110,7 @@ class BasePlayer(object):
         if state is not None:
             self._running.set() if state else self._running.clear()
         # GET
-        for iface in self._interfaces:
+        for iface in self._interfaces.values():
             if not iface.isRunning():
                 return False
         return self._running.is_set()
@@ -119,7 +128,7 @@ class BasePlayer(object):
 
     # QUIT
     def quit(self):
-        for iface in self._interfaces:
+        for iface in self._interfaces.values():
             iface.quit()
         self._quit()
         self.isRunning(False)
@@ -148,8 +157,10 @@ class BasePlayer(object):
         error = False
         with self._lock:
             if arg >= 0 and arg < len(self._playlist):
+                self._status['media'] = self._playlist[arg]
                 self._play(self._playlist[arg])
             else:
+                self._status['media'] = None
                 print(self.nameP, "no file to play..")
                 error = True
         if error:
@@ -158,6 +169,7 @@ class BasePlayer(object):
     # STOP Playback
     def stop(self):
         print(self.nameP, "stop")
+        self._status['media'] = None
         with self._lock:
             self._stop()
             self._currentIndex = -1
@@ -190,6 +202,20 @@ class BasePlayer(object):
     def seekTo(self, milli):
         self._seekTo(milli)
 
+    # LOOP
+    def loop(self, doloop):
+       self._status['loop'] = doloop
+
+    # VOLUME
+    def volume(self, vol):
+       self._status['volume'] = vol
+       self._applyVolume()
+
+    # MUTE
+    def mute(self, domute):
+       self._status['mute'] = domute
+       self._applyVolume()
+
     #
     # Player INTERNAL actions: Methods to overwrite !
     #
@@ -215,3 +241,9 @@ class BasePlayer(object):
 
     def _seekTo(self, milli):
         print(self.nameP, "seek to", milli)
+
+    def _applyVolume(self, vol):
+        if not self._status['mute']:
+            print(self.nameP, "volume set to", self._status['volume'])
+        else:
+            print(self.nameP, "volume muted")

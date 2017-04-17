@@ -40,7 +40,7 @@ if [[ $(uname -m) = armv* ]]; then
 fi
 
 # Build
-./rebuild -j4
+sudo ./build -j4
 cd ..
 
 # Copy bin
@@ -48,4 +48,4 @@ mkdir -p bin
 cp mpv-build/mpv/build/mpv  bin/mpv
 
 # Clean
-rm -fR mpv-build
+#rm -fR mpv-build

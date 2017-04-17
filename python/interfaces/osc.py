@@ -19,9 +19,14 @@ class OscInterface (BaseInterface):
 
         self.portIn = args[0]
         self.portOut = args[1]
+        self.hostOut = "127.0.0.1"
 
         self.start()
 
+    # OSC sender
+    def send(self, path, *args):
+        target = liblo.Address("osc.udp://"+self.hostOut+":"+str(self.portOut))
+        liblo.send(target, path, *args)
 
     # OSC receiver THREAD
     def receive(self):
@@ -46,22 +51,19 @@ class OscInterface (BaseInterface):
 
         @osc("/play")
         def play(path, args, types):
-            self.player.play(args[0])
+            self.player.loop(False)
+            if args[0]: self.player.play(args[0])
+            else: self.player.play()
 
         @osc("/playloop")
         def playloop(path, args, types):
-            # TODO
-            pass
+            self.player.loop(True)
+            if args[0]: self.player.play(args[0])
+            else: self.player.play()
 
         @osc("/load")
         def load(path, args, types):
-            # TODO
-            pass
-
-        @osc("/add")
-        def add(path, args, types):
-            # TODO
-            pass
+            self.player.load(args[0])
 
         @osc("/stop")
         def stop(path, args, types):
@@ -77,57 +79,35 @@ class OscInterface (BaseInterface):
 
         @osc("/next")
         def next(path, args, types):
-            # TODO
-            pass
+            self.player.next()
 
         @osc("/prev")
         def prev(path, args, types):
-            # TODO
-            pass
+            self.player.prev()
 
         @osc("/loop")
         def loop(path, args, types):
-            # TODO
-            pass
+            self.player.loop(True)
 
         @osc("/unloop")
         def unloop(path, args, types):
-            # TODO
-            pass
+            self.player.loop(False)
 
         @osc("/volume")
         def volume(path, args, types):
-            # TODO
-            pass
+            self.player.volume(args[0])
 
         @osc("/mute")
         def mute(path, args, types):
-            # TODO
-            pass
+            self.player.mute(True)
 
         @osc("/unmute")
         def unmute(path, args, types):
-            # TODO
-            pass
+            self.player.mute(False)
 
-        @osc("/zoom")
-        def zoom(path, args, types):
-            # TODO
-            pass
-
-        @osc("/info")
-        def info(path, args, types):
-            # TODO
-            pass
-
-        @osc("/host")
-        def host(path, args, types):
-            # TODO
-            pass
-
-        @osc("/getStatus")
+        @osc("/status")
         def getStatus(path, args, types):
-            # TODO
+            print('STATUS')
             pass
 
         @osc("/quit")
@@ -136,9 +116,10 @@ class OscInterface (BaseInterface):
 
         @osc(None, None)
         def fallback(path, args, types, src):
-            print (nameP, "unknown message", path, "from", src.url)
-            for a, t in zip(args, types):
-                print (nameP, "argument of type", t, ":", a)
+        	self.player.trigger(path, args)
+            #print (nameP, "unknown message", path, "from", src.url)
+            #for a, t in zip(args, types):
+                #print (nameP, "argument of type", t, ":", a)
 
         # loop and dispatch messages every 100ms
         while self.isRunning():

@@ -28,5 +28,5 @@ if __name__ == '__main__':
     fails = 5
 
     # RUN
-    hplayer.setBasePath("/home/mgr/Videos/")
+    hplayer.setBasePath("/home/pi/Videos/")
     hplayer.run()                               # TODO: non blocking

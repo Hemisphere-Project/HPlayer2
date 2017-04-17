@@ -154,3 +154,9 @@ class MpvPlayer(BasePlayer):
 
     def _seekTo(self, milli):
         print(self.nameP, "seek to", milli)
+
+    def _applyVolume(self, vol):
+        if not self._status['mute']:
+            print(self.nameP, "volume set to", self._status['volume'])
+        else:
+            print(self.nameP, "volume muted")
