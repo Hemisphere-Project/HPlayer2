@@ -19,10 +19,12 @@ sudo apt install python-pip python-termcolor python-liblo -y
 sudo pip install cherrypy netifaces
 
 # rpi-update: pkgconfig for bcm_host
-sudo apt install rpi-update -y
-sudo rpi-update
-export LIBRARY_PATH=/opt/vc/lib
-export PKG_CONFIG_PATH=/opt/vc/lib/pkgconfig/
+if [[ $(uname -m) = armv* ]]; then
+	sudo apt install rpi-update -y
+	sudo rpi-update
+	export LIBRARY_PATH=/opt/vc/lib
+	export PKG_CONFIG_PATH=/opt/vc/lib/pkgconfig/
+fi
 
 # GPIO RPi
 if [[ $(uname -m) = armv* ]]; then
