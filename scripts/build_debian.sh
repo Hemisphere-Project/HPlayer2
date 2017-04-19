@@ -16,7 +16,13 @@ sudo apt install libcaca-dev libsdl2-dev libasound2-dev -y
 
 # hplayer2 dependencies
 sudo apt install python-pip python-termcolor python-liblo -y
-sudo pip install cherrypy
+sudo pip install cherrypy netifaces
+
+# rpi-update: pkgconfig for bcm_host
+sudo apt install rpi-update -y
+sudo rpi-update
+export LIBRARY_PATH=/opt/vc/lib
+export PKG_CONFIG_PATH=/opt/vc/lib/pkgconfig/
 
 # GPIO RPi
 if [[ $(uname -m) = armv* ]]; then
@@ -40,7 +46,7 @@ if [[ $(uname -m) = armv* ]]; then
 fi
 
 # Build
-sudo ./build -j4
+./rebuild -j4
 cd ..
 
 # Copy bin

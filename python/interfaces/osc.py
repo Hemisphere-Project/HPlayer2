@@ -19,7 +19,7 @@ class OscInterface (BaseInterface):
 
         self.portIn = args[0]
         self.portOut = args[1]
-        self.hostOut = "127.0.0.1"
+        self.hostOut = '127.0.0.1'
 
         self.start()
 
@@ -27,6 +27,7 @@ class OscInterface (BaseInterface):
     def send(self, path, *args):
         target = liblo.Address("osc.udp://"+self.hostOut+":"+str(self.portOut))
         liblo.send(target, path, *args)
+        print(self.nameP, "sent OSC", path, args ," to ","osc.udp://"+self.hostOut+":"+str(self.portOut))
 
     # OSC receiver THREAD
     def receive(self):
@@ -104,6 +105,14 @@ class OscInterface (BaseInterface):
         @osc("/unmute")
         def unmute(path, args, types):
             self.player.mute(False)
+
+        @osc("/flip")
+        def flip(path, args, types):
+            self.player.flip(True)
+
+        @osc("/unflip")
+        def unflip(path, args, types):
+            self.player.flip(False)
 
         @osc("/status")
         def getStatus(path, args, types):

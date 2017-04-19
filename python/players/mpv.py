@@ -104,7 +104,7 @@ class MpvPlayer(BasePlayer):
                             #print(self.nameP, "IPC event:", mpvsays['event'])
 
 
-                #print(self.nameP, "IPC says:", msg.rstrip())
+                print(self.nameP, "IPC says:", msg.rstrip())
 
             # Timeout: retry
             except socket.timeout:
@@ -153,10 +153,18 @@ class MpvPlayer(BasePlayer):
         self._send('{ "command": ["set_property", "pause", false] }')
 
     def _seekTo(self, milli):
-        print(self.nameP, "seek to", milli)
+        self._send('{ "command": ["seek", "'+str(milli/1000)+'", "absolute"] }')
+        # print(self.nameP, "seek to", milli/1000)
 
-    def _applyVolume(self, vol):
-        if not self._status['mute']:
-            print(self.nameP, "volume set to", self._status['volume'])
+    def _applyVolume(self):
+        vol = self._status['volume']
+        if self._status['mute']:
+            vol = 0
+        self._send('{ "command": ["set_property", "volume", '+str(vol)+'] }')
+        print(self.nameP, "VOLUME to", vol)
+
+    def _applyFlip(self):
+        if not self._status['flip']:
+            self._send('{ "command": ["vf", "add", "mirror"] }')
         else:
-            print(self.nameP, "volume muted")
+            self._send('{ "command": ["vf", "del", "mirror"] }')

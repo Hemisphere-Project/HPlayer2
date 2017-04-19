@@ -25,6 +25,7 @@ class BasePlayer(object):
         'volume':       50,
         'mute':         False,
         'loop':         True,
+        'flip':         False,
         'random':       False,
         'isPlaying':    False,
         'isPaused':     False,
@@ -216,6 +217,11 @@ class BasePlayer(object):
        self._status['mute'] = domute
        self._applyVolume()
 
+    # FLIP
+    def flip(self, doflip):
+       self._status['flip'] = doflip
+       self._applyFlip()
+
     #
     # Player INTERNAL actions: Methods to overwrite !
     #
@@ -242,8 +248,14 @@ class BasePlayer(object):
     def _seekTo(self, milli):
         print(self.nameP, "seek to", milli)
 
-    def _applyVolume(self, vol):
+    def _applyVolume(self):
         if not self._status['mute']:
             print(self.nameP, "volume set to", self._status['volume'])
         else:
             print(self.nameP, "volume muted")
+
+    def _applyFlip(self):
+        if not self._status['flip']:
+            print(self.nameP, "screen flipped")
+        else:
+            print(self.nameP, "screen not flipped")
