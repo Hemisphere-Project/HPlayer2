@@ -4,6 +4,7 @@ import players as playerlib
 from time import sleep
 import signal
 import sys
+import network
 
 runningFlag = True
 players_pool = {}
@@ -58,6 +59,7 @@ def run():
     name = "HPlayer2"
     nameP = colored(name, 'green')
     print('\n' + nameP, "started. Welcome !");
+    print(nameP, "Device IP is", network.get_ip());
 
     while runningFlag and running():
         sleep(0.5)

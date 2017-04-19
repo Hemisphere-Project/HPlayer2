@@ -104,7 +104,7 @@ class MpvPlayer(BasePlayer):
                             #print(self.nameP, "IPC event:", mpvsays['event'])
 
 
-                print(self.nameP, "IPC says:", msg.rstrip())
+                # print(self.nameP, "IPC says:", msg.rstrip())
 
             # Timeout: retry
             except socket.timeout:

@@ -1,25 +1,8 @@
 from engine import hplayer
+from engine import network
+
 from time import sleep
 import os
-
-from netifaces import AF_INET, AF_INET6, AF_LINK, AF_PACKET, AF_BRIDGE
-import netifaces as ni
-
-def get_ip():
-    ip = '127.0.0.1'
-    try:
-        ip = ni.ifaddresses('eth0')[AF_INET][0]['addr']
-    except:
-        pass
-    return ip
-
-def get_broadcast():
-    ip = '127.0.0.1'
-    try:
-        ip = ni.ifaddresses('eth0')[AF_INET][0]['broadcast']
-    except:
-        pass
-    return ip
 
 
 if __name__ == '__main__':
@@ -43,13 +26,13 @@ if __name__ == '__main__':
         if media:
             media = os.path.basename(media)
         if not regie_ip:
-            player.iface('osc').hostOut = get_broadcast()
+            player.iface('osc').hostOut = network.get_broadcast()
     	player.iface('osc').send(playerName, 'auto', loop, screen, playing, media)
 
     def fullSyncTest():
         if not regie_ip:
-            player.iface('osc').hostOut = get_broadcast()
-    	player.iface('osc').send(playerName, 'initinfo', get_ip())
+            player.iface('osc').hostOut = network.get_broadcast()
+    	player.iface('osc').send(playerName, 'initinfo', network.get_ip())
 
     def setIpRegie(args):
         global regie_ip
@@ -68,7 +51,6 @@ if __name__ == '__main__':
 
     # RUN
     sleep(0.1)
-    print("Device IP: ", get_ip())
 
     hplayer.setBasePath("/home/pi/Videos/")
     hplayer.run()                               # TODO: non blocking
