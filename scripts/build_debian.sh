@@ -56,4 +56,4 @@ mkdir -p bin
 cp mpv-build/mpv/build/mpv  bin/mpv
 
 # Clean
-#rm -fR mpv-build
+rm -fR mpv-build
