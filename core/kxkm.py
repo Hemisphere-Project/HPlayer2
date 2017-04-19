@@ -26,13 +26,13 @@ if __name__ == '__main__':
         if media:
             media = os.path.basename(media)
         if not regie_ip:
-            player.iface('osc').hostOut = network.get_broadcast()
+            player.iface('osc').hostOut = network.get_broadcast('eth0')
     	player.iface('osc').send(playerName, 'auto', loop, screen, playing, media)
 
     def fullSyncTest():
         if not regie_ip:
-            player.iface('osc').hostOut = network.get_broadcast()
-    	player.iface('osc').send(playerName, 'initinfo', network.get_ip())
+            player.iface('osc').hostOut = network.get_broadcast('eth0')
+    	player.iface('osc').send(playerName, 'initinfo', network.get_ip('eth0'))
 
     def setIpRegie(args):
         global regie_ip

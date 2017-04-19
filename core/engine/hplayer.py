@@ -59,7 +59,8 @@ def run():
     name = "HPlayer2"
     nameP = colored(name, 'green')
     print('\n' + nameP, "started. Welcome !");
-    print(nameP, "Device IP is", network.get_ip());
+    print('\n' + nameP, "Device IP on eth0  is", network.get_ip('eth0'));
+    print(nameP, "Device IP on wlan0 is", network.get_ip('wlan0'));
 
     while runningFlag and running():
         sleep(0.5)
