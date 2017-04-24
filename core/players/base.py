@@ -5,6 +5,7 @@ import threading
 from termcolor import colored
 
 import interfaces
+import overlays
 
 class BasePlayer(object):
 
@@ -21,6 +22,7 @@ class BasePlayer(object):
 
     _events = {}
     _interfaces = {}
+    _overlays = {}
     _status = {
         'volume':       50,
         'mute':         False,
@@ -44,10 +46,21 @@ class BasePlayer(object):
         self._interfaces[iface] = InterfaceClass(self, args)
         return self._interfaces[iface]
 
-    def iface(self, name):
+    def addOverlay(self, olay, args=[]):
+        OverlayClass = overlays.getOverlay(olay)
+        self._overlays[olay] = OverlayClass()
+        return self._overlays[olay]
+
+    def getInterface(self, name):
         if name in self._interfaces.keys():
             return self._interfaces[name]
         return None
+
+    def getOverlay(self, name):
+        if name in self._overlays.keys():
+            return self._overlays[name]
+        return None
+
 
     #
     # Player TOOLS
@@ -114,6 +127,10 @@ class BasePlayer(object):
         for iface in self._interfaces.values():
             if not iface.isRunning():
                 return False
+        # GET
+        for olay in self._overlays.values():
+            if not olay.isRunning():
+                return False
         return self._running.is_set()
 
     # STATUS Get
@@ -131,6 +148,8 @@ class BasePlayer(object):
     def quit(self):
         for iface in self._interfaces.values():
             iface.quit()
+        for olay in self._overlays.values():
+            olay.quit()
         self._quit()
         self.isRunning(False)
 
@@ -158,6 +177,7 @@ class BasePlayer(object):
         error = False
         with self._lock:
             if arg >= 0 and arg < len(self._playlist):
+                self._currentIndex = arg
                 self._status['media'] = self._playlist[arg]
                 self._play(self._playlist[arg])
             else:

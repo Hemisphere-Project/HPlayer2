@@ -24,9 +24,9 @@ class MpvPlayer(BasePlayer):
         self.process = subprocess.Popen(
                             [script_path+'/../../bin/mpv', '--input-ipc-server=' + socketpath + '',
                                 '--idle=yes', '--no-osc', '--script=lua/welcome.lua', '--msg-level=ipc=v', '--quiet'
-                                ,'--force-window=yes'
-                                ,'--window-scale=0.5'
-                                #, '--fs'
+                                #,'--force-window=yes'
+                                #,'--window-scale=0.5'
+                                , '--fs'
                                 ,'--keep-open'
                                 ],
                             stdout=subprocess.PIPE, stdin=subprocess.PIPE,

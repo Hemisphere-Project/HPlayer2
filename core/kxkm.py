@@ -4,7 +4,6 @@ from engine import network
 from time import sleep
 import os
 
-
 if __name__ == '__main__':
 
     # PLAYER
@@ -12,6 +11,9 @@ if __name__ == '__main__':
 
     # Interfaces
     player.addInterface('osc', [1222, 3737])
+
+    # Overlay
+    player.addOverlay('rpifader')
 
     # KXKM
     playerName = '/ipod2'
@@ -39,6 +41,18 @@ if __name__ == '__main__':
         regie_ip = args[0]
         player.iface('osc').hostOut = regie_ip
 
+    def fadeColor(args=None):
+        if args and len(args) == 3:
+            player.getOverlay('rpifader').set(args[0]/255.0, args[1]/255.0, args[2]/255.0, 1.0)
+        elif args and len(args) == 4:
+            player.getOverlay('rpifader').set(args[0]/255.0, args[1]/255.0, args[2]/255.0, args[3]/255.0)
+        else:
+            player.getOverlay('rpifader').set(1.0, 1.0, 1.0, 1.0)
+
+    def unfadeColor():
+        player.getOverlay('rpifader').set(alpha=0.0)
+
+
     player.on(['/synctest'],    syncTest)
     player.on(['/fullsynctest'], fullSyncTest)
     player.on(['/ipregie'],     setIpRegie)
@@ -49,8 +63,11 @@ if __name__ == '__main__':
     player.on(['/stopmovie'],   player.stop)
     player.on(['/unpause'],     player.resume)
 
+    player.on(['/fade'],        fadeColor)
+    player.on(['/unfade'],      unfadeColor)
+
     # RUN
     sleep(0.1)
 
-    hplayer.setBasePath("/home/pi/Videos/")
+    hplayer.setBasePath("/home/alarm/Videos/")
     hplayer.run()                               # TODO: non blocking
