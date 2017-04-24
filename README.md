@@ -32,7 +32,7 @@ Go the HPlayer2 directory and run it:
 ```
 
 For now, it might not work out of the box.
-You can tweak the behaviour by editing python/hplayer2.py
+You can tweak the behaviour by editing core/default.py
 
 We will provide a ready to use build soon, with json configs files (both default and overwritted examples).
 
