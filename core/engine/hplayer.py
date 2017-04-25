@@ -55,7 +55,6 @@ def running():
 
 def run():
 
-
     name = "HPlayer2"
     nameP = colored(name, 'green')
     print('\n' + nameP, "started. Welcome !");

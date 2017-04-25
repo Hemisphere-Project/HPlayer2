@@ -2,7 +2,7 @@ from engine import hplayer
 from engine import network
 
 from time import sleep
-import os
+import os, socket
 
 if __name__ == '__main__':
 
@@ -16,7 +16,7 @@ if __name__ == '__main__':
     player.addOverlay('rpifader')
 
     # KXKM
-    playerName = '/ipod2'
+    playerName = socket.gethostname()
     regie_ip = None
 
     # OSC events
@@ -28,18 +28,18 @@ if __name__ == '__main__':
         if media:
             media = os.path.basename(media)
         if not regie_ip:
-            player.iface('osc').hostOut = network.get_broadcast('eth0')
-    	player.iface('osc').send(playerName, 'auto', loop, screen, playing, media)
+            player.getInterface('osc').hostOut = network.get_broadcast('eth0')
+    	player.getInterface('osc').send(playerName, 'auto', loop, screen, playing, media)
 
     def fullSyncTest():
         if not regie_ip:
-            player.iface('osc').hostOut = network.get_broadcast('eth0')
-    	player.iface('osc').send(playerName, 'initinfo', network.get_ip('eth0'))
+            player.getInterface('osc').hostOut = network.get_broadcast('eth0')
+    	player.getInterface('osc').send(playerName, 'initinfo', network.get_ip('eth0'))
 
     def setIpRegie(args):
         global regie_ip
         regie_ip = args[0]
-        player.iface('osc').hostOut = regie_ip
+        player.getInterface('osc').hostOut = regie_ip
 
     def fadeColor(args=None):
         if args and len(args) == 3:
@@ -69,5 +69,5 @@ if __name__ == '__main__':
     # RUN
     sleep(0.1)
 
-    hplayer.setBasePath("/home/alarm/Videos/")
+    hplayer.setBasePath("/data/")
     hplayer.run()                               # TODO: non blocking
