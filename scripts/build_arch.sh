@@ -8,7 +8,7 @@ pacman -Su
 # libass / ffmpeg / mpv dependencies
 pacman -S freetype2 fribidi fontconfig yasm libx264 libtool base-devel pkg-config autoconf --noconfirm
 pacman -S lua luajit libvdpau libva libxv libjpeg libxkbcommon libxrandr mesa libv4l libxss libcaca sdl2 fbida --noconfirm
-pacman -S alsa-lib alsa-firmware
+pacman -S alsa-lib alsa-firmware ttf-roboto
 
 # /boot/config.txt
 # add dtparam=audio=on 
@@ -17,6 +17,9 @@ pacman -S alsa-lib alsa-firmware
 # read-only
 # https://gist.github.com/yeokm1/8b0ffc03e622ce011010
 # https://hallard.me/raspberry-pi-read-only/ (bash prompt only)
+
+# clean boot
+# https://yingtongli.me/blog/2016/12/21/splash.html
 
 # hplayer2 dependencies
 pacman -S python2 python2-pip cython2 liblo
