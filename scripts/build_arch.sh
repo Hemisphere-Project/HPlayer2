@@ -18,8 +18,11 @@ pacman -S alsa-lib alsa-firmware ttf-roboto
 # https://gist.github.com/yeokm1/8b0ffc03e622ce011010
 # https://hallard.me/raspberry-pi-read-only/ (bash prompt only)
 
-# clean boot
+# clean boot with splashscreen
 # https://yingtongli.me/blog/2016/12/21/splash.html
+
+# run at last boot
+# https://www.mauras.ch/systemd-run-it-last.html
 
 # hplayer2 dependencies
 pacman -S python2 python2-pip cython2 liblo
