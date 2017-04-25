@@ -1,17 +1,28 @@
 #!/bin/bash
+
+# fix arch certs
 pacman -Syuw
 rm /etc/ssl/certs/ca-certificates.crt
 pacman -Su
 
 # libass / ffmpeg / mpv dependencies
 pacman -S freetype2 fribidi fontconfig yasm libx264 libtool base-devel pkg-config autoconf --noconfirm
-pacman -S lua luajit libvdpau libva libxv libjpeg libxkbcommon libxrandr mesa libv4l libxss libcaca sdl2 alsa-lib
+pacman -S lua luajit libvdpau libva libxv libjpeg libxkbcommon libxrandr mesa libv4l libxss libcaca sdl2 fbida --noconfirm
+pacman -S alsa-lib alsa-firmware
+
+# /boot/config.txt
+# add dtparam=audio=on 
+# change gpu_mem=256
+
+# read-only
+# https://gist.github.com/yeokm1/8b0ffc03e622ce011010
+# https://hallard.me/raspberry-pi-read-only/ (bash prompt only)
 
 # hplayer2 dependencies
 pacman -S python2 python2-pip cython2 liblo
 pip2 install pyliblo termcolor cherrypy netifaces
 cd /usr/bin
-ln -sf python2 python
+ln -sf python2 python # set python2 as python
 cd "$(dirname "$0")"
 
 # pkgconfig for bcm_host
