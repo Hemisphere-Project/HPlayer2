@@ -52,12 +52,15 @@ if __name__ == '__main__':
     def unfadeColor():
         player.getOverlay('rpifader').set(alpha=0.0)
 
+    def playmovie(args=None):
+        player.play( args[0] ) if args else player.play()
+
 
     player.on(['/synctest'],    syncTest)
     player.on(['/fullsynctest'], fullSyncTest)
     player.on(['/ipregie'],     setIpRegie)
 
-    player.on(['/playmovie'],   lambda args: player.play(args[0]))
+    player.on(['/playmovie'],   playmovie)
     player.on(['/loadmovie'],   lambda args: player.load(args[0]))
     player.on(['/attime'],      lambda args: player.seekTo(args[0]))
     player.on(['/stopmovie'],   player.stop)
@@ -69,5 +72,5 @@ if __name__ == '__main__':
     # RUN
     sleep(0.1)
 
-    hplayer.setBasePath("/data/")
+    hplayer.setBasePath("/kxkm/media")
     hplayer.run()                               # TODO: non blocking

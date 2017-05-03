@@ -80,9 +80,9 @@ class BasePlayer(object):
         liste = []
         for entry in files:
             if os.path.isdir(entry):
-                liste.extend(self.addToList(liste, os.listdir(entry)))
+                liste.extend(self.buildList(os.listdir(entry)))
             elif os.path.isdir(self.basepath+entry):
-                liste.extend(self.addToList(liste, os.listdir(self.basepath+entry)))
+                liste.extend(self.buildList(os.listdir(self.basepath+entry)))
             elif os.path.isfile(entry):
                 if self.validExt(entry):
                     liste.append(entry)
@@ -165,6 +165,8 @@ class BasePlayer(object):
             self._playlist = self.buildList(playlist)
             self._currentIndex = -1
 
+        # print("Current playlist: ", self._playlist)
+
     # PLAY A Playlist or Index
     def play(self, arg=0):
 
@@ -179,6 +181,7 @@ class BasePlayer(object):
             if arg >= 0 and arg < len(self._playlist):
                 self._currentIndex = arg
                 self._status['media'] = self._playlist[arg]
+                # print(self.nameP, "PLAY ", self._status['media'])
                 self._play(self._playlist[arg])
             else:
                 self._status['media'] = None

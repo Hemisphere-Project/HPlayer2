@@ -140,6 +140,7 @@ class MpvPlayer(BasePlayer):
 
     def _play(self, path):
         print(self.nameP, "play", path)
+        self._send('{ "command": ["stop"] }')
         self._send('{ "command": ["loadfile", "'+path+'"] }')
         self._send('{ "command": ["set_property", "pause", false] }')
 

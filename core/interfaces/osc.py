@@ -3,6 +3,8 @@ from termcolor import colored
 from base import BaseInterface
 import liblo
 
+def oscdump(path, args, types):
+    print("OSC Received:", path, args)
 
 class OscInterface (BaseInterface):
 
@@ -45,6 +47,7 @@ class OscInterface (BaseInterface):
         def osc(path, argsTypes=None):
             def handler(func):
                 if self.isRunning():
+                    # oscServer.add_method(path, argsTypes, oscdump)
                     oscServer.add_method(path, argsTypes, func)
                 return func
             return handler

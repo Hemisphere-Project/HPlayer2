@@ -3,7 +3,7 @@ from termcolor import colored
 import players as playerlib
 from time import sleep
 import signal
-import sys
+import sys, os
 import network
 
 runningFlag = True
@@ -20,7 +20,7 @@ signal.signal(signal.SIGINT, signal_handler)
 
 
 def setBasePath(base):
-    basepath = base
+    basepath = os.path.join(base, '')
     for p in players():
         p.setBasePath(basepath)
 
