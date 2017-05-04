@@ -8,7 +8,6 @@ import network
 
 runningFlag = True
 players_pool = {}
-basepath = "~/media/"
 
 
 # CTR-C Handler
@@ -19,11 +18,9 @@ def signal_handler(signal, frame):
 signal.signal(signal.SIGINT, signal_handler)
 
 
-def setBasePath(base):
-    basepath = os.path.join(base, '')
+def setBasePath(bpath):
     for p in players():
-        p.setBasePath(basepath)
-
+        p.setBasePath(bpath)
 
 def addplayer(ptype, name=None):
     if name and name in players_pool:
@@ -31,7 +28,6 @@ def addplayer(ptype, name=None):
     else:
         PlayerClass = playerlib.getPlayer(ptype)
         p = PlayerClass(name)
-        p.setBasePath(basepath)
         players_pool[p.name] = p
     return players_pool[p.name]
 

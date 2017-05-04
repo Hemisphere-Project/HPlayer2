@@ -14,7 +14,7 @@ class BasePlayer(object):
     _running.set()
 
     name = "DUMMY Player"
-    basepath = "~/media/"
+    basepath = ["/media/usb/"]
 
     _playlist = []
     _currentIndex = -1
@@ -38,8 +38,12 @@ class BasePlayer(object):
         self.nameP = colored(self.name,'magenta')
         self.on('end', self.next)
 
-    def setBasePath(self, basepath):
-        self.basepath = basepath if basepath else "~/media/"
+    def setBasePath(self, bpath):
+        if not isinstance(bpath, list):
+            bpath = [bpath]
+        self.basepath = []
+        for base in bpath:
+            self.basepath.append(os.path.join(base, ''))
 
     def addInterface(self, iface, args=[]):
         InterfaceClass = interfaces.getInterface(iface)
@@ -79,18 +83,25 @@ class BasePlayer(object):
     def buildList(self, files):
         liste = []
         for entry in files:
+            # full path directory -> add content recursively
             if os.path.isdir(entry):
                 liste.extend(self.buildList(os.listdir(entry)))
-            elif os.path.isdir(self.basepath+entry):
-                liste.extend(self.buildList(os.listdir(self.basepath+entry)))
+            # full path file -> add it
             elif os.path.isfile(entry):
                 if self.validExt(entry):
                     liste.append(entry)
-            elif os.path.isfile(self.basepath+entry):
-                if self.validExt(entry):
-                    liste.append(self.basepath+entry)
             else:
-                print(self.nameP, "can't find", entry, "- skipping..")
+                # check each base path
+                for base in self.basepath:
+                    # relative path directory -> add content recursively
+                    if os.path.isdir(os.path.join(base,entry)):
+                        liste.extend(self.buildList(os.path.join(base,entry)))
+                        break
+                    # relative path file -> add content recursively
+                    elif os.path.isfile(os.path.join(base,entry)):
+                        if self.validExt(entry):
+                            liste.append(os.path.join(base,entry))
+                            break
         return liste
 
     #

@@ -72,5 +72,5 @@ if __name__ == '__main__':
     # RUN
     sleep(0.1)
 
-    hplayer.setBasePath("/kxkm/media")
+    hplayer.setBasePath(["/media/usb", "/kxkm/media"])
     hplayer.run()                               # TODO: non blocking
