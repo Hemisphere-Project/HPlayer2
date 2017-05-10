@@ -5,7 +5,7 @@ from time import sleep
 
 import RPi.GPIO as GPIO
 
-from python.interfaces import BaseInterface
+from base import BaseInterface
 
 DEBOUNCE = 50
 
@@ -29,7 +29,7 @@ class GpioInterface (BaseInterface):
 
         self.start()
 
-    # HTTP receiver THREAD
+    # GPIO receiver THREAD
     def receive(self):
         print(self.nameP, "starting GPIO listener")
 

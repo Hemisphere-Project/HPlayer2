@@ -1,0 +1,7 @@
+[Unit]
+Description=Mount USB Drive on %i
+[Service]
+Type=oneshot
+RemainAfterExit=true
+ExecStart=/kxkm/usb-automount.sh add %i
+ExecStop=/kxkm/usb-automount.sh remove %i

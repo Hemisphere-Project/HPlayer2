@@ -2,6 +2,7 @@ from __future__ import print_function
 from termcolor import colored
 from time import sleep
 from base import BaseInterface
+import pprint
 import cherrypy
 
 class HttpInterface (BaseInterface):
@@ -46,11 +47,51 @@ class HttpInterface (BaseInterface):
                 return "resume"
 
             @cherrypy.expose
+            def next(self):
+                self.player.next()
+                return "next"
+
+            @cherrypy.expose
+            def prev(self):
+                self.player.prev()
+                return "prev"
+
+            @cherrypy.expose
+            def loop(self):
+                self.player.loop(True)
+                return "loop"
+
+            @cherrypy.expose
+            def unloop(self):
+                self.player.loop(False)
+                return "unloop"
+
+            @cherrypy.expose
+            def volume(self, vol):
+                self.player.volume(int(vol))
+                return "volume "+vol
+
+            @cherrypy.expose
+            def mute(self):
+                self.player.mute(True)
+                return "mute"
+
+            @cherrypy.expose
+            def unmute(self):
+                self.player.mute(False)
+                return "unmute"
+
+            @cherrypy.expose
+            def status(self):
+                return pprint.pformat(self.player._status, indent=4)
+
+            @cherrypy.expose
             def event(self, *args, **kwargs):
                 self.player.trigger(args[0])
                 return u'Event {0} triggered with {1}'.format(args[0], kwargs)
 
-        cherrypy.server.socket_port = args[0]
+        self.port = args[0]
+        cherrypy.server.socket_port = self.port
         cherrypy.server.socket_host = '0.0.0.0'
         cherrypy.log.screen = False
         cherrypy.tree.mount(HelloWorld(player), "/", {'/':{}})
@@ -60,7 +101,7 @@ class HttpInterface (BaseInterface):
     # HTTP receiver THREAD
     def receive(self):
 
-        print(self.nameP, "starting HTTP server")
+        print(self.nameP, "starting HTTP server on port", self.port)
         cherrypy.engine.start()
 
         while self.isRunning() and cherrypy.engine.state == cherrypy.engine.states.STARTED:

@@ -1,0 +1,22 @@
+Description='A simple open wireless connection'
+Interface=wlan0
+Connection=wireless
+
+### OPEN Wifi
+#Security=none
+#ESSID='kxkm24'
+#Hidden=yes
+
+### STATIC ip
+#IP=static
+#Address='192.168.1.23/24'
+#Gateway='192.168.1.1'
+#DNS=('192.168.1.1')
+
+### SECURE Wifi
+Security=wpa
+ESSID='interweb'
+Key='superspeed37'
+
+### DHCP
+IP=dhcp

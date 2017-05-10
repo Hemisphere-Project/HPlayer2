@@ -1,0 +1,10 @@
+[Unit]
+Description=Dynamic Hostname
+After=systemd-hostnamed.service
+
+[Service]
+Type=oneshot
+ExecStart=/kxkm/dynhost.sh
+
+[Install]
+WantedBy=multi-user.target
