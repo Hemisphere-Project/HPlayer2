@@ -14,7 +14,7 @@ if __name__ == '__main__':
     # Interfaces
     player.addInterface('osc', [1222, 3737])
     player.addInterface('http', [8080])
-    player.addInterface('nfc', [0.5])
+    player.addInterface('nfc', [1.3])
 
     # HTTP + GPIO events
     player.on(['nfc-card'], lambda args: player.play(args[0]['uid']+"-*.*"))
