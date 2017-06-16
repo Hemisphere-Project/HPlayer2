@@ -25,6 +25,10 @@ class NfcInterface (BaseInterface):
             args[0] = 1000
             print(self.nameP, 'default timeout:', args[0] ,'ms')
 
+        if len(args) < 2:
+            args[1] = 5
+            print(self.nameP, 'default divider:', args[1] ,'ms')
+
         # Interface settings
         super(NfcInterface, self).__init__(player)
         self.name = "NFC "+player.name
@@ -32,7 +36,7 @@ class NfcInterface (BaseInterface):
 
         # Timeout
         self.timeout = args[0]
-        self.timeout_divider = 10
+        self.timeout_divider = args[1]
         self.timeout_internal = self.timeout*1.0 / self.timeout_divider
         if self.timeout_internal < 0.02:
             self.timeout_internal = 0.02
@@ -43,7 +47,12 @@ class NfcInterface (BaseInterface):
 
         # NFC config
         self.nfc = PN532.PN532(cs=18, sclk=25, mosi=23, miso=24)
-        self.nfc.begin()
+        try:
+            self.nfc.begin()
+        except Exception as e:
+            print(self.nameP, 'PN532 not found... exit !')
+            self.isRunning(False)
+            return
 
         # NFC info
         ic, ver, rev, support = self.nfc.get_firmware_version()
@@ -61,6 +70,8 @@ class NfcInterface (BaseInterface):
         timeout_counter = -1;
         while self.isRunning():
             uid = self.nfc.read_passive_target(timeout_sec=self.timeout_internal)
+            # uid = self.nfc.read_passive_target()
+            print(uid)
 
             # Card detected
             if uid is not None:
@@ -97,12 +108,18 @@ class NfcInterface (BaseInterface):
 
             # No Card detected
             elif timeout_counter > 0:
-                    timeout_counter -= 1
+                timeout_counter -= 1
+                print(self.nameP, "count", timeout_counter)
 
             # Reach end of timeout counter: trigger event nocard
             if timeout_counter == 1:
                 self.card = None                    # Unregister card
                 self.player.trigger('nfc-nocard')   # Trigger event
+
+            # if timeout_counter == -10:
+            #     timeout_counter = 0
+            #     self.nfc.begin()
+            #     self.nfc.SAM_configuration()
 
 
         self.isRunning(False)

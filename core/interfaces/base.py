@@ -33,7 +33,8 @@ class BaseInterface(object):
     # Stop
     def quit(self):
         self.isRunning(False)
-        self.recvThread.join()
+        if self.isRunning():
+            self.recvThread.join()
         print(self.nameP, "stopped")
 
 	# is Running
