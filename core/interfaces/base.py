@@ -21,7 +21,7 @@ class BaseInterface(object):
     # receiver THREAD (dummy)
     def receive(self):
         while self.isRunning():
-            sleep(1000)
+            sleep(1)
         return
 
     # Stop
