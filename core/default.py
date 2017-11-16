@@ -11,7 +11,7 @@ if __name__ == '__main__':
     # player.addInterface('gpio', [20])
 
     # Example event: HTTP + GPIO events
-    # player.on(['push1', 'gpio20'], lambda: player.play('media.mp4'))
+    # player.on(['push1', 'gpio20'], lambda : player.play('media.mp4'))
 
     # RUN
     hplayer.setBasePath("/home/pi/media/")

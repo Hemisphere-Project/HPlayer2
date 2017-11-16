@@ -23,9 +23,11 @@ class KmsgInterface (BaseInterface):
         km.set_app_name("kplayer")
         km.start_gateway(1000)
 
-        ep = km.Endpoint(self.name, port=self.portKpi)
-        ep.set_callback(self.kpi_receive, None)
-        ep.start()
+        self.ep = km.Endpoint(self.name, port=self.portKpi)
+        self.ep.set_callback(self.kpi_receive, None)
+        self.ep.start()
+
+        self.player.on(['*'], self.emit)
 
         print(self.nameP, "started on", "kplayer/"+self.name )
 
@@ -33,9 +35,21 @@ class KmsgInterface (BaseInterface):
 
 
     # Kpi send
-    def emit(self, path, *args):
+    def emit(self, event, args):
+        DATA_FORMAT = km.FORMAT_DATA_MSGPACK
+
+        # serialize
+        if (DATA_FORMAT == km.FORMAT_DATA_MSGPACK):
+            k_args = msgpack.packb(args)
+        elif (DATA_FORMAT == km.FORMAT_DATA_JSON):
+            k_args = json.dumps(args, separators=(',',':'))
+        else:
+            k_args = ' '.join(args)
+
+        self.ep.emit("/"+event, k_args, DATA_FORMAT)
+
         #  Emit KPI msg
-        print(self.nameP, "sent KpiMSG", path, args )
+        print(self.nameP, "KPimsg emit: ", "/"+event, args )
 
     # Kpi receiver
     def kpi_receive(self, msg, data):

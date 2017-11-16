@@ -140,11 +140,17 @@ class BasePlayer(object):
     def trigger(self, event, args=None):
         if self.log['events']:
             print(self.nameP, "event:", event, "/ args:", args)
+            
+        if '*' in self._events:
+            self._events['*'](event, args)
+
         if event in self._events:
             if args:
                 self._events[event](args)
             else:
                 self._events[event]()
+
+
 
     #
     # Player STATUS
@@ -221,11 +227,14 @@ class BasePlayer(object):
                 print(self.nameP, "Empty playlist..")
                 error = True
                 nomedia = True
-                
+
+        if nomedia:
+            self.trigger('nomedia')
         if error:
             self.stop()
-        if nomedia:
-        	self.trigger('nomedia')
+        else:
+            self.trigger('play', [self._status['media']])
+
 
     # STOP Playback
     def stop(self):
