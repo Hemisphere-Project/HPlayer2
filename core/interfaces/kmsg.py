@@ -46,10 +46,10 @@ class KmsgInterface (BaseInterface):
         else:
             k_args = ' '.join(args)
 
-        self.ep.emit("/"+event, k_args, DATA_FORMAT)
+        self.ep.emit("/event/"+event, k_args, DATA_FORMAT)
 
         #  Emit KPI msg
-        print(self.nameP, "KPimsg emit: ", "/"+event, args )
+        print(self.nameP, "KPimsg emit: ", "/event/"+event, args )
 
     # Kpi receiver
     def kpi_receive(self, msg, data):
