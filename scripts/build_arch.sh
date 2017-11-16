@@ -11,7 +11,7 @@ pacman -S lua luajit libvdpau libva libxv libjpeg libxkbcommon libxrandr mesa li
 pacman -S alsa-lib alsa-firmware ttf-roboto
 
 # /boot/config.txt
-# add dtparam=audio=on 
+# add dtparam=audio=on
 # change gpu_mem=256
 
 # read-only
@@ -43,6 +43,20 @@ if [[ $(uname -m) = armv* ]]; then
 fi
 
 #######
+# SELECT PREBUILD ?
+#######
+
+cd "$(dirname "$0")"
+./select_prebuild
+if [ $? -eq 0 ]
+then
+	echo ""
+  echo "Building MPV for your system..."
+else
+  exit
+fi
+
+#######
 # BUILD
 #######
 
@@ -68,6 +82,3 @@ cp mpv-build/mpv/build/mpv  bin/mpv
 
 # Clean
 rm -fR mpv-build
-
-
-

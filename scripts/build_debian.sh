@@ -32,7 +32,21 @@ if [[ $(uname -m) = armv* ]]; then
 fi
 
 #######
-# BUILD
+# SELECT PREBUILD ?
+#######
+
+cd "$(dirname "$0")"
+./select_prebuild
+if [ $? -eq 0 ]
+then
+	echo ""
+  echo "Building MPV for your system..."
+else
+  exit
+fi
+
+#######
+# COMPILE MPV
 #######
 
 # Get MPV Build tools
