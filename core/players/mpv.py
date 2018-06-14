@@ -96,6 +96,7 @@ class MpvPlayer(BasePlayer):
                     if 'name' in mpvsays:
                         if mpvsays['name'] == 'eof-reached' and mpvsays['data'] == True:
                             self.trigger('end')
+                            self._status['isPaused'] = False
                             pass
                         elif mpvsays['name'] == 'core-idle':
                             self._status['isPlaying'] = not mpvsays['data']
@@ -143,15 +144,19 @@ class MpvPlayer(BasePlayer):
         self._send('{ "command": ["stop"] }')
         self._send('{ "command": ["loadfile", "'+path+'"] }')
         self._send('{ "command": ["set_property", "pause", false] }')
+        self._status['isPaused'] = False
 
     def _stop(self):
         self._send('{ "command": ["stop"] }')
+        self._status['isPaused'] = False
 
     def _pause(self):
         self._send('{ "command": ["set_property", "pause", true] }')
+        self._status['isPaused'] = True
 
     def _resume(self):
         self._send('{ "command": ["set_property", "pause", false] }')
+        self._status['isPaused'] = False
 
     def _seekTo(self, milli):
         self._send('{ "command": ["seek", "'+str(milli/1000)+'", "absolute"] }')

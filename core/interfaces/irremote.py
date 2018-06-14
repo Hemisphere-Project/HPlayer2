@@ -47,8 +47,10 @@ class IrremoteInterface (BaseInterface):
                     if event.value == 1:
                         if self.player.isPlaying():
                             self.player.pause()
+                        elif self.player.isPaused():
+                            self.player.resume()
                         else:
-                            self.player.play()
+                            self.player.play() 
 
                 elif event.code == ecodes.KEY_STOPCD:
                     if event.value == 1:

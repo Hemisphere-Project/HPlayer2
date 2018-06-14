@@ -18,3 +18,4 @@ player.on(['app-run', 'nomedia'], playloop)
 # RUN
 hplayer.setBasePath(["/mnt/usb"])
 hplayer.run()                               # TODO: non blocking
+ 

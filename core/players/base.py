@@ -178,6 +178,9 @@ class BasePlayer(object):
     def isPlaying(self):
         return self._status['isPlaying']
 
+    def isPaused(self):
+        return self._status['isPaused']
+
     #
     # Player CONTROLS
     #
@@ -267,7 +270,7 @@ class BasePlayer(object):
             self._currentIndex -= 1
             if self._currentIndex < 0 and self._status['loop']:
                 self._currentIndex = len(self._playlist)-1
-            self.play(self._currentIndex)
+        self.play(self._currentIndex)
 
      # SEEK to position
     def seekTo(self, milli):
