@@ -1,5 +1,16 @@
-#!/bin/bash
-DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
-SCRIPT=${1:-default}
-echo "HPlayer2: starting $SCRIPT script"
-python2 $DIR"/core/"$SCRIPT".py"
+#!/usr/bin/env python2
+
+# DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
+# SCRIPT=${1:-default}
+# echo "HPlayer2: starting $SCRIPT script"
+# python2 $DIR"/core/"$SCRIPT".py"
+
+import sys
+from core.engine import hplayer
+
+profile = 'default'
+if len(sys.argv) > 1:
+    profile = sys.argv[1]
+print ("HPlayer2: loading "+profile+" profile...\n")
+
+__import__("profiles."+profile)

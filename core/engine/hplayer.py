@@ -1,6 +1,6 @@
 from __future__ import print_function
 from termcolor import colored
-import players as playerlib
+import core.players as playerlib
 from time import sleep
 import signal
 import sys, os
@@ -50,6 +50,8 @@ def running():
 
 
 def run():
+
+    sleep(0.1)
 
     name = "HPlayer2"
     nameP = colored(name, 'green')

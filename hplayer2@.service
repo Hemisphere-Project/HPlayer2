@@ -1,0 +1,11 @@
+[Unit]
+Description=HPlayer
+           
+[Service]
+Type=simple
+ExecStart=/root/HPlayer2/hplayer2 %i
+ExecStop=/bin/pkill hplayer2
+Restart=always
+           
+[Install]
+WantedBy=default.target

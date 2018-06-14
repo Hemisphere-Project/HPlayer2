@@ -6,16 +6,16 @@ import copy
 import Queue
 from rpiopengles import rpiopengles
 
-class RpifaderOverlay (BaseOverlay):
+class RpifadeOverlay (BaseOverlay):
 
     queue = Queue.Queue()
     nextFader = {'red': 0.0, 'green': 0.0, 'blue': 0.0, 'alpha': 0.0}
     currentFader = copy.deepcopy(nextFader)
 
     def __init__(self):
-        super(RpifaderOverlay, self).__init__()
+        super(RpifadeOverlay, self).__init__()
 
-        self.name = "Rpi Fader "
+        self.name = "RPI Fade"
         self.nameP = colored(self.name,'cyan')
         # self.texture = rpiopengles.colortexture()
         self.start()
@@ -24,6 +24,7 @@ class RpifaderOverlay (BaseOverlay):
     def receive(self):
 
         texture = rpiopengles.colortexture()
+        print(self.nameP, "texture created")
 
         while self.isRunning():
             if not self.queue.empty():

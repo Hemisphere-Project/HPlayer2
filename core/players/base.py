@@ -5,8 +5,8 @@ import threading
 import glob
 from termcolor import colored
 
-import interfaces
-import overlays
+from core import interfaces
+from core import overlays
 
 class BasePlayer(object):
 
@@ -140,7 +140,7 @@ class BasePlayer(object):
     def trigger(self, event, args=None):
         if self.log['events']:
             print(self.nameP, "event:", event, "/ args:", args)
-            
+
         if '*' in self._events:
             self._events['*'](event, args)
 
