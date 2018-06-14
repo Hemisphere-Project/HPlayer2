@@ -282,15 +282,37 @@ class BasePlayer(object):
        self._status['volume'] = vol
        self._applyVolume()
 
+    # VOLUME INC
+    def volume_inc(self):
+       self._status['volume'] += 1
+       if self._status['volume'] > 100:
+           self._status['volume'] = 100
+       self._applyVolume()
+
+    # VOLUME DEC
+    def volume_dec(self):
+       self._status['volume'] -= 1
+       if self._status['volume'] < 0:
+           self._status['volume'] = 0
+       self._applyVolume()
+
     # MUTE
     def mute(self, domute):
        self._status['mute'] = domute
        self._applyVolume()
 
+    # TOGGLE MUTE
+    def mute_toggle(self):
+       self.mute(not self._status['mute'])
+
     # FLIP
     def flip(self, doflip):
        self._status['flip'] = doflip
        self._applyFlip()
+
+    # TOGGLE FLIP
+    def flip_toggle(self):
+       self.flip(not self._status['flip'])
 
     #
     # Player INTERNAL actions: Methods to overwrite !

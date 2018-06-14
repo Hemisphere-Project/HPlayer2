@@ -1,7 +1,11 @@
+from time import sleep
 from core.engine import hplayer
 
 # PLAYER
 player = hplayer.addplayer('mpv', 'looper')
+
+# INTERFACES
+player.addInterface('irremote')
 
 def playloop():
 	print("No Media... Retrying")
@@ -12,5 +16,5 @@ def playloop():
 player.on(['app-run', 'nomedia'], playloop)
 
 # RUN
-hplayer.setBasePath(["/media/usb", "/kxkm/media"])
+hplayer.setBasePath(["/mnt/usb"])
 hplayer.run()                               # TODO: non blocking
