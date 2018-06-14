@@ -33,11 +33,13 @@ class IrremoteInterface (BaseInterface):
 
                 if event.code == ecodes.KEY_VOLUMEUP:
                     if event.value == 1:
-                        self.player.volume_inc()
+                        for i in range(5):
+                            self.player.volume_inc()
 
-                elif event.code == ecodes.KEY_VOLUMEDOWN:
+                elif event.code == ecodes.KEY_VOLUMEDOWN: 
                     if event.value == 1:
-                        self.player.volume_dec()
+                        for i in range(5):
+                            self.player.volume_dec()
 
                 elif event.code == ecodes.KEY_MUTE:
                     if event.value == 1:
@@ -50,7 +52,7 @@ class IrremoteInterface (BaseInterface):
                         elif self.player.isPaused():
                             self.player.resume()
                         else:
-                            self.player.play() 
+                            self.player.play()
 
                 elif event.code == ecodes.KEY_STOPCD:
                     if event.value == 1:

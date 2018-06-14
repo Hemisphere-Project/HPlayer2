@@ -37,19 +37,22 @@ class MpvPlayer(BasePlayer):
         self.procThread.start()
 
         # Socket IPC to process
+        self.socketReady = False
         self.sock = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
         for retry in xrange(10, 0, -1):
             try:
                 self.sock.connect(socketpath)
                 self.sock.settimeout(0.1)
                 print(self.nameP, "connected to MPV at", socketpath)
+                self.socketReady = True
                 break
             except socket.error, msg:
                 if retry == 1:
                     print (self.nameP, "socket error:", msg)
                     self.isRunning(False)
                 else:
-                    sleep(0.1)
+                    print (self.nameP, "retying socket..")
+                    sleep(0.2)
 
         # Socket Receive thread
         self.recvThread = threading.Thread(target=self._receive)
@@ -115,14 +118,15 @@ class MpvPlayer(BasePlayer):
             except (socket.error, AssertionError) as e:
                 if self.isRunning():
                     print(self.nameP, e)
-                    self.isRunning(False)
+                    self.isRunning(False) 
 
         return
 
 
     # MPV ipc send
     def _send(self, msg):
-        self.sock.send(msg+'\n')
+        if self.socketReady:
+            self.sock.send(msg+'\n')
 
     ########################
     # OVERLOAD Abstract Player #
