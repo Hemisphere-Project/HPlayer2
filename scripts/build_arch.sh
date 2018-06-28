@@ -8,7 +8,7 @@ pacman -Su
 # libass / ffmpeg / mpv dependencies
 pacman -S freetype2 fribidi fontconfig yasm libx264 libtool base-devel pkg-config autoconf --noconfirm
 pacman -S lua luajit libvdpau libva libxv libjpeg libxkbcommon libxrandr mesa libv4l libxss libcaca sdl2 fbida --noconfirm
-pacman -S alsa-lib alsa-firmware ttf-roboto
+pacman -S alsa-lib alsa-firmware ttf-roboto --noconfirm
 
 # /boot/config.txt
 # add dtparam=audio=on

@@ -1,5 +1,4 @@
 #!/bin/bash
-sudo apt update
 
 ##############
 # DEPENDENCIES
@@ -32,22 +31,23 @@ if [[ $(uname -m) = armv* ]]; then
 fi
 
 #######
-# SELECT PREBUILD ?
+# SELECT PREBUILD ? 
 #######
 
-cd "$(dirname "$0")"
-./select_prebuild
-if [ $? -eq 0 ]
-then
-	echo ""
-  echo "Building MPV for your system..."
-else
-  exit
-fi
+# cd "$(dirname "$0")"
+# ./select_prebuild
+# if [ $? -eq 0 ]
+# then
+# 	echo ""
+# else
+#   exit
+# fi
 
 #######
 # COMPILE MPV
 #######
+
+echo "Building MPV for your system..."
 
 # Get MPV Build tools
 cd "$(dirname "$0")"
@@ -62,6 +62,9 @@ if [[ $(uname -m) = armv* ]]; then
 fi
 
 # Build
+./use-mpv-release
+./use-ffmpeg-release
+./update
 ./rebuild -j4
 cd ..
 
