@@ -82,9 +82,10 @@ class KeypadInterface (BaseInterface):
 
 
             display = ""
-            if self.player.isPlaying() and self.player.status()['media']:
+            if self.player.status()['media'] is not None:
                 display = os.path.basename(self.player.status()['media'])[:-4]
-                display += "  \"" + str(int(self.player.status()['time']))
+                if self.player.status()['time'] is not None:
+                    display += "  \"" + str(int(self.player.status()['time']))
             else:
                 display = "-stop-"
             display += "\n" + 'VOLUME: '+str(self.player.status()['volume'])

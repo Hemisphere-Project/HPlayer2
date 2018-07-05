@@ -237,10 +237,11 @@ class BasePlayer(object):
             if arg >= 0 and arg < len(self._playlist) and os.path.isfile(self._playlist[arg]):
                 self._currentIndex = arg
                 self._status['media'] = self._playlist[arg]
+                self._status['time'] = None
                 self._play(self._playlist[arg])
             else:
                 self._status['media'] = None
-                self._status['time'] = 0
+                self._status['time'] = None
                 print(self.nameP, "Empty playlist..")
                 error = True
                 nomedia = True
