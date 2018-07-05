@@ -12,16 +12,16 @@ player.addInterface('osc', [4000,4001])
 player.addInterface('http', [8037])
 
 def syncTest():
-    print 'synctest'
-    loop = "loop" if player.status()['loop'] else "unloop"
-    screen = "screen" if not player.status()['flip'] else "screenflip"
-    media = os.path.basename(player.status()['media']) if player.isPlaying() else "-stop-"
-    player.getInterface('osc').hostOut = regie_ip
-    player.getInterface('osc').send(media)
+	if player.isPlaying():
+		media = os.path.basename(player.status()['media'])  
+		media += "/'" + str(player.status()['time'])
+	else: 
+		media = "-stop-"
+	player.getInterface('osc').hostOut = regie_ip
+	player.getInterface('osc').send(media)
 	
 
 player.on(['/synctest'],  syncTest)
-#player.on(['stop'], syncTest)
 
 # RUN
 hplayer.setBasePath("/mnt/usb/")

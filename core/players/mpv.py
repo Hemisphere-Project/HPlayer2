@@ -79,6 +79,7 @@ class MpvPlayer(BasePlayer):
         # Listener
         self._send('{ "command": ["observe_property", 1, "eof-reached"] }')
         self._send('{ "command": ["observe_property", 2, "core-idle"] }')
+        self._send('{ "command": ["observe_property", 3, "time-pos"] }')
 
         # Receive
         while self.isRunning():
@@ -103,9 +104,11 @@ class MpvPlayer(BasePlayer):
                             pass
                         elif mpvsays['name'] == 'core-idle':
                             self._status['isPlaying'] = not mpvsays['data']
+                        elif mpvsays['name'] == 'time-pos':
+                            self._status['time'] = mpvsays['data']
                         else:
                             pass
-                            #print(self.nameP, "IPC event:", mpvsays['event'])
+                        #    print(self.nameP, "IPC event:", mpvsays)
 
 
                 # print(self.nameP, "IPC says:", msg.rstrip())
