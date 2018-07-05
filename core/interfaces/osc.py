@@ -117,10 +117,10 @@ class OscInterface (BaseInterface):
         def unflip(path, args, types):
             self.player.flip(False)
 
-        @osc("/status")
-        def getStatus(path, args, types):
-            print('STATUS')
-            pass
+        #@osc("/status")
+        #def getStatus(path, args, types):
+        #    print('STATUS')
+        #    pass
 
         @osc("/quit")
         def quit(path, args, types):

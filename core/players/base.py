@@ -270,6 +270,8 @@ class BasePlayer(object):
 
     # NEXT item in playlist
     def next(self):
+    	if not self.isPlaying():
+    		self.load()			# Initial "next" should consider the whole basepath as playlist
         with self._lock:
             self._currentIndex += 1
             if self._currentIndex >= len(self._playlist) and self._status['loop']:

@@ -95,8 +95,18 @@ def MakeHandlerClass(player):
                 self.player.mute(False)
 
             elif command == 'status':
-                status = pprint.pformat(self.player._status, indent=4)
+                statusTree = self.player._status
+                while len(args) > 0:
+                	key = args.pop(0)
+                	status = None
+                	if key in statusTree:
+                		statusTree = statusTree[key]
+                status = pprint.pformat(statusTree, indent=4)
                 self.wfile.write(status)
+                return
+
+            elif command == 'ping':
+                self.wfile.write('pong') 
                 return
 
             elif command == 'event':
@@ -120,7 +130,7 @@ def MakeHandlerClass(player):
             print("DATA", post_data)
             self._set_headers()
             self.wfile.write("<html><body><h1>POST!</h1></body></html>")
-            
+
         def log_message(self, format, *args):
             # QUIET LOG
             return
