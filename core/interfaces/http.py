@@ -85,19 +85,25 @@ def MakeHandlerClass(player):
                 self.player.loop(False)
 
             elif command == 'volume':
-                pass
+                if len(args) > 0:
+                    self.player.volume(int(args[0]))
 
             elif command == 'mute':
-                pass
+                self.player.mute(True)
 
             elif command == 'unmute':
-                pass
+                self.player.mute(False)
 
             elif command == 'status':
-                pass
+                status = pprint.pformat(self.player._status, indent=4)
+                self.wfile.write(status)
+                return
 
             elif command == 'event':
-                pass
+                if len(args) > 1:
+                    self.player.trigger(args[0], arg[1:])
+                elif len(args) > 0:
+                    self.player.trigger(args[0])
 
             self.wfile.write("<html><body><h1>Command: "+command+" - Args: "+','.join(args)+"</h1></body></html>")
             print("GET", self.path)
