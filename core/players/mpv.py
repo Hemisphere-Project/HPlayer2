@@ -118,7 +118,7 @@ class MpvPlayer(BasePlayer):
             except (socket.error, AssertionError) as e:
                 if self.isRunning():
                     print(self.nameP, e)
-                    self.isRunning(False) 
+                    self.isRunning(False)
 
         return
 
@@ -126,7 +126,12 @@ class MpvPlayer(BasePlayer):
     # MPV ipc send
     def _send(self, msg):
         if self.socketReady:
-            self.sock.send(msg+'\n')
+            try:
+                self.sock.send(msg+'\n')
+            except socket.error:
+                print (self.nameP, "socket send error:", msg)
+                self.isRunning(False)
+
 
     ########################
     # OVERLOAD Abstract Player #

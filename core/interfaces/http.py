@@ -3,7 +3,9 @@ from termcolor import colored
 from time import sleep
 from base import BaseInterface
 import pprint
-import cherrypy
+
+from BaseHTTPServer import BaseHTTPRequestHandler, HTTPServer
+
 
 class HttpInterface (BaseInterface):
 
@@ -17,84 +19,7 @@ class HttpInterface (BaseInterface):
         self.name = "HTTP "+player.name
         self.nameP = colored(self.name, 'blue')
 
-        class HelloWorld(object):
-
-            def __init__(self, player):
-                self.player = player
-
-            @cherrypy.expose
-            def index(self):
-                return "Hello World!"
-
-            @cherrypy.expose
-            def play(self, media):
-                self.player.play(str(media))
-                return "play "+media
-
-            @cherrypy.expose
-            def stop(self):
-                self.player.stop()
-                return "stop"
-
-            @cherrypy.expose
-            def pause(self):
-                self.player.pause()
-                return "pause"
-
-            @cherrypy.expose
-            def resume(self):
-                self.player.resume()
-                return "resume"
-
-            @cherrypy.expose
-            def next(self):
-                self.player.next()
-                return "next"
-
-            @cherrypy.expose
-            def prev(self):
-                self.player.prev()
-                return "prev"
-
-            @cherrypy.expose
-            def loop(self):
-                self.player.loop(True)
-                return "loop"
-
-            @cherrypy.expose
-            def unloop(self):
-                self.player.loop(False)
-                return "unloop"
-
-            @cherrypy.expose
-            def volume(self, vol):
-                self.player.volume(int(vol))
-                return "volume "+vol
-
-            @cherrypy.expose
-            def mute(self):
-                self.player.mute(True)
-                return "mute"
-
-            @cherrypy.expose
-            def unmute(self):
-                self.player.mute(False)
-                return "unmute"
-
-            @cherrypy.expose
-            def status(self):
-                return pprint.pformat(self.player._status, indent=4)
-
-            @cherrypy.expose
-            def event(self, *args, **kwargs):
-                self.player.trigger(args[0])
-                return u'Event {0} triggered with {1}'.format(args[0], kwargs)
-
         self.port = args[0]
-        cherrypy.server.socket_port = self.port
-        cherrypy.server.socket_host = '0.0.0.0'
-        cherrypy.log.screen = False
-        cherrypy.tree.mount(HelloWorld(player), "/", {'/':{}})
 
         self.start()
 
@@ -102,12 +27,92 @@ class HttpInterface (BaseInterface):
     def receive(self):
 
         print(self.nameP, "starting HTTP server on port", self.port)
-        cherrypy.engine.start()
 
-        while self.isRunning() and cherrypy.engine.state == cherrypy.engine.states.STARTED:
-            sleep(0.1)
+        httpd = HTTPServer(('', self.port), MakeHandlerClass(self.player))
+        httpd.serve_forever()
 
-        cherrypy.engine.exit()
-        cherrypy.server.stop()
         self.isRunning(False)
         return
+
+
+def MakeHandlerClass(player):
+    class CustomHandler(BaseHTTPRequestHandler, object):
+        def __init__(self, *args, **kwargs):
+            self.player = player
+            super(CustomHandler, self).__init__(*args, **kwargs)
+
+        def _set_headers(self):
+            self.send_response(200)
+            self.send_header('Content-type', 'text/html')
+            self.end_headers()
+
+        def do_GET(self):
+            self._set_headers()
+            args = self.path.split('/')
+            args.pop(0)
+
+            if len(args) == 0 or args[0] == '':
+                self.wfile.write("<html><body><h1>Hello World!</h1></body></html>")
+                return
+
+            command = args.pop(0)
+
+            if command == 'play':
+                if len(args) > 0:
+                    self.player.play(str(args[0]))
+                else:
+                    self.player.play()
+
+            elif command == 'stop':
+                self.player.stop()
+
+            elif command == 'pause':
+                self.player.pause()
+
+            elif command == 'resume':
+                self.player.resume()
+
+            elif command == 'next':
+                self.player.next()
+
+            elif command == 'prev':
+                self.player.prev()
+
+            elif command == 'loop':
+                self.player.loop(True)
+
+            elif command == 'unloop':
+                self.player.loop(False)
+
+            elif command == 'volume':
+                pass
+
+            elif command == 'mute':
+                pass
+
+            elif command == 'unmute':
+                pass
+
+            elif command == 'status':
+                pass
+
+            elif command == 'event':
+                pass
+
+            self.wfile.write("<html><body><h1>Command: "+command+" - Args: "+','.join(args)+"</h1></body></html>")
+            print("GET", self.path)
+
+
+        def do_HEAD(self):
+            self._set_headers()
+
+        def do_POST(self):
+             # Doesn't do anything with posted data
+            content_length = int(self.headers['Content-Length']) # <--- Gets the size of data
+            post_data = self.rfile.read(content_length) # <--- Gets the data itself
+            print("POST", self.path)
+            print("DATA", post_data)
+            self._set_headers()
+            self.wfile.write("<html><body><h1>POST!</h1></body></html>")
+
+    return CustomHandler

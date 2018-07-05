@@ -115,11 +115,21 @@ class BasePlayer(object):
                             liste.append(fullpath)
                             break
                     # relative path file with WILDCARD
-                    elif len(glob.glob(fullpath)) > 0:
-                        for e in glob.glob(fullpath):
-                            if os.path.isfile(e) and self.validExt(e):
-                                liste.append(e)
-                        break
+                    ##
+                    ## BROKEN
+                    ##
+                    else:
+                        globlist = []
+                        for root, dirs, files in os.walk("/mnt/usb/", topdown=False):
+                           for name in files:
+                              fpath = os.path.join(root, name)
+                              if '/.' not in fpath:
+                                globlist.append(fpath)
+                        if len(globlist) > 0:
+                            for e in globlist:
+                                if os.path.isfile(e) and self.validExt(e):
+                                    liste.append(e)
+                            break
 
         liste = sorted(liste)
         return liste
@@ -219,11 +229,11 @@ class BasePlayer(object):
         # Play file at index
         error = False
         nomedia = False
+
         with self._lock:
             if arg >= 0 and arg < len(self._playlist) and os.path.isfile(self._playlist[arg]):
                 self._currentIndex = arg
                 self._status['media'] = self._playlist[arg]
-                # print(self.nameP, "PLAY ", self._status['media'])
                 self._play(self._playlist[arg])
             else:
                 self._status['media'] = None
