@@ -12,6 +12,7 @@ player.addInterface('osc', [4000,4001])
 player.addInterface('http', [8037])
 player.addInterface('keypad')
 
+
 def syncTest():
 	if player.status()['media'] is not None:
 		display = os.path.basename(player.status()['media'])[:-4]
@@ -25,6 +26,8 @@ def syncTest():
 
 
 player.on(['/synctest'],  syncTest)
+
+
 
 # RUN
 hplayer.setBasePath("/mnt/usb/")
