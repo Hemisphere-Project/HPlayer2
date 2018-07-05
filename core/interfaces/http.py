@@ -106,7 +106,7 @@ def MakeHandlerClass(player):
                     self.player.trigger(args[0])
 
             self.wfile.write("<html><body><h1>Command: "+command+" - Args: "+','.join(args)+"</h1></body></html>")
-            print("GET", self.path)
+            # print("GET", self.path)
 
 
         def do_HEAD(self):
@@ -120,5 +120,9 @@ def MakeHandlerClass(player):
             print("DATA", post_data)
             self._set_headers()
             self.wfile.write("<html><body><h1>POST!</h1></body></html>")
+            
+        def log_message(self, format, *args):
+            # QUIET LOG
+            return
 
     return CustomHandler

@@ -3,6 +3,7 @@ from __future__ import print_function
 import os
 import threading
 import glob
+import re
 from termcolor import colored
 
 from core import interfaces
@@ -96,10 +97,11 @@ class BasePlayer(object):
                 if self.validExt(entry):
                     liste.append(entry)
             # full path file with WILDCARD
-            elif entry[0] == '/' and len(glob.glob(entry)) > 0:
-                for e in glob.glob(entry):
-                    if os.path.isfile(e):
-                        liste.extend(e)
+            ## TODO PROBABLY BROKEN !
+            # elif entry[0] == '/' and len(glob.glob(entry)) > 0:
+            # 	for e in glob.glob(entry):
+            #         if os.path.isfile(e):
+            #             liste.extend(e)
 
             # check each base path
             else:
@@ -115,16 +117,15 @@ class BasePlayer(object):
                             liste.append(fullpath)
                             break
                     # relative path file with WILDCARD
-                    ##
-                    ## BROKEN
-                    ##
                     else:
                         globlist = []
-                        for root, dirs, files in os.walk("/mnt/usb/", topdown=False):
+                        for root, dirs, files in os.walk(base, topdown=False):
                            for name in files:
                               fpath = os.path.join(root, name)
-                              if '/.' not in fpath:
-                                globlist.append(fpath)
+                              match = re.match( r''+fullpath.replace('*','.*'), fpath, re.M|re.I)
+                              if ('/.' not in fpath) and match:
+                                	globlist.append(fpath)
+                        #print(globlist)        
                         if len(globlist) > 0:
                             for e in globlist:
                                 if os.path.isfile(e) and self.validExt(e):
@@ -215,7 +216,8 @@ class BasePlayer(object):
         with self._lock:
             self._playlist = self.buildList(playlist)
             self._currentIndex = -1
-
+        
+        print(self.nameP, "playlist loaded:", self._playlist)
         # print("Current playlist: ", self._playlist)
 
     # PLAY A Playlist or Index
