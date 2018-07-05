@@ -37,7 +37,8 @@ class BasePlayer(object):
         'random':       False,
         'isPlaying':    False,
         'isPaused':     False,
-        'media':        None
+        'media':        None,
+        'time':         0
     }
 
     def __init__(self):
@@ -125,7 +126,7 @@ class BasePlayer(object):
                               match = re.match( r''+fullpath.replace('*','.*'), fpath, re.M|re.I)
                               if ('/.' not in fpath) and match:
                                 	globlist.append(fpath)
-                        #print(globlist)        
+                        #print(globlist)
                         if len(globlist) > 0:
                             for e in globlist:
                                 if os.path.isfile(e) and self.validExt(e):
@@ -216,7 +217,7 @@ class BasePlayer(object):
         with self._lock:
             self._playlist = self.buildList(playlist)
             self._currentIndex = -1
-        
+
         print(self.nameP, "playlist loaded:", self._playlist)
         # print("Current playlist: ", self._playlist)
 
@@ -239,6 +240,7 @@ class BasePlayer(object):
                 self._play(self._playlist[arg])
             else:
                 self._status['media'] = None
+                self._status['time'] = 0
                 print(self.nameP, "Empty playlist..")
                 error = True
                 nomedia = True
@@ -254,10 +256,11 @@ class BasePlayer(object):
     # STOP Playback
     def stop(self):
         print(self.nameP, "stop")
-        self._status['media'] = None
         with self._lock:
             self._stop()
             self._currentIndex = -1
+        self._status['media'] = None
+        self._status['time'] = 0
         self.trigger('stop')
 
     # PAUSE Playback
@@ -280,6 +283,8 @@ class BasePlayer(object):
 
     # PREVIOUS item in playlist
     def prev(self):
+        if not self.isPlaying():
+    		self.load()			# Initial "prev" should consider the whole basepath as playlist
         with self._lock:
             self._currentIndex -= 1
             if self._currentIndex < 0 and self._status['loop']:
