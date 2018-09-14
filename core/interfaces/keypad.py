@@ -47,8 +47,7 @@ class KeypadInterface (BaseInterface):
                 pressed['LEFT']-=1
 
             if self.lcd.is_pressed(LCD.SELECT) and pressed['SEL'] == 0:
-                if self.player.isPlaying():
-                    self.player.stop()
+                self.player.stop()
                 # else:
                 #     self.player.load()
                 #     self.player.play()
@@ -73,4 +72,4 @@ class KeypadInterface (BaseInterface):
                 self.lcd.message( display['new'] )
                 display['last'] = display['new']
 
-            sleep(0.05)
+            sleep(0.02)
