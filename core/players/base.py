@@ -129,31 +129,32 @@ class BasePlayer(object):
             # check each base path
             else:
                 for base in self.basepath:
-                    fullpath = os.path.join(base, entry)
-                    # relative path directory -> add content recursively
-                    if os.path.isdir(fullpath):
-                        liste.extend(self.buildList(fullpath))
-                        break
-                    # relative path file -> add content recursively
-                    elif os.path.isfile(fullpath):
-                        if self.validExt(entry):
-                            liste.append(fullpath)
+                    if os.path.isdir(base):
+                        fullpath = os.path.join(base, entry)
+                        # relative path directory -> add content recursively
+                        if os.path.isdir(fullpath):
+                            liste.extend(self.buildList(fullpath))
                             break
+                        # relative path file -> add content recursively
+                        elif os.path.isfile(fullpath):
+                            if self.validExt(entry):
+                                liste.append(fullpath)
+                                break
 
-                    # relative path file with WILDCARD
-                    else:
-                        globlist = []
-                        for root, dirs, files in os.walk(base, topdown=False):
-                           for name in files:
-                              fpath = os.path.join(root, name)
-                              match = re.match( r''+fullpath.replace('*','.*'), fpath, re.M|re.I)
-                              if ('/.' not in fpath) and match:
-                                	globlist.append(fpath)
-                        #print(globlist)
-                        for e in globlist:
-                            if os.path.isfile(e) and self.validExt(e):
-                                liste.append(e)
-                        break
+                        # relative path file with WILDCARD
+                        else:
+                            globlist = []
+                            for root, dirs, files in os.walk(base, topdown=False):
+                               for name in files:
+                                  fpath = os.path.join(root, name)
+                                  match = re.match( r''+fullpath.replace('*','.*'), fpath, re.M|re.I)
+                                  if ('/.' not in fpath) and match:
+                                    	globlist.append(fpath)
+                            #print(globlist)
+                            for e in globlist:
+                                if os.path.isfile(e) and self.validExt(e):
+                                    liste.append(e)
+                            break
 
         liste = sorted(liste)
         return liste
@@ -271,16 +272,26 @@ class BasePlayer(object):
 
         valid = False
 
+        # empty playlist: try a re-scan
+        if len(self._playlist) == 0:
+            self.load()
+            index = 0
+
+        # media not found: try a res-can
+        if 0 <= index < len(self._playlist) and not os.path.isfile(self._playlist[index]):
+            self.load()
+            index = 0
+
         # Play file at index
         with self._lock:
             self._status['media'] = None
             self._status['time'] = 0
 
             if 0 <= index < len(self._playlist) and os.path.isfile(self._playlist[index]):
-                    self._play(self._playlist[index])
-                    self._currentIndex = index
-                    self._status['media'] = self._playlist[index]
-                    valid = True
+                self._play(self._playlist[index])
+                self._currentIndex = index
+                self._status['media'] = self._playlist[index]
+                valid = True
 
         # Emit play event
         if valid:
@@ -293,7 +304,7 @@ class BasePlayer(object):
             self.trigger('nomedia')
 
             if len(self._playlist) == 0:
-                print(self.nameP, "Nothing to play ...")
+                print(self.nameP, "No media found in", self.basepath)
             elif not (0 <= index < len(self._playlist)):
                 print(self.nameP, "Index out of playlist range:", index, self._playlist)
             else:

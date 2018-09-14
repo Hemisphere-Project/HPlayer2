@@ -38,22 +38,22 @@ elif [[ $(command -v pacman) ]]; then
     distro='arch'
 
     # libass / ffmpeg / mpv dependencies
-    pacman -S freetype2 fribidi fontconfig yasm git --noconfirm
-    pacman -S autoconf pkg-config libtool --noconfirm
-    pacman -S lua luajit libvdpau libva libxv libjpeg libxkbcommon libxrandr libv4l libxss libcaca sdl2 --noconfirm 
-    pacman -S base-devel --noconfirm    ## error ?
-    pacman -S libx264 --noconfirm       ## error ?
-    pacman -S mesa --noconfirm          ## error ?
-    pacman -S fbida --noconfirm         ## error ?
-    pacman -S alsa-lib alsa-firmware ttf-roboto --noconfirm
+    pacman -S freetype2 fribidi fontconfig yasm git --noconfirm --needed
+    pacman -S autoconf pkg-config libtool --noconfirm --needed
+    pacman -S lua luajit libvdpau libva libxv libjpeg libxkbcommon libxrandr libv4l libxss libcaca sdl2 --noconfirm --needed 
+    pacman -S base-devel --noconfirm --needed    ## error ?
+    pacman -S libx264 --noconfirm --needed       ## error ?
+    pacman -S mesa --noconfirm --needed          ## error ?
+    pacman -S fbida --noconfirm --needed         ## error ?
+    pacman -S alsa-lib alsa-firmware ttf-roboto --noconfirm --needed
 
     # hplayer2 dependencies
-    pacman -S python3 cython liblo --noconfirm
-    pacman -S python-pyliblo python-netifaces python-termcolor python-evdev
+    pacman -S python3 cython liblo --noconfirm --needed
+    pacman -S python-pyliblo python-netifaces python-termcolor python-evdev --noconfirm --needed
 
     # GPIO RPi
     if [[ $(uname -m) = armv* ]]; then
-      pacman -S python-pip --noconfirm
+      pacman -S python-pip --noconfirm --needed
       /usr/bin/yes | pip3 install RPi.GPIO
       git clone https://github.com/adafruit/Adafruit_Python_CharLCD.git
 	  cd Adafruit_Python_CharLCD
@@ -95,6 +95,7 @@ cd mpv-build
 # RPi MMAL
 if [[ $(uname -m) = armv* ]]; then
 	echo --enable-mmal > ffmpeg_options
+	echo --disable-vaapi > mpv_options
 fi
 
 # Build
