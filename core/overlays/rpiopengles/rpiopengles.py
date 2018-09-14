@@ -3,9 +3,9 @@ import time
 import math
 
 # Pick up our constants extracted from the header files with prepare_constants.py
-from egl import *
-from gl2 import *
-from gl2ext import *
+from .egl import *
+from .gl2 import *
+from .gl2ext import *
 
 # Define verbose=True to get debug messages
 verbose = True
@@ -37,7 +37,7 @@ def check(e):
     """Checks that error is zero"""
     if e==0: return
     if verbose:
-        print 'Error code',hex(e&0xffffffff)
+        print ('Error code',hex(e&0xffffffff))
     raise ValueError
 
 class EGL(object):
@@ -78,7 +78,7 @@ class EGL(object):
         r = openegl.eglBindAPI(EGL_OPENGL_ES_API)
         assert r
         if verbose:
-            print 'numconfig=',numconfig
+            print ('numconfig=',numconfig)
         context_attribs = eglints( (EGL_CONTEXT_CLIENT_VERSION, 2, EGL_NONE) )
         self.context = openegl.eglCreateContext(self.display, config,
                                         EGL_NO_CONTEXT,
@@ -131,5 +131,5 @@ class colortexture():
     def check(self):
         e=opengles.glGetError()
         if e:
-            print hex(e)
+            print (hex(e))
             raise ValueError

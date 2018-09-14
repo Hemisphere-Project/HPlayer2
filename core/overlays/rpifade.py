@@ -1,14 +1,14 @@
 from __future__ import print_function
 from termcolor import colored
 from time import sleep
-from base import BaseOverlay
+from .base import BaseOverlay
 import copy
-import Queue
-from rpiopengles import rpiopengles
+import queue
+from .rpiopengles import rpiopengles
 
 class RpifadeOverlay (BaseOverlay):
 
-    queue = Queue.Queue()
+    queue = queue.Queue()
     nextFader = {'red': 0.0, 'green': 0.0, 'blue': 0.0, 'alpha': 0.0}
     currentFader = copy.deepcopy(nextFader)
 

@@ -17,17 +17,25 @@ class KeypadInterface (BaseInterface):
     def __init__(self, player):
         super(KeypadInterface, self).__init__(player, "KEYPAD")
 
-        self.lcd = LCD.Adafruit_CharLCDPlate()
-        self.lcd.set_color(0, 0, 0)
+        try:
+            self.lcd = LCD.Adafruit_CharLCDPlate()
+            self.lcd.set_color(0, 0, 0)
+        except:
+            self.log("LCD Keypad not found ...")
+            self.lcd = None
 
 
     def listen(self):
+        if not self.lcd:
+            return
+            
         self.log("starting KEYPAD listener")
 
         display = {'new': "", 'last': ""}
         pressed = dict.fromkeys(['UP', 'DOWN', 'RIGHT', 'LEFT', 'SEL'], False)
 
         while self.isRunning():
+
             if self.lcd.is_pressed(LCD.UP):
                 self.player.volume_inc()
 

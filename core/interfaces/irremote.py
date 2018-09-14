@@ -10,12 +10,18 @@ class IrremoteInterface (BaseInterface):
         # Interface settings
         super(IrremoteInterface, self).__init__(player, "IRremote")
 
-        self.remote = InputDevice("/dev/input/event0")
-        self.remote.grab()
-
+        try:
+            self.remote = InputDevice("/dev/input/event0")
+            self.remote.grab()
+        except:
+            self.log("IR Remote dongle not found ...")
+            self.remote = None
 
     # Remote receiver THREAD
     def listen(self):
+        if not self.remote:
+            return
+
         self.log("starting IRremote listener")
 
         while self.isRunning():
