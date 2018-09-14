@@ -189,7 +189,7 @@ class ThreadedHTTPServer(object):
                 d = {'text': os.path.basename(path),
                      'path': path}
                 if os.path.isdir(path):
-                    d['nodes'] = [path_to_dict(os.path.join(path,x)) for x in os.listdir(path)]
+                    d['nodes'] = [path_to_dict(os.path.join(path,x)) for x in sorted(os.listdir(path))]
                     d['backColor'] = "#EEE"
                     d['selectable'] = False
                 return d
