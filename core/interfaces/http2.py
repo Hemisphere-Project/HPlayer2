@@ -153,6 +153,10 @@ class ThreadedHTTPServer(object):
         @socketio.on('notautoplay')
         def unmute_message():
             self.player.autoplay(False)
+            
+        @socketio.on('reboot')
+        def reboot_message():
+            os.system('reboot')
 
         @socketio.on('pan')
         def pan_message(message=None):

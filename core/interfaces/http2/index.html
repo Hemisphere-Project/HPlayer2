@@ -35,6 +35,15 @@
       background-color: #444;
       color: #EEE;
     }
+    #link-connected {
+      float: right;
+      color: green;
+      display: none;
+    }
+    #link-disconnected {
+      color: red;
+      float: right;
+    }
     </style>
 
     <script type="text/javascript" charset="utf-8">
@@ -62,9 +71,16 @@
             }
 
             socket.on('connect', function() {
-                // socket.emit('my_event', {data: 'I\'m connected!'});
-                console.log('SocketIO connected !')
+                console.log('SocketIO connected :)')
                 socket.emit('fileslist');
+                $('#link-connected').show();
+                $('#link-disconnected').hide();
+            });
+            
+            socket.on('disconnect', function() {
+                console.log('SocketIO disconnected :(')
+                $('#link-connected').hide();
+                $('#link-disconnected').show();
             });
 
             socket.on('files', function(msg) {
@@ -158,6 +174,10 @@
               if(!settings['autoplay']) socket.emit('autoplay');
               else socket.emit('notautoplay');
             });
+            $('#reboot_btn').click(function(event) {
+              var r = confirm("Reboot the device ?");
+              if (r == true) socket.emit('reboot');
+            });
 
             $('#volume_range').on('input', function(event) {
               socket.emit('volume', this.value);
@@ -199,6 +219,8 @@
     <div class="row">
       <div class="col-0 col-md-2 col-lg-3"></div>
       <div class="col-12 col-md-8 col-lg-6">
+        <span id="link-connected">connected</span>
+        <span id="link-disconnected">disconnected</span>
         <h1>HPlayer2</h1>
         <hr />
 
@@ -208,6 +230,7 @@
             <button type="button" class="btn btn-outline-info" id="loop_btn">loop</button>
             <button type="button" class="btn btn-outline-secondary" id="auto_btn">autoplay</button>
             <button type="button" class="btn btn-outline-warning" id="mute_btn">mute</button>
+            <button type="button" class="btn btn-outline-danger" id="reboot_btn">reboot</button>
           </div>
 
           <div class="form-group">
