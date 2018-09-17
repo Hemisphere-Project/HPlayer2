@@ -13,8 +13,8 @@ player.addInterface('http', [8037])
 
 def syncTest():
 	if player.isPlaying():
-		media = os.path.basename(player.status()['media'])  
-		media += "/'" + str(player.status()['time'])
+		media = os.path.basename(player.status()['media'])[:-4]
+		media += "/\"" + str(int(player.status()['time']))
 	else: 
 		media = "-stop-"
 	player.getInterface('osc').hostOut = regie_ip
