@@ -4,7 +4,6 @@ blurp
 distro=''
 if [[ $(command -v apt) ]]; then
     distro='xbian'
-    ./build_debian.sh
 
     # libass / ffmpeg / mpv dependencies
     sudo apt install libfreetype6-dev libfribidi-dev libfontconfig1-dev yasm libx264-dev git libtool build-essential pkg-config autoconf -y
