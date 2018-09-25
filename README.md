@@ -1,7 +1,8 @@
 # HPlayer2
 HPlayer2 is a modular media player designed to allow multiple ways of control, over multiple platform.
 
-It is build in a modular way: you can choose the player engine (mpv, vlc, omxplayer, ...), i/o interfaces (osc, http, rfid, ble, gpio, ...) and patch everything up.
+It is build in a modular way: you can choose the player engine (mpv, vlc, omxplayer, ...),  
+i/o interfaces (osc, http, rfid, ble, gpio, ...) and patch everything up.
 
 HPlayer2 is focused on Raspberry Pi, but is based on python code wrapping 3rd parties engines and libraries, so as long as those 3rd parties components are supported on other platform, HPlayer2 should run on it ! 
 
