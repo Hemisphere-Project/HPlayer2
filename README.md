@@ -83,13 +83,13 @@ Available interfaces:
  - GPIO: allows patching RPi gpio event to player action
  - OSC: patching OSC message to player actions to control it from TouchOSC / MaxMSP / etc...
  - HTTP: bootstrap a basic HTTP server to control and get status of the player over a network
- - iRRemote: interface usb infrared remotes like [this one](https://goo.gl/sz7rie)
- - Keypad: interface LCD+Keypad RPi shield like [this one](https://www.adafruit.com/product/1110) 
- - NFC: interface RFID/NFC tag reader based on PN532 like [this one](https://www.adafruit.com/product/364)
+ - iRRemote: interface usb infrared remotes like [this one](https://goo.gl/sz7rie){:target="_blank"}
+ - Keypad: interface LCD+Keypad RPi shield like [this one](https://www.adafruit.com/product/1110) {:target="_blank"}
+ - NFC: interface RFID/NFC tag reader based on PN532 like [this one](https://www.adafruit.com/product/364){:target="_blank"}
  
 
 
 ## CREDITS
-HPlayer2 is developed by Thomas BOHL for [Hemisphere](https://www.hemisphere-project.com/)
+HPlayer2 is developed by Thomas BOHL for [Hemisphere](https://www.hemisphere-project.com/){:target="_blank"}
 
 HPlayer2 is build on top of MPV player, liblo, Adafruit libs and more.. thanks to all those open developers !
