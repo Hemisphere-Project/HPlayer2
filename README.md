@@ -1,13 +1,14 @@
 # HPlayer2
-HPlayer2 is a modular media player designed to allow multiple ways of control, over multiple platform. It is build in a modular way: you can choose the player engine (mpv, vlc, omxplayer, ...), i/o interfaces (osc, http, rfid, ble, gpio, ...) and patch everything the way you want.
+HPlayer2 is a modular media player designed to allow multiple ways of control, over multiple platform.  
+It is build in a modular way: you can choose the player engine (mpv, vlc, omxplayer, ...), i/o interfaces (osc, http, rfid, ble, gpio, ...) and patch everything up.
 
 HPlayer2 is focused on Raspberry Pi, but is based on python code wrapping 3rd parties engines and libraries, so as long as those 3rd parties components are supported on other platform, HPlayer2 should run on it ! 
 
-HPlayer2 is under development, some features might not be fully available or sometimes broken, feel free to ask for help and open issues, i'll do my best to cover it. Pull requests are also welcomed !
+HPlayer2 is under development, some features might not be fully available or sometimes broken, feel free to ask for help and open issues, i'll do my best to cover it.  
+Pull requests are also welcomed !
 
 ## Media engine
-Hplayer2 is built in a modular way. 
-It abstracts the concept of player (media list, play, pause, stop, volume, position, ...),
+Hplayer2 abstracts the concept of player (media list, play, pause, stop, volume, position, ...),
 and then bind to an existing player engine. 
 
 On Raspberry Pi, i only managed to use 3 engines with Hardware acceleration on H.264 decoding: 
@@ -18,12 +19,13 @@ On Raspberry Pi, i only managed to use 3 engines with Hardware acceleration on H
 The goal of HPlayer2 is to offer the choice between those 3 engines, but for now only **mpv** is supported.
 
 ## Install
-HPlayer2 is a python program, with several "modular" dependencies, depending on which component you will be using. The core component you need to install is of course the media engine.
+HPlayer2 is a python program, with several "modular" dependencies, depending on which component you will be using.  
+The core component you need to install is of course the media engine.
 For now, only **mpv** is supported, so you should install it, but the **mpv** package in your distro repository might not be compiled with HW video decoding, so it might be necessary to build it yourself with this specific options enabled.
 
 There is a generic build script provided in **scripts/build.sh** that should cover most of the dependencies installation, including mpv. It is a bit long since mpv is re-compiled. The script might miss some recent dependencies (i sometime forget to update this script for brand new features).
 
-This script supports **arch** and **xbian** (raspbian/debian/ubuntu)
+This script supports **arch** and **xbian** (raspbian/debian/ubuntu)  
 On Raspberry Pi, i recommand using arch since boot up is faster, but it's up to you !
 
 On your freshly configured Raspberry Pi:
@@ -34,28 +36,28 @@ On your freshly configured Raspberry Pi:
     sudo ./build.sh
     cd ..
 
-You should examine this build script to understand what i does.
-You could run each part on your own instead of running the whole script blindly,
+You should examine this build script to understand what i does.  
+You could run each part on your own instead of running the whole script blindly,  
 it will help in case it is broken (it can be, since distro are evolving faster than i can keep up with).
 
 ## Run
-Since HPlayer2 is modular, you must specify a "patch" or **profile** that link i/o interfaces to the engine.
+Since HPlayer2 is modular, you must specify a "patch" or **profile** that link i/o interfaces to the engine.  
 There is a default profile provided, and several example based on projects where i use HPlayer2.
 
-To start, go to HPlayer2 directory, and run `./hplayer2 profile`
+To start, go to HPlayer2 directory, and run `./hplayer2 profile`  
 where *profile* is the name of a file in the **profiles** subdirectory (without the .py)
 
-for exemple you can run `./hplayer2 hpod` 
+for exemple you can run `./hplayer2 hpod`   
 which will start HPlayer with the profile located in **profiles/hpod.py**
 
-if you omit the profile and simply run `./hplayer2`
+if you omit the profile and simply run `./hplayer2`  
 it will use the default profile located in **profiles/default.py**
 
 ## Patch a profile
-The idea here is for you to program you own profile !
+The idea here is for you to program you own profile !  
 (or to use an existing one if it feats your needs..)
 
-Start reading the files in **profiles/** to see examples on how profiles are made.
+Start reading the files in **profiles/** to see examples on how profiles are made.  
 It's very simplified and *patching* oriented: an interface event can be plugged to a player action and vice-versa.
 
 The idea in a profile is: 
@@ -72,7 +74,7 @@ The idea in a profile is:
  - ciconia: HTTP and LCD-Keypad interfaces
 
 ## Interfaces
-A more complete documentation regarding the capabilities and the use of the different interface modules will be provided in the future (PR and help are welcome!).
+A more complete documentation regarding the capabilities and the use of the different interface modules will be provided in the future (PR and help are welcome!).  
 Interfaces are available without the need of explicit inclusion, from directory **core/interfaces/**
 
 Please check the profiles examples to see how to use those interfaces.
