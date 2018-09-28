@@ -1,10 +1,10 @@
 from __future__ import print_function
 from termcolor import colored
 from time import sleep
-from base import BaseInterface
+from .base import BaseInterface
 import pprint
 
-from BaseHTTPServer import BaseHTTPRequestHandler, HTTPServer
+from http.server import BaseHTTPRequestHandler, HTTPServer
 
 
 class HttpInterface (BaseInterface):
@@ -52,7 +52,7 @@ def MakeHandlerClass(player):
             args.pop(0)
 
             if len(args) == 0 or args[0] == '':
-                self.wfile.write("<html><body><h1>Hello World!</h1></body></html>")
+                self.wfile.write( ("<html><body><h1>Hello World!</h1></body></html>").encode() )
                 return
 
             command = args.pop(0)
@@ -102,11 +102,11 @@ def MakeHandlerClass(player):
                 	if key in statusTree:
                 		statusTree = statusTree[key]
                 status = pprint.pformat(statusTree, indent=4)
-                self.wfile.write(status)
+                self.wfile.write( status.encode() )
                 return
 
             elif command == 'ping':
-                self.wfile.write('pong') 
+                self.wfile.write( ('pong').encode() )
                 return
 
             elif command == 'event':
@@ -115,7 +115,7 @@ def MakeHandlerClass(player):
                 elif len(args) > 0:
                     self.player.trigger(args[0])
 
-            self.wfile.write("<html><body><h1>Command: "+command+" - Args: "+','.join(args)+"</h1></body></html>")
+            self.wfile.write( ("<html><body><h1>Command: "+command+" - Args: "+','.join(args)+"</h1></body></html>").encode() )
             # print("GET", self.path)
 
 
@@ -129,7 +129,7 @@ def MakeHandlerClass(player):
             print("POST", self.path)
             print("DATA", post_data)
             self._set_headers()
-            self.wfile.write("<html><body><h1>POST!</h1></body></html>")
+            self.wfile.write( ("<html><body><h1>POST!</h1></body></html>").encode() )
 
         def log_message(self, format, *args):
             # QUIET LOG

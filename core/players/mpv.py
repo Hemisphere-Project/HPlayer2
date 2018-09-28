@@ -2,7 +2,7 @@ from __future__ import print_function
 from termcolor import colored
 import socket, threading, subprocess, os, json, select
 from time import sleep
-from base import BasePlayer
+from .base import BasePlayer
 
 class MpvPlayer(BasePlayer):
 
@@ -77,16 +77,16 @@ class MpvPlayer(BasePlayer):
 
         # Socket IPC to process
         self._mpv_sock = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
-        for retry in xrange(10, 0, -1):
+        for retry in range(10, 0, -1):
             try:
                 self._mpv_sock.connect(self._mpv_socketpath)
                 self._mpv_sock.settimeout(0.1)
                 print(self.nameP, "socket connected through ", self._mpv_socketpath)
                 self._mpv_sock_connected = True
                 break
-            except socket.error, msg:
+            except socket.error as e:
                 if retry == 1:
-                    print (self.nameP, "socket error:", msg)
+                    print (self.nameP, "socket error:", e)
                     self.isRunning(False)
                 else:
                     print (self.nameP, "retrying socket connection..")
@@ -108,7 +108,7 @@ class MpvPlayer(BasePlayer):
                     assert len(msg) != 0, "socket disconnected"
 
                     # Message received
-                    for event in msg.rstrip().split("\n"):
+                    for event in msg.rstrip().split( b"\n" ):
                         try:
                             mpvsays = json.loads(event)
                         except:
@@ -151,7 +151,7 @@ class MpvPlayer(BasePlayer):
     def _mpv_send(self, msg):
         if self._mpv_sock_connected:
             try:
-                self._mpv_sock.send(msg+'\n')
+                self._mpv_sock.send( (msg+'\n').encode() )
             except socket.error:
                 print (self.nameP, "socket send error:", msg)
                 self.isRunning(False)

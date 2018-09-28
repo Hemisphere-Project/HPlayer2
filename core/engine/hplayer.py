@@ -4,7 +4,7 @@ import core.players as playerlib
 from time import sleep
 import signal
 import sys, os
-import network
+import netifaces as ni
 
 runningFlag = True
 players_pool = {}
@@ -57,8 +57,13 @@ def run():
     name = "HPlayer2"
     nameP = colored(name, 'green')
     print('\n' + nameP, "started. Welcome !");
-    print('\n' + nameP, "Device IP on eth0  is", network.get_ip('eth0'));
-    print(nameP, "Device IP on wlan0 is", network.get_ip('wlan0'));
+
+    try:
+        print('\n' + nameP, "Device IP on eth0  is", ni.ifaddresses('eth0')[ni.AF_INET][0]['addr']);
+        print(nameP, "Device IP on wlan0 is", ni.ifaddresses('wlan0')[ni.AF_INET][0]['addr']);
+    except:
+        pass
+
     sys.stdout.flush()
 
     # START players

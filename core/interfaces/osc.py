@@ -1,6 +1,6 @@
 from __future__ import print_function
 from termcolor import colored
-from base import BaseInterface
+from .base import BaseInterface
 import liblo
 
 def oscdump(path, args, types):
@@ -39,7 +39,7 @@ class OscInterface (BaseInterface):
             oscServer = liblo.Server(self.portIn)
             print(self.nameP, "binded to OSC port", self.portIn)
 
-        except liblo.ServerError, e:
+        except liblo.ServerError as e:
             print(self.nameP,  "OSC Error:", e)
             self.isRunning(False)
 

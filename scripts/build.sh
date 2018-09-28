@@ -20,7 +20,7 @@ if [[ $(command -v apt) ]]; then
     apt install libcaca-dev libsdl2-dev libasound2-dev -y
 
     # hplayer2 dependencies
-    apt install python-pip python-termcolor python-liblo -y
+    apt install python3-pip python3-liblo -y
     /usr/bin/yes | pip install netifaces termcolor
 
     # GPIO RPi
@@ -38,8 +38,8 @@ elif [[ $(command -v pacman) ]]; then
     pacman -S alsa-lib alsa-firmware ttf-roboto --noconfirm
 
     # hplayer2 dependencies
-    pacman -S python python-pip cython liblo --noconfirm
-    /usr/bin/yes | pip install netifaces termcolor
+    pacman -S python3 python3-pip cython liblo --noconfirm
+    /usr/bin/yes | pip3 install netifaces termcolor
 
     # GPIO RPi
     if [[ $(uname -m) = armv* ]]; then
