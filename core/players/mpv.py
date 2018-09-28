@@ -1,6 +1,6 @@
 from __future__ import print_function
 from termcolor import colored
-import socket, threading, subprocess, os, json
+import socket, threading, subprocess, os, json, select
 from time import sleep
 from base import BasePlayer
 
@@ -57,13 +57,16 @@ class MpvPlayer(BasePlayer):
             else:
                 sleep(0.1)          ## TODO turn into ASYNC !!
 
-        print(self.nameP, "closing process")
-        self._mpv_subproc.terminate()
-        if not self._mpv_subproc.poll():
-            print(self.nameP, "process terminated")
+
+        if self._mpv_subproc.poll():
+            self._mpv_subproc.terminate()
+            if not self._mpv_subproc.poll():
+                print(self.nameP, "process terminated")
+            else:
+                self._mpv_subproc.kill()
+                print(self.nameP, "process killed")
         else:
-            self._mpv_subproc.kill()
-            print(self.nameP, "process killed")
+            print(self.nameP, "process closed")
 
         self.isRunning(False)
         return
