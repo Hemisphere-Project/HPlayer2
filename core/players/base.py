@@ -197,6 +197,15 @@ class BasePlayer(object):
     # Player CONTROLS
     #
 
+    # START
+    def start(self):
+        # for iface in self._interfaces.values():
+        #     iface.start()
+        # for olay in self._overlays.values():
+        #     olay.start()
+        self.isRunning(True)
+        self._start()
+
     # QUIT
     def quit(self):
         for iface in self._interfaces.values():
@@ -340,6 +349,9 @@ class BasePlayer(object):
     #
     # Player INTERNAL actions: Methods to overwrite !
     #
+
+    def _start(self):
+        print(self.nameP, "start")
 
     def _quit(self):
         print(self.nameP, "quit")

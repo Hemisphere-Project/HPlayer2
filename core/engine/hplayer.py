@@ -19,6 +19,7 @@ signal.signal(signal.SIGINT, signal_handler)
 
 
 def setBasePath(bpath):
+    print('\n' + colored('HPlayer2', 'green'), "basepath:", bpath);
     for p in players():
         p.setBasePath(bpath)
 
@@ -60,8 +61,9 @@ def run():
     print(nameP, "Device IP on wlan0 is", network.get_ip('wlan0'));
     sys.stdout.flush()
 
-    # RUN event
+    # START players
     for p in players():
+        p.start()
         p.trigger('app-run')
 
     while runningFlag and running():

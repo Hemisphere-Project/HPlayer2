@@ -12,5 +12,5 @@ player.addInterface('http', [8080])
 # player.on(['push1', 'gpio20'], lambda : player.play('media.mp4'))
 
 # RUN
-hplayer.setBasePath("/home/pi/media/")
+hplayer.setBasePath("/home/mgr/Videos")
 hplayer.run()
