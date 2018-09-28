@@ -1,18 +1,17 @@
 from core.engine import hplayer
 from core.engine import network
-
-import os, socket, platform
+import os, platform
 
 # KXKM
-playerName = socket.gethostname()
-regie_ip = None
+playerName = network.get_hostname()
 is_RPi = platform.machine().startswith('armv')
+regie_ip = None
 
 # PLAYER
 player = hplayer.addplayer('mpv', playerName)
 
 # Interfaces
-player.addInterface('osc', [1222, 3737])
+player.addInterface('osc', 1222, 3737)
 
 # Overlay
 if is_RPi:
@@ -20,7 +19,6 @@ if is_RPi:
 
 # OSC events
 def syncTest():
-    print 'synctest'
     loop = "loop" if player.status()['loop'] else "unloop"
     screen = "screen" if not player.status()['flip'] else "screenflip"
     playing = "playmovie" if player.isPlaying() else "stopmovie"
@@ -29,12 +27,12 @@ def syncTest():
         media = os.path.basename(media)
     if not regie_ip:
         player.getInterface('osc').hostOut = network.get_broadcast()
-	player.getInterface('osc').send(playerName, 'auto', loop, screen, playing, media)
+    player.getInterface('osc').send(playerName, 'auto', loop, screen, playing, media)
 
 def fullSyncTest():
     if not regie_ip:
         player.getInterface('osc').hostOut = network.get_broadcast()
-	player.getInterface('osc').send(playerName, 'initinfo', network.get_ip())
+    player.getInterface('osc').send(playerName, 'initinfo', network.get_ip())
 
 def setIpRegie(args):
     global regie_ip
@@ -73,4 +71,4 @@ player.on(['/unfade'],      unfadeColor)
 
 # RUN
 hplayer.setBasePath(["/mnt/usb", "/data"])
-hplayer.run()                               # TODO: non blocking
+hplayer.run()

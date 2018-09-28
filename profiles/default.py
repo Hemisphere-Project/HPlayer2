@@ -4,8 +4,8 @@ from core.engine import hplayer
 player = hplayer.addplayer('mpv', 'myPlayer')
 
 # Interfaces
-player.addInterface('osc', [4000, 4001])
-player.addInterface('http', [8080])
+player.addInterface('osc', 4000, 4001)
+player.addInterface('http', 8080)
 # player.addInterface('gpio', [20])
 
 # Example event: HTTP + GPIO events

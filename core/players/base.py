@@ -52,9 +52,9 @@ class BasePlayer(object):
         for base in bpath:
             self.basepath.append(os.path.join(base, ''))
 
-    def addInterface(self, iface, args=[]):
+    def addInterface(self, iface, *argv):
         InterfaceClass = interfaces.getInterface(iface)
-        self._interfaces[iface] = InterfaceClass(self, args)
+        self._interfaces[iface] = InterfaceClass(self, *argv)
         return self._interfaces[iface]
 
     def addOverlay(self, olay, args=[]):
@@ -199,8 +199,8 @@ class BasePlayer(object):
 
     # START
     def start(self):
-        # for iface in self._interfaces.values():
-        #     iface.start()
+        for iface in self._interfaces.values():
+            iface.start()
         # for olay in self._overlays.values():
         #     olay.start()
         self.isRunning(True)

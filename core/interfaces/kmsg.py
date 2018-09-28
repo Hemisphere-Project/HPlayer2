@@ -1,6 +1,4 @@
-from __future__ import print_function
-from termcolor import colored
-from base import BaseInterface
+from .base import BaseInterface
 
 import kpimsg as km
 import json
@@ -8,31 +6,25 @@ import msgpack
 
 class KmsgInterface (BaseInterface):
 
-    def  __init__(self, player, args):
+    def  __init__(self, player):
+        super(KmsgInterface, self).__init__(player, "KMSG")
 
-        if len(args) < 1:
-            args.append('kmsg')
-
-        super(KmsgInterface, self).__init__(player)
-
-        self.name = args[0]
-        self.nameP = colored(self.name,'blue')
-
-        self.portKpi = 8002
+        self._portKpi = 8002
 
         km.set_app_name("kplayer")
         km.start_gateway(1000)
 
-        self.ep = km.Endpoint(self.name, port=self.portKpi)
+        self.ep = km.Endpoint(self.name, port=self._portKpi)
         self.ep.set_callback(self.kpi_receive, None)
         self.ep.start()
 
         self.player.on(['*'], self.emit)
 
-        print(self.nameP, "started on", "kplayer/"+self.name )
+        self.log("started on", "kplayer/"+self.name )
 
-        self.start()
-
+    # Listener
+    def listen(self):
+        self.stopped.wait()
 
     # Kpi send
     def emit(self, event, args):
@@ -49,7 +41,7 @@ class KmsgInterface (BaseInterface):
         self.ep.emit("/event/"+event, k_args, DATA_FORMAT)
 
         #  Emit KPI msg
-        print(self.nameP, "KPimsg emit: ", "/event/"+event, args )
+        self.log("KPimsg emit: ", "/event/"+event, args )
 
     # Kpi receiver
     def kpi_receive(self, msg, data):

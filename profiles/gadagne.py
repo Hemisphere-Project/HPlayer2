@@ -1,11 +1,11 @@
 from core.engine import hplayer
 
 # PLAYER
-player = hplayer.addplayer('mpv', 'myPlayer')
+player = hplayer.addplayer('mpv', 'gadagne')
 
 # Interfaces
-player.addInterface('osc', [4000, 4001])
-player.addInterface('http', [8080])
+player.addInterface('osc', 4000, 4001)
+player.addInterface('http', 8080)
 # player.addInterface('gpio', [16,19,20,21,26])
 
 # GADAGNE logic
@@ -26,4 +26,4 @@ fails = 5
 
 # RUN
 hplayer.setBasePath("/home/pi/Videos/")
-hplayer.run()                               # TODO: non blocking
+hplayer.run()

@@ -13,8 +13,8 @@ class MpvPlayer(BasePlayer):
             import time
             name = time.time()
 
-        self.name = "MPV -"+name+"-"
-        self.nameP = colored(self.name,'magenta')
+        self.name = name
+        self.nameP = colored("MPV -" + name + "-",'magenta')
         self.on('end', self.next)
 
         self._mpv_procThread = None
@@ -81,7 +81,7 @@ class MpvPlayer(BasePlayer):
             try:
                 self._mpv_sock.connect(self._mpv_socketpath)
                 self._mpv_sock.settimeout(0.1)
-                print(self.nameP, "socket connected through ", self._mpv_socketpath)
+                print(self.nameP, "connected to player backend")
                 self._mpv_sock_connected = True
                 break
             except socket.error as e:
@@ -89,7 +89,7 @@ class MpvPlayer(BasePlayer):
                     print (self.nameP, "socket error:", e)
                     self.isRunning(False)
                 else:
-                    print (self.nameP, "retrying socket connection..")
+                    # print (self.nameP, "retrying socket connection..")
                     sleep(0.2)
 
         if self._mpv_sock_connected:

@@ -1,10 +1,10 @@
 from __future__ import print_function
-from termcolor import colored
+from . import network
 import core.players as playerlib
+from termcolor import colored
 from time import sleep
 import signal
 import sys, os
-import netifaces as ni
 
 runningFlag = True
 players_pool = {}
@@ -19,7 +19,7 @@ signal.signal(signal.SIGINT, signal_handler)
 
 
 def setBasePath(bpath):
-    print('\n' + colored('HPlayer2', 'green'), "basepath:", bpath);
+    print(colored('HPlayer2', 'green'), "basepath:", bpath);
     for p in players():
         p.setBasePath(bpath)
 
@@ -56,13 +56,16 @@ def run():
 
     name = "HPlayer2"
     nameP = colored(name, 'green')
-    print('\n' + nameP, "started. Welcome !");
 
     try:
-        print('\n' + nameP, "Device IP on eth0  is", ni.ifaddresses('eth0')[ni.AF_INET][0]['addr']);
-        print(nameP, "Device IP on wlan0 is", ni.ifaddresses('wlan0')[ni.AF_INET][0]['addr']);
+        if network.get_ip("eth0") != "127.0.0.1":
+            print(nameP, "IP for eth0 is", network.get_ip("eth0"));
+        if network.get_ip("wlan0") != "127.0.0.1":
+            print(nameP, "IP for wlan0  is", network.get_ip("wlan0"));
     except:
         pass
+
+    print(nameP, "started.. Welcome ! \n");
 
     sys.stdout.flush()
 

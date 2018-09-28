@@ -21,7 +21,7 @@ if [[ $(command -v apt) ]]; then
 
     # hplayer2 dependencies
     apt install python3-pip python3-liblo -y
-    /usr/bin/yes | pip install netifaces termcolor
+    /usr/bin/yes | pip install netifaces termcolor evdev
 
     # GPIO RPi
     if [[ $(uname -m) = armv* ]]; then
@@ -39,7 +39,7 @@ elif [[ $(command -v pacman) ]]; then
 
     # hplayer2 dependencies
     pacman -S python3 python3-pip cython liblo --noconfirm
-    /usr/bin/yes | pip3 install netifaces termcolor
+    /usr/bin/yes | pip3 install netifaces termcolor evdev
 
     # GPIO RPi
     if [[ $(uname -m) = armv* ]]; then

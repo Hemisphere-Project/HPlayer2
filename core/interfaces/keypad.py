@@ -1,17 +1,12 @@
-from __future__ import print_function
-
-from termcolor import colored
+from .base import BaseInterface
+import Adafruit_CharLCD as LCD
 from time import sleep
 import os
 
-import Adafruit_CharLCD as LCD
 
-from base import BaseInterface
 
 
 class KeypadInterface (BaseInterface):
-
-    state = {}
 
     buttons = ( (LCD.SELECT, 'Select', (1,1,1)),
                 (LCD.LEFT,   'Left'  , (1,0,0)),
@@ -20,34 +15,17 @@ class KeypadInterface (BaseInterface):
                 (LCD.RIGHT, 'Right' , (1,0,1)) )
 
     def __init__(self, player, args):
-# else:
-                #     self.player.load()
-                #     self.
-        super(KeypadInterface, self).__init__(player)
-
-        self.name = "KEYPAD "+player.name
-        self.nameP = colored(self.name,'blue')
+        super(KeypadInterface, self).__init__(player, "KEYPAD")
 
         self.lcd = LCD.Adafruit_CharLCDPlate()
         self.lcd.set_color(0, 0, 0)
 
-        self.start()
-# else:
-                #     self.player.load()
-                #     self.
-    # GPIO receiver THREAD
-    def receive(self):
-        print(self.nameP, "starting KEYPAD listener")
 
-        display = ""
-        display_l = ""
+    def listen(self):
+        self.log("starting KEYPAD listener")
 
-        pressed = dict()
-        pressed['UP'] = False
-        pressed['DOWN'] = False
-        pressed['RIGHT'] = False
-        pressed['LEFT'] = False
-        pressed['SEL'] = False
+        display = {'new': "", 'last': ""}
+        pressed = dict.fromkeys(['UP', 'DOWN', 'RIGHT', 'LEFT', 'SEL'], False)
 
         while self.isRunning():
             if self.lcd.is_pressed(LCD.UP):
@@ -75,27 +53,24 @@ class KeypadInterface (BaseInterface):
                 #     self.player.load()
                 #     self.player.play()
                 pressed['SEL'] = 10
-                # print(self.nameP, "pressed SEL")
+                # self.log("pressed SEL")
             elif pressed['SEL'] > 0:
                 pressed['SEL']-=1
-                # print(self.nameP, "release SEL")
+                # self.log("release SEL")
 
 
-            display = ""
+            display['new'] = ""
             if self.player.status()['media'] is not None:
-                display = os.path.basename(self.player.status()['media'])[:-4]
+                display['new'] = os.path.basename(self.player.status()['media'])[:-4]
                 if self.player.status()['time'] is not None:
-                    display += "  \"" + str(int(self.player.status()['time']))
+                    display['new'] += "  \"" + str(int(self.player.status()['time']))
             else:
-                display = "-stop-"
-            display += "\n" + 'VOLUME: '+str(self.player.status()['volume'])
+                display['new'] = "-stop-"
+            display['new'] += "\n" + 'VOLUME: '+str(self.player.status()['volume'])
 
-            if display != display_l:
+            if display['new'] != display['last']:
                 self.lcd.clear()
-                self.lcd.message( display )
-                display_l = display
+                self.lcd.message( display['new'] )
+                display['last'] = display['new']
 
             sleep(0.05)
-
-        self.isRunning(False)
-        return

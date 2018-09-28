@@ -1,11 +1,8 @@
-from __future__ import print_function
-
-from termcolor import colored
+from .base import BaseInterface
 from time import sleep
 import binascii
 import sys
 
-from base import BaseInterface
 
 
 ###
@@ -19,24 +16,17 @@ class NfcInterface (BaseInterface):
 
     state = {}
 
-    def __init__(self, player, args):
+    def __init__(self, player, timeout=1000, divider=5):
 
-        if len(args) < 1:
-            args[0] = 1000
-            print(self.nameP, 'default timeout:', args[0] ,'ms')
-
-        if len(args) < 2:
-            args[1] = 5
-            print(self.nameP, 'default divider:', args[1] ,'ms')
+        self.log('timeout:', timeout ,'ms')
+        self.log('divider:', divider ,'ms')
 
         # Interface settings
-        super(NfcInterface, self).__init__(player)
-        self.name = "NFC "+player.name
-        self.nameP = colored(self.name,'blue')
+        super(NfcInterface, self).__init__(player, "NFC")
 
         # Timeout
-        self.timeout = args[0]
-        self.timeout_divider = args[1]
+        self.timeout = timeout
+        self.timeout_divider = divider
         self.timeout_internal = self.timeout*1.0 / self.timeout_divider
         if self.timeout_internal < 0.02:
             self.timeout_internal = 0.02
@@ -50,22 +40,21 @@ class NfcInterface (BaseInterface):
         try:
             self.nfc.begin()
         except Exception as e:
-            print(self.nameP, 'PN532 not found... exit !')
-            self.isRunning(False)
+            self.log('PN532 not found... exit !')
+            self.stopped.set()
             return
 
         # NFC info
         ic, ver, rev, support = self.nfc.get_firmware_version()
-        print(self.nameP, 'Found PN532 with firmware version: {0}.{1}'.format(ver, rev))
+        self.log('Found PN532 with firmware version: {0}.{1}'.format(ver, rev))
 
         # NFC configure with MiFare cards.
         self.nfc.SAM_configuration()
 
-        self.start()
 
-    # NFC receiver THREAD
-    def receive(self):
-        print(self.nameP, "starting NFC listener")
+    # NFC listener THREAD
+    def listen(self):
+        self.log("starting NFC listener")
 
         timeout_counter = -1;
         while self.isRunning():
@@ -109,7 +98,7 @@ class NfcInterface (BaseInterface):
             # No Card detected
             elif timeout_counter > 0:
                 timeout_counter -= 1
-                print(self.nameP, "count", timeout_counter)
+                self.log("count", timeout_counter)
 
             # Reach end of timeout counter: trigger event nocard
             if timeout_counter == 1:
@@ -120,7 +109,3 @@ class NfcInterface (BaseInterface):
             #     timeout_counter = 0
             #     self.nfc.begin()
             #     self.nfc.SAM_configuration()
-
-
-        self.isRunning(False)
-        return
