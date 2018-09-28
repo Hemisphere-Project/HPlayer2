@@ -42,12 +42,20 @@ class MpvPlayer(BasePlayer):
     # MPV Process THREAD
     def _mpv_watchprocess(self):
 
+        # stdout watcher
+        poll_obj = select.poll()
+        poll_obj.register(self._mpv_subproc.stdout, select.POLLIN)
+
         # Watcher loop
         while not self._mpv_subproc.poll() and self.isRunning():
-            out = self._mpv_subproc.stdout.readline()
-            if out.strip():
-                # print(self.nameP, "subproc says", out.strip())
-                pass
+            poll_result = poll_obj.poll(0)
+            if poll_result:
+                out = self._mpv_subproc.stdout.readline()
+                if out.strip():
+                    # print(self.nameP, "subproc says", out.strip())
+                    pass
+            else:
+                sleep(0.1)          ## TODO turn into ASYNC !!
 
         print(self.nameP, "closing process")
         self._mpv_subproc.terminate()
