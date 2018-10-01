@@ -1,28 +1,21 @@
+BUG
 - check if RPi overlay is broken ?
-
-- Replacing custom trigger / event player system with pyee or equivalent.
-Check if '*' is supported.
-
-- Clean up log in player and overlays like in interfaces
-
-- Clean up overlay like interfaces
-
 - Looper doesn't gracefully exit..
 
+NEXT
+- Clean up log in player and overlays like in interfaces
+- Clean up overlay like interfaces
+- image player
 - adafruit_lcd install in build.sh script
 
-- replacing log system with a global and configurable one..
-
+FUTURE
+- Replacing custom trigger / event player system with pyee or equivalent.
+Check if '*' is supported.
 - command line arguments instead of profiles for direct start
-
-- doc for each interfaces
-
-- ciconia: disable auto next
-
-- add a global manageable extension filter
-
-- image player
-
-- ofxomxplayer backend // libvlc backend
-
 - time sync plugin (anticipated accurate start)
+
+LONG SHOT
+- doc for each interfaces
+- add a global manageable extension filter
+- replacing log system with a global and configurable one..
+- ofxomxplayer backend // libvlc backend
