@@ -43,7 +43,13 @@ class BasePlayer(object):
 
     def __init__(self):
         self.nameP = colored(self.name,'magenta')
-        self.on('end', self.next)
+        self.on('end', self.onMediaEnd)
+
+    def onMediaEnd(self):
+        if self._status['loop']:
+            self.next()
+        else:
+            self.stop()
 
     def setBasePath(self, bpath):
         if not isinstance(bpath, list):
@@ -249,7 +255,7 @@ class BasePlayer(object):
 
     # PLAY A Playlist or Index
     def play(self, arg=None):
-        
+
         index = self._currentIndex
         if index == -1:
             index = 0

@@ -7,6 +7,7 @@ from .base import BasePlayer
 class MpvPlayer(BasePlayer):
 
     def __init__(self, name=None):
+        super(MpvPlayer, self).__init__()
 
         name = name.replace(" ", "_")
         if not name:
@@ -15,7 +16,6 @@ class MpvPlayer(BasePlayer):
 
         self.name = name
         self.nameP = colored("MPV -" + name + "-",'magenta')
-        self.on('end', self.next)
 
         self._mpv_procThread = None
 
@@ -117,8 +117,8 @@ class MpvPlayer(BasePlayer):
 
                         if 'name' in mpvsays:
                             if mpvsays['name'] == 'eof-reached' and mpvsays['data'] == True:
-                                self.trigger('end')
                                 self._status['isPaused'] = False
+                                self.trigger('end')
                                 pass
                             elif mpvsays['name'] == 'core-idle':
                                 self._status['isPlaying'] = not mpvsays['data']

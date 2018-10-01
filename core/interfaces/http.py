@@ -87,7 +87,10 @@ def MakeHandlerClass(player):
                 self.player.prev()
 
             elif command == 'loop':
-                self.player.loop(True)
+                doLoop = True
+                if len(args) > 0:
+                    doLoop = (int(args[0]) == 1)
+                self.player.loop(doLoop)
 
             elif command == 'unloop':
                 self.player.loop(False)
