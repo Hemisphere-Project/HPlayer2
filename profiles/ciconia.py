@@ -24,7 +24,6 @@ def syncTest():
 
 	player.getInterface('osc').hostOut = regie_ip
 	player.getInterface('osc').send(display)
-	print(display)
 
 
 player.on(['/synctest'], syncTest)
