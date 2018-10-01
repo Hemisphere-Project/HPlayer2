@@ -7,5 +7,5 @@ player = hplayer.addplayer('mpv', 'kplayer')
 player.addInterface('kmsg')
 
 # RUN
-hplayer.setBasePath("/home/mgr/Videos/")
+hplayer.setBasePath("/mnt/usb")
 hplayer.run()

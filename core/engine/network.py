@@ -55,3 +55,7 @@ def get_broadcast(iface=None):
                     except:
                         pass
     return ip
+
+def get_hostname():
+    import socket
+    return socket.gethostname()

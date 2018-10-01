@@ -1,6 +1,4 @@
-from __future__ import print_function
-from termcolor import colored
-from base import BaseInterface
+from .base import BaseInterface
 import liblo
 
 def oscdump(path, args, types):
@@ -8,40 +6,32 @@ def oscdump(path, args, types):
 
 class OscInterface (BaseInterface):
 
-    def  __init__(self, player, args):
+    def  __init__(self, player, in_port, out_port):
+        super(OscInterface, self).__init__(player, "OSC")
 
-        if len(args) < 2:
-            print(self.nameP, 'OSC interface needs in and out port arguments')
-            return
-
-        super(OscInterface, self).__init__(player)
-
-        self.name = "OSC "+player.name
-        self.nameP = colored(self.name,'blue')
-
-        self.portIn = args[0]
-        self.portOut = args[1]
+        self._portIn = in_port
+        self._portOut = out_port
         self.hostOut = '127.0.0.1'
 
-        self.start()
 
     # OSC sender
     def send(self, path, *args):
-        target = liblo.Address("osc.udp://"+self.hostOut+":"+str(self.portOut))
+        target = liblo.Address("osc.udp://"+self.hostOut+":"+str(self._portOut))
         liblo.send(target, path, *args)
-        print(self.nameP, "sent OSC", path, args ," to ","osc.udp://"+self.hostOut+":"+str(self.portOut))
+        self.log("sent OSC", path, args ," to ","osc.udp://"+self.hostOut+":"+str(self._portOut))
 
     # OSC receiver THREAD
-    def receive(self):
+    def listen(self):
 
         # OSC: Bind server
         try:
-            oscServer = liblo.Server(self.portIn)
-            print(self.nameP, "binded to OSC port", self.portIn)
+            oscServer = liblo.Server(self._portIn)
+            self.log("sending to", self.hostOut, "on port", self._portIn)
+            self.log("receiving on port", self._portIn)
 
-        except liblo.ServerError, e:
-            print(self.nameP,  "OSC Error:", e)
-            self.isRunning(False)
+        except liblo.ServerError as e:
+            self.log( "OSC Error:", e)
+            self.stopped.set()
 
         # OSC trigger decorator
         def osc(path, argsTypes=None):
@@ -124,7 +114,7 @@ class OscInterface (BaseInterface):
 
         @osc("/quit")
         def quit(path, args, types):
-            self.isRunning(False)
+            self.stopped.set()
 
         @osc(None, None)
         def fallback(path, args, types, src):

@@ -2,43 +2,47 @@ from __future__ import print_function
 from termcolor import colored
 import threading
 from time import sleep
+from abc import ABC, abstractmethod
 
-class BaseInterface(object):
+class BaseInterface(ABC):
 
-    def  __init__(self, player):
+    def  __init__(self, player, name="INTERFACE", color="blue"):
 
-        self.name = "INTERFACE"
-        self.nameP = colored(self.name,'blue')
+        self.name = name
+        self.nameP = colored(self.name + " -" + player.name + "-", color)
 
         self.player = player
 
-        # running flag
-        self.running = threading.Event()
+        # stopping flag
+        self.stopped = threading.Event()
+        self.stopped.set()
 
-        # Receive thread
-        self.recvThread = threading.Thread(target=self.receive)
+        # Listen thread
+        self.recvThread = threading.Thread(target=self.listen)
 
-    # receiver THREAD (dummy)
-    def receive(self):
-        while self.isRunning():
-            sleep(1)
-        return
+    # Receiver THREAD (ABSTRACT)
+    @abstractmethod
+    def listen(self):
+        self.stopped.wait()
 
-    # Stop
+    # Start
     def start(self):
-        self.running.set()
+        self.stopped.clear()
         self.recvThread.start()
         return self
 
     # Stop
     def quit(self):
-        self.isRunning(False)
-        if self.isRunning():
-            self.recvThread.join()
-        print(self.nameP, "stopped")
+        self.stopped.set()
+        self.recvThread.join()
+        self.log("stopped")
 
 	# is Running
     def isRunning(self, state=None):
         if state is not None:
-            self.running.set() if state else self.running.clear()
-        return self.running.is_set()
+            self.stopped.clear() if state else self.running.set()
+        return not self.stopped.is_set()
+
+    # Log
+    def log(self,  *argv):
+        print(self.nameP, *argv)

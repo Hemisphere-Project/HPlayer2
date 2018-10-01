@@ -1,2 +1,0 @@
-dwc_otg.lpm_enable=0 console=ttyAMA0,115200 root=/dev/mmcblk0p2 rootfstype=ext4 elevator=deadline rootwait ro quiet logo.nologo console=tty1 consoleblank=0 loglevel=1 vt.global_cursor_default=0
-

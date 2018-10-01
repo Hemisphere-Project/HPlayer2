@@ -1,40 +1,48 @@
-from __future__ import print_function
-from termcolor import colored
-from time import sleep
-from base import BaseInterface
-import pprint
-
-from BaseHTTPServer import BaseHTTPRequestHandler, HTTPServer
-
+from .base import BaseInterface
+from http.server import BaseHTTPRequestHandler, HTTPServer
+import threading
 
 class HttpInterface (BaseInterface):
 
-    def  __init__(self, player, args):
-
-        if len(args) < 1:
-            print(self.nameP, 'HTTP interface needs a port')
-
-        super(HttpInterface, self).__init__(player)
-
-        self.name = "HTTP "+player.name
-        self.nameP = colored(self.name, 'blue')
-
-        self.port = args[0]
-
-        self.start()
+    def  __init__(self, player, port):
+        super(HttpInterface, self).__init__(player, "HTTP")
+        self._port = port
 
     # HTTP receiver THREAD
-    def receive(self):
+    def listen(self):
 
-        print(self.nameP, "starting HTTP server on port", self.port)
-
-        httpd = HTTPServer(('', self.port), MakeHandlerClass(self.player))
-        httpd.serve_forever()
-
-        self.isRunning(False)
-        return
+        # Start server
+        self.log( "listening on port", self._port)
+        with ThreadedHTTPServer(self._port, MakeHandlerClass(self.player)) as server:
+            self.stopped.wait()
 
 
+#
+# Threaded HTTP Server
+#
+class ThreadedHTTPServer(object):
+    def __init__(self, port, handler):
+        self.server = HTTPServer(('', port), handler)
+        self.server_thread = threading.Thread(target=self.server.serve_forever)
+        self.server_thread.daemon = True
+
+    def start(self):
+        self.server_thread.start()
+
+    def stop(self):
+        self.server.shutdown()
+        self.server.server_close()
+
+    def __enter__(self):
+        self.start()
+        return self
+
+    def __exit__(self, type, value, traceback):
+        self.stop()
+
+#
+# Request Handler
+#
 def MakeHandlerClass(player):
     class CustomHandler(BaseHTTPRequestHandler, object):
         def __init__(self, *args, **kwargs):
@@ -52,7 +60,7 @@ def MakeHandlerClass(player):
             args.pop(0)
 
             if len(args) == 0 or args[0] == '':
-                self.wfile.write("<html><body><h1>Hello World!</h1></body></html>")
+                self.wfile.write( ("<html><body><h1>Hello World!</h1></body></html>").encode() )
                 return
 
             command = args.pop(0)
@@ -102,11 +110,11 @@ def MakeHandlerClass(player):
                 	if key in statusTree:
                 		statusTree = statusTree[key]
                 status = pprint.pformat(statusTree, indent=4)
-                self.wfile.write(status)
+                self.wfile.write( status.encode() )
                 return
 
             elif command == 'ping':
-                self.wfile.write('pong') 
+                self.wfile.write( ('pong').encode() )
                 return
 
             elif command == 'event':
@@ -115,7 +123,7 @@ def MakeHandlerClass(player):
                 elif len(args) > 0:
                     self.player.trigger(args[0])
 
-            self.wfile.write("<html><body><h1>Command: "+command+" - Args: "+','.join(args)+"</h1></body></html>")
+            self.wfile.write( ("<html><body><h1>Command: "+command+" - Args: "+','.join(args)+"</h1></body></html>").encode() )
             # print("GET", self.path)
 
 
@@ -129,7 +137,7 @@ def MakeHandlerClass(player):
             print("POST", self.path)
             print("DATA", post_data)
             self._set_headers()
-            self.wfile.write("<html><body><h1>POST!</h1></body></html>")
+            self.wfile.write( ("<html><body><h1>POST!</h1></body></html>").encode() )
 
         def log_message(self, format, *args):
             # QUIET LOG

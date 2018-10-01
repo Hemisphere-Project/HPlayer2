@@ -52,9 +52,9 @@ class BasePlayer(object):
         for base in bpath:
             self.basepath.append(os.path.join(base, ''))
 
-    def addInterface(self, iface, args=[]):
+    def addInterface(self, iface, *argv):
         InterfaceClass = interfaces.getInterface(iface)
-        self._interfaces[iface] = InterfaceClass(self, args)
+        self._interfaces[iface] = InterfaceClass(self, *argv)
         return self._interfaces[iface]
 
     def addOverlay(self, olay, args=[]):
@@ -197,6 +197,15 @@ class BasePlayer(object):
     # Player CONTROLS
     #
 
+    # START
+    def start(self):
+        for iface in self._interfaces.values():
+            iface.start()
+        # for olay in self._overlays.values():
+        #     olay.start()
+        self.isRunning(True)
+        self._start()
+
     # QUIT
     def quit(self):
         for iface in self._interfaces.values():
@@ -274,8 +283,10 @@ class BasePlayer(object):
 
     # NEXT item in playlist
     def next(self):
-    	if not self.isPlaying():
-    		self.load()			# Initial "next" should consider the whole basepath as playlist
+        # Initial "next" should consider the whole basepath as playlist
+        if not self.isPlaying():
+            self.load()
+
         with self._lock:
             self._currentIndex += 1
             if self._currentIndex >= len(self._playlist) and self._status['loop']:
@@ -284,8 +295,10 @@ class BasePlayer(object):
 
     # PREVIOUS item in playlist
     def prev(self):
+        # Initial "prev" should consider the whole basepath as playlist
         if not self.isPlaying():
-    		self.load()			# Initial "prev" should consider the whole basepath as playlist
+            self.load()
+
         with self._lock:
             self._currentIndex -= 1
             if self._currentIndex < 0 and self._status['loop']:
@@ -340,6 +353,9 @@ class BasePlayer(object):
     #
     # Player INTERNAL actions: Methods to overwrite !
     #
+
+    def _start(self):
+        print(self.nameP, "start")
 
     def _quit(self):
         print(self.nameP, "quit")
