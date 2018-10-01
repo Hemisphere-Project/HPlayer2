@@ -21,7 +21,7 @@ if [[ $(command -v apt) ]]; then
 
     # hplayer2 dependencies
     apt install python3-pip python3-liblo -y
-    /usr/bin/yes | pip install netifaces termcolor evdev
+    /usr/bin/yes | pip3 install netifaces termcolor evdev
 
     # GPIO RPi
     if [[ $(uname -m) = armv* ]]; then
@@ -43,7 +43,7 @@ elif [[ $(command -v pacman) ]]; then
 
     # GPIO RPi
     if [[ $(uname -m) = armv* ]]; then
-      /usr/bin/yes | pip install RPi.GPIO
+      /usr/bin/yes | pip3 install RPi.GPIO
     fi
 
 ## Plateform not detected ...

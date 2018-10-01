@@ -24,7 +24,7 @@ class BasePlayer(object):
 
     _playlist = []
     _currentIndex = -1
-    _validExt = '*'
+    _validExt = ['.mp4', '.m4v', '.mkv', 'avi', '.mov', '.flv', '.mpg', 'wmv', '.3gp', '.mp3', '.aac', '.wma', '.wav', '.flac', '.aiff', '.m4a', '.ogg', '.opus', '.webm']
 
     _events = {}
     _interfaces = {}
@@ -79,24 +79,38 @@ class BasePlayer(object):
 
     # CHECK EXT
     def validExt(self, filename):
-        if self._validExt == '*':
-            return True
-        elif filename.lower().endswith(self._validExt):
-            return True
-        else:
-            return False
+        vExt = self._validExt
+        if not type(vExt) is list:
+            vExt = [vExt]
+        for ext in vExt:
+            if ext == '*':
+                return True
+            elif filename.lower().endswith(ext.lower()):
+                return True
+        return False
+
 
     # BUILD LIST RECURSIVE
-    def buildList(self, files):
+    def buildList(self, entries):
         liste = []
-        for entry in files:
+        if not isinstance(entries, (list,)):
+            entries = [entries]
+
+        for entry in entries:
+
+            # ABSOLUTE PATH
+
             # full path directory -> add content recursively
             if os.path.isdir(entry):
-                liste.extend(self.buildList(os.listdir(entry)))
+                dirContent = [os.path.join(entry, f) for f in os.listdir(entry)]
+                dirContent.sort()
+                liste.extend(self.buildList( dirContent ))
+
             # full path file -> add it
             elif os.path.isfile(entry):
                 if self.validExt(entry):
                     liste.append(entry)
+
             # full path file with WILDCARD
             ## TODO PROBABLY BROKEN !
             # elif entry[0] == '/' and len(glob.glob(entry)) > 0:
@@ -104,10 +118,12 @@ class BasePlayer(object):
             #         if os.path.isfile(e):
             #             liste.extend(e)
 
+            # RELATIVE PATH
+
             # check each base path
             else:
                 for base in self.basepath:
-                    fullpath = os.path.join(base,entry)
+                    fullpath = os.path.join(base, entry)
                     # relative path directory -> add content recursively
                     if os.path.isdir(fullpath):
                         liste.extend(self.buildList(fullpath))
@@ -117,6 +133,7 @@ class BasePlayer(object):
                         if self.validExt(entry):
                             liste.append(fullpath)
                             break
+
                     # relative path file with WILDCARD
                     else:
                         globlist = []
@@ -127,11 +144,10 @@ class BasePlayer(object):
                               if ('/.' not in fpath) and match:
                                 	globlist.append(fpath)
                         #print(globlist)
-                        if len(globlist) > 0:
-                            for e in globlist:
-                                if os.path.isfile(e) and self.validExt(e):
-                                    liste.append(e)
-                            break
+                        for e in globlist:
+                            if os.path.isfile(e) and self.validExt(e):
+                                liste.append(e)
+                        break
 
         liste = sorted(liste)
         return liste
@@ -203,6 +219,7 @@ class BasePlayer(object):
             iface.start()
         # for olay in self._overlays.values():
         #     olay.start()
+        self.load()             # Load default playlist based on basepath provided
         self.isRunning(True)
         self._start()
 
@@ -231,44 +248,60 @@ class BasePlayer(object):
         # print("Current playlist: ", self._playlist)
 
     # PLAY A Playlist or Index
-    def play(self, arg=0):
+    def play(self, arg=None):
+        
+        index = self._currentIndex
+        if index == -1:
+            index = 0
 
-        # Load playlist (if not index provided)
-        if not isinstance(arg, int):
+        # Direct index provided
+        if isinstance(arg, int):
+            index = arg
+
+        # new playlist or media provided
+        elif arg is not None:
             self.load(arg)
-            arg = 0
+            index = 0
+
+        valid = False
 
         # Play file at index
-        error = False
-        nomedia = False
-
         with self._lock:
-            if arg >= 0 and arg < len(self._playlist) and os.path.isfile(self._playlist[arg]):
-                self._currentIndex = arg
-                self._status['media'] = self._playlist[arg]
-                self._status['time'] = None
-                self._play(self._playlist[arg])
-            else:
-                self._status['media'] = None
-                self._status['time'] = None
-                print(self.nameP, "Empty playlist..")
-                error = True
-                nomedia = True
+            self._status['media'] = None
+            self._status['time'] = 0
 
-        if nomedia:
-            self.trigger('nomedia')
-        if error:
-            self.stop()
-        else:
+            if 0 <= index < len(self._playlist) and os.path.isfile(self._playlist[index]):
+                    self._play(self._playlist[index])
+                    self._currentIndex = index
+                    self._status['media'] = self._playlist[index]
+                    valid = True
+
+        # Emit play event
+        if valid:
             self.trigger('play', [self._status['media']])
+
+        # Handle error
+        else:
+            if self.isPlaying():
+                self.stop()
+            self.trigger('nomedia')
+
+            if len(self._playlist) == 0:
+                print(self.nameP, "Nothing to play ...")
+            elif not (0 <= index < len(self._playlist)):
+                print(self.nameP, "Index out of playlist range:", index, self._playlist)
+            else:
+                print(self.nameP, "Media not found:", self._playlist[index])
 
 
     # STOP Playback
     def stop(self):
         print(self.nameP, "stop")
         with self._lock:
-            self._stop()
-            self._currentIndex = -1
+            if self.isPlaying():
+                self._stop()
+            else:
+                self._currentIndex = -1
         self._status['media'] = None
         self._status['time'] = 0
         self.trigger('stop')
@@ -283,10 +316,6 @@ class BasePlayer(object):
 
     # NEXT item in playlist
     def next(self):
-        # Initial "next" should consider the whole basepath as playlist
-        if not self.isPlaying():
-            self.load()
-
         with self._lock:
             self._currentIndex += 1
             if self._currentIndex >= len(self._playlist) and self._status['loop']:
@@ -295,10 +324,6 @@ class BasePlayer(object):
 
     # PREVIOUS item in playlist
     def prev(self):
-        # Initial "prev" should consider the whole basepath as playlist
-        if not self.isPlaying():
-            self.load()
-
         with self._lock:
             self._currentIndex -= 1
             if self._currentIndex < 0 and self._status['loop']:

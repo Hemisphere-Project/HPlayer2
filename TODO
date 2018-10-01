@@ -18,9 +18,6 @@ Check if '*' is supported.
 - doc for each interfaces
 
 - ciconia: disable auto next
-- ciconia: stop does not reset playlist index (double stop does)
-
-- clean up logic of playlist loading
 
 - add a global extension filter
 
