@@ -9,6 +9,7 @@ player = hplayer.addplayer('mpv', 'ciconia')
 player.loop(False)
 
 # Interfaces
+player.addInterface('osc', 4000, 4001)
 player.addInterface('http', 8037)
 player.addInterface('keypad')
 
@@ -23,9 +24,10 @@ def syncTest():
 
 	player.getInterface('osc').hostOut = regie_ip
 	player.getInterface('osc').send(display)
+	print(display)
 
 
-player.on(['/synctest'],  syncTest)
+player.on(['/synctest'], syncTest)
 
 
 

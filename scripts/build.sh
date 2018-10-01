@@ -25,7 +25,12 @@ if [[ $(command -v apt) ]]; then
 
     # GPIO RPi
     if [[ $(uname -m) = armv* ]]; then
-    	sudo apt-get install python-rpi.gpio -y
+    	apt-get install python-rpi.gpio -y
+    	git clone https://github.com/adafruit/Adafruit_Python_CharLCD.git
+    	cd Adafruit_Python_CharLCD
+    	python3 setup.py install
+    	cd ..
+	    rm -Rf Adafruit_Python_CharLCD
     fi
 
 ## ARCH Linux
@@ -33,17 +38,28 @@ elif [[ $(command -v pacman) ]]; then
     distro='arch'
 
     # libass / ffmpeg / mpv dependencies
-    pacman -S freetype2 fribidi fontconfig yasm libx264 git libtool base-devel pkg-config autoconf --noconfirm
-    pacman -S lua luajit libvdpau libva libxv libjpeg libxkbcommon libxrandr mesa libv4l libxss libcaca sdl2 fbida --noconfirm
+    pacman -S freetype2 fribidi fontconfig yasm git --noconfirm
+    pacman -S autoconf pkg-config libtool --noconfirm
+    pacman -S lua luajit libvdpau libva libxv libjpeg libxkbcommon libxrandr libv4l libxss libcaca sdl2 --noconfirm 
+    pacman -S base-devel --noconfirm    ## error ?
+    pacman -S libx264 --noconfirm       ## error ?
+    pacman -S mesa --noconfirm          ## error ?
+    pacman -S fbida --noconfirm         ## error ?
     pacman -S alsa-lib alsa-firmware ttf-roboto --noconfirm
 
     # hplayer2 dependencies
-    pacman -S python3 python3-pip cython liblo --noconfirm
-    /usr/bin/yes | pip3 install netifaces termcolor evdev
+    pacman -S python3 cython liblo --noconfirm
+    pacman -S python-pyliblo python-netifaces python-termcolor python-evdev
 
     # GPIO RPi
     if [[ $(uname -m) = armv* ]]; then
+      pacman -S python-pip --noconfirm
       /usr/bin/yes | pip3 install RPi.GPIO
+      git clone https://github.com/adafruit/Adafruit_Python_CharLCD.git
+	  cd Adafruit_Python_CharLCD
+	  python3 setup.py install
+	  cd ..
+	  rm -Rf Adafruit_Python_CharLCD
     fi
 
 ## Plateform not detected ...
