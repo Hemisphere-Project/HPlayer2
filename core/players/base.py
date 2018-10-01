@@ -324,7 +324,7 @@ class BasePlayer(object):
     def next(self):
         with self._lock:
             self._currentIndex += 1
-            if self._currentIndex >= len(self._playlist) and self._status['loop']:
+            if self._currentIndex >= len(self._playlist):
                 self._currentIndex = 0
         self.play(self._currentIndex)
 
@@ -332,7 +332,7 @@ class BasePlayer(object):
     def prev(self):
         with self._lock:
             self._currentIndex -= 1
-            if self._currentIndex < 0 and self._status['loop']:
+            if self._currentIndex < 0:
                 self._currentIndex = len(self._playlist)-1
         self.play(self._currentIndex)
 
