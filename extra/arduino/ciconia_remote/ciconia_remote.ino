@@ -3,6 +3,7 @@
 */
 #define CR_VERSION  0.01  // Init
 #define CR_VERSION  0.02  // Fix on disconnect
+#define CR_VERSION  0.03  // Remove touch 
 
 /*
    INCLUDES
@@ -50,8 +51,9 @@ void setup() {
 
   // Init Screen
   display.init(); // initialise the OLED
+  display.setTextAlignment(TEXT_ALIGN_CENTER);
   //display.flipScreenVertically(); // does what is says
-  dispStatus(":: disconnected ::");
+  dispStatus("-disconnected-");
 
   // Wifi
   wifi_static("3.0.0.10");
@@ -64,8 +66,8 @@ void setup() {
   http.setReuse(true);
 
   // Touch
-  touchAttachInterrupt(T2, touch2, threshold);  // Touch 2 = GPIO 2
-  touchAttachInterrupt(T8, touch8, threshold);  // Touch 8 = GPIO 33
+  // touchAttachInterrupt(T2, touch2, threshold);  // Touch 2 = GPIO 2
+  // touchAttachInterrupt(T8, touch8, threshold);  // Touch 8 = GPIO 33
 
   // Btn
   pinMode(interruptPin, INPUT_PULLUP);
@@ -127,7 +129,7 @@ void loop() {
 
     //LOG("checking link");
     if (millis()-lastNews > 1500) {
-      dispStatus(":: no player ::");
+      dispStatus("-no player-");
     }
     
     // MEDIA check
@@ -141,7 +143,7 @@ void loop() {
     
   }
   else {
-    dispStatus(":: disconnected ::");
+    dispStatus("-disconnected-");
   }
   delay(50);
 }
@@ -175,7 +177,7 @@ void touch8() {
    on Connect
 */
 void doOnConnect() {
-  dispStatus(":: connected ::");
+  dispStatus("-connected-");
   //httpGet("/loop");
   //httpGet("/play/earth.mp4");
 }
@@ -184,7 +186,7 @@ void doOnConnect() {
    on Disconnect
 */
 void doOnDisconnect() {
-  dispStatus(":: disconnected ::");
+  dispStatus("-disconnected-");
 }
 
 /*
@@ -217,12 +219,14 @@ void dispStatus(String stat) {
 }
 
 void dispStatus(String stat, String stat2) {
-  display.setFont(ArialMT_Plain_16);
-  display.setTextAlignment(TEXT_ALIGN_LEFT);
+  if (stat.length() > 11) display.setFont(ArialMT_Plain_16);
+  else display.setFont(ArialMT_Plain_24);
   display.clear();
-  display.drawString(0, 0, "Ciconia");
-  display.drawString(10, 24, stat);
-  display.drawString(10, 48, stat2);
+  display.drawString(64, 5, stat);
+
+  if (stat2.length() > 11) display.setFont(ArialMT_Plain_16);
+  else display.setFont(ArialMT_Plain_24);
+  display.drawString(64, 40, stat2);
   display.display();
 }
 
