@@ -1,12 +1,20 @@
 BUG
 - check if RPi overlay is broken ?
-- Looper doesn't gracefully exit..
+- Looper Profile doesn't gracefully exit..
+
+CHRD
+- PAN
+- Persistent settings (Volume/PAN)
+- HTTP2: implement all commands
+- HTTP2: FileManager
+- HTTP2: style !
 
 NEXT
 - Clean up log in player and overlays like in interfaces
 - Clean up overlay like interfaces
 - image player
 - adafruit_lcd install in build.sh script
+- HTTP2 dependencies in build.sh script
 
 FUTURE
 - Replacing custom trigger / event player system with pyee or equivalent.

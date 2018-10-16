@@ -3,8 +3,11 @@ import socketio
 import eventlet
 from flask import Flask, render_template, session, request
 from flask_socketio import SocketIO, emit, join_room, leave_room, close_room, rooms, disconnect
-import threading, os
+import threading, os, time
 import logging
+
+thread = None
+thread_lock = threading.Lock()
 
 
 class Http2Interface (BaseInterface):
@@ -38,9 +41,28 @@ class ThreadedHTTPServer(object):
         app.config['SECRET_KEY'] = 'secret!'
         socketio = SocketIO(app, async_mode='eventlet')
 
+        #
+        # FLASK Routing
+        #
         @app.route('/')
         def index():
             return render_template('index.html', async_mode=socketio.async_mode)
+
+        #
+        # SOCKETIO Routing
+        #
+
+        def background_thread():
+            while True:
+                socketio.emit('status', self.player._status)  # {'msg': 'yo', 'timestamp': time.gmtime()}
+                socketio.sleep(0.1)
+
+        @socketio.on('connect')
+        def client_connect():
+            global thread
+            with thread_lock:
+                if thread is None:
+                    thread = socketio.start_background_task(target=background_thread)
 
         @socketio.on('play')
         def play_message(message=None):
@@ -112,7 +134,7 @@ class ThreadedHTTPServer(object):
 
 
         # prepare sub-thread
-        self.server_thread = threading.Thread(target=lambda:socketio.run(app))
+        self.server_thread = threading.Thread(target=lambda:socketio.run(app, host='0.0.0.0', port=port))
         self.server_thread.daemon = True
 
     def start(self):

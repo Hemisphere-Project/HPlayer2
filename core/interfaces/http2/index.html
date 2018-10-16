@@ -14,7 +14,8 @@
             });
 
             socket.on('status', function(msg) {
-                $('#log').text(msg.data);
+                console.log(msg);
+                $('#log').text(JSON.stringify(msg));
             });
 
             // Handlers for the different forms in the page.
@@ -30,7 +31,8 @@
     </script>
 </head>
 <body>
-    <h1>HPlayer2 - HTTP / SocketIO interface</h1>
+    <h1>HPlayer2</h1>
+    <h3>HTTP / SocketIO interface</h3>
     <p>Async mode is: <b>{{ async_mode }}</b></p>
 
     <h2>Commands:</h2>
