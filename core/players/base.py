@@ -251,7 +251,10 @@ class BasePlayer(object):
             else:
                 self._status['media'] = None
                 self._status['time'] = None
-                print(self.nameP, "Empty playlist..")
+                if len(self._playlist) == 0:
+                    print(self.nameP, "Empty playlist..")
+                else:
+                    print(self.nameP, "Nothing left to play..")
                 error = True
                 nomedia = True
 

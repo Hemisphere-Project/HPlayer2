@@ -13,7 +13,7 @@ class HttpInterface (BaseInterface):
 
         # Start server
         self.log( "listening on port", self._port)
-        with ThreadedHTTPServer(self._port, MakeHandlerClass(self.player)) as server:
+        with ThreadedHTTPServer(self._port, BasicHTTPServerHandler(self.player)) as server:
             self.stopped.wait()
 
 
@@ -43,7 +43,7 @@ class ThreadedHTTPServer(object):
 #
 # Request Handler
 #
-def MakeHandlerClass(player):
+def BasicHTTPServerHandler(player):
     class CustomHandler(BaseHTTPRequestHandler, object):
         def __init__(self, *args, **kwargs):
             self.player = player
@@ -60,7 +60,7 @@ def MakeHandlerClass(player):
             args.pop(0)
 
             if len(args) == 0 or args[0] == '':
-                self.wfile.write( ("<html><body><h1>Hello World!</h1></body></html>").encode() )
+                self.wfile.write( ("<html><body><h1>Hello World!</h1><p>HPlayer2 API endpoint</p></body></html>").encode() )
                 return
 
             command = args.pop(0)
