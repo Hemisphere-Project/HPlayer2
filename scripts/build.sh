@@ -21,11 +21,16 @@ if [[ $(command -v apt) ]]; then
 
     # hplayer2 dependencies
     apt install python3-pip python3-liblo -y
-    /usr/bin/yes | pip install netifaces termcolor evdev
+    /usr/bin/yes | pip3 install netifaces termcolor evdev
 
     # GPIO RPi
     if [[ $(uname -m) = armv* ]]; then
-    	sudo apt-get install python-rpi.gpio -y
+    	apt-get install python-rpi.gpio -y
+    	git clone https://github.com/adafruit/Adafruit_Python_CharLCD.git
+    	cd Adafruit_Python_CharLCD
+    	python3 setup.py install
+    	cd ..
+	    rm -Rf Adafruit_Python_CharLCD
     fi
 
 ## ARCH Linux
@@ -33,17 +38,28 @@ elif [[ $(command -v pacman) ]]; then
     distro='arch'
 
     # libass / ffmpeg / mpv dependencies
-    pacman -S freetype2 fribidi fontconfig yasm libx264 git libtool base-devel pkg-config autoconf --noconfirm
-    pacman -S lua luajit libvdpau libva libxv libjpeg libxkbcommon libxrandr mesa libv4l libxss libcaca sdl2 fbida --noconfirm
-    pacman -S alsa-lib alsa-firmware ttf-roboto --noconfirm
+    pacman -S freetype2 fribidi fontconfig yasm git --noconfirm --needed
+    pacman -S autoconf pkg-config libtool --noconfirm --needed
+    pacman -S lua luajit libvdpau libva libxv libjpeg libxkbcommon libxrandr libv4l libxss libcaca sdl2 --noconfirm --needed 
+    pacman -S base-devel --noconfirm --needed    ## error ?
+    pacman -S libx264 --noconfirm --needed       ## error ?
+    pacman -S mesa --noconfirm --needed          ## error ?
+    pacman -S fbida --noconfirm --needed         ## error ?
+    pacman -S alsa-lib alsa-firmware ttf-roboto --noconfirm --needed
 
     # hplayer2 dependencies
-    pacman -S python3 python3-pip cython liblo --noconfirm
-    /usr/bin/yes | pip3 install netifaces termcolor evdev
+    pacman -S python3 cython liblo --noconfirm --needed
+    pacman -S python-pyliblo python-netifaces python-termcolor python-evdev --noconfirm --needed
 
     # GPIO RPi
     if [[ $(uname -m) = armv* ]]; then
-      /usr/bin/yes | pip install RPi.GPIO
+      pacman -S python-pip --noconfirm --needed
+      /usr/bin/yes | pip3 install RPi.GPIO
+      git clone https://github.com/adafruit/Adafruit_Python_CharLCD.git
+	  cd Adafruit_Python_CharLCD
+	  python3 setup.py install
+	  cd ..
+	  rm -Rf Adafruit_Python_CharLCD
     fi
 
 ## Plateform not detected ...
@@ -79,6 +95,7 @@ cd mpv-build
 # RPi MMAL
 if [[ $(uname -m) = armv* ]]; then
 	echo --enable-mmal > ffmpeg_options
+	echo --disable-vaapi > mpv_options
 fi
 
 # Build

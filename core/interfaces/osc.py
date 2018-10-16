@@ -18,7 +18,7 @@ class OscInterface (BaseInterface):
     def send(self, path, *args):
         target = liblo.Address("osc.udp://"+self.hostOut+":"+str(self._portOut))
         liblo.send(target, path, *args)
-        self.log("sent OSC", path, args ," to ","osc.udp://"+self.hostOut+":"+str(self._portOut))
+        # self.log("sent OSC", path, args ," to ","osc.udp://"+self.hostOut+":"+str(self._portOut))
 
     # OSC receiver THREAD
     def listen(self):
