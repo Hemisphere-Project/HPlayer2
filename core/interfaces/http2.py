@@ -35,8 +35,7 @@ class ThreadedHTTPServer(object):
         self.player = player
 
         interface_path = os.path.dirname(os.path.realpath(__file__))
-        templates_path = os.path.join(interface_path, 'http2', 'templates')
-        static_path = os.path.join(interface_path, 'http2', 'static')
+        www_path = os.path.join(interface_path, 'http2', 'templates')
 
         app = Flask(__name__, template_folder=templates_path)
         app.config['SECRET_KEY'] = 'secret!'
@@ -49,16 +48,13 @@ class ThreadedHTTPServer(object):
         @app.route('/')
         def index():
             # return render_template('index.html', async_mode=socketio.async_mode)
-            return send_from_directory(templates_path, 'index.html')
+            return send_from_directory(www_path, 'index.html')
 
 
-        @app.route('/js/<path:path>')
+        @app.route('/static/<path:path>')
         def send_js(path):
-            return send_from_directory(static_path+'/js', path)
+            return send_from_directory(www_path, path)
 
-        @app.route('/css/<path:path>')
-        def send_css(path):
-            return send_from_directory(static_path+'/css', path)
 
         #
         # SOCKETIO Routing
