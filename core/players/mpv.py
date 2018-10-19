@@ -83,6 +83,7 @@ class MpvPlayer(BasePlayer):
                 self._mpv_sock.settimeout(0.1)
                 print(self.nameP, "connected to player backend")
                 self._mpv_sock_connected = True
+                self.trigger('player-ready')
                 break
             except socket.error as e:
                 if retry == 1:
@@ -233,14 +234,20 @@ class MpvPlayer(BasePlayer):
         # print(self.nameP, "seek to", milli/1000)
 
     def _applyVolume(self):
-        vol = self._status['volume']
-        if self._status['mute']:
+        vol = self._settings['volume']
+        if self._settings['mute']:
             vol = 0
         self._mpv_send('{ "command": ["set_property", "volume", '+str(vol)+'] }')
         print(self.nameP, "VOLUME to", vol)
 
+    def _applyPan(self):
+        left = self._settings['pan'][0]/100.0
+        right = self._settings['pan'][1]/100.0
+        self._mpv_send('{"command": ["set_property", "af", "lavfi=[pan=stereo|c0='+str(left)+'*c0|c1='+str(right)+'*c1]"]}')
+        print(self.nameP, "PAN to", left, right, '{"command": ["set_property", "af", "lavfi=[pan=stereo|c0='+str(left)+'*c0|c1='+str(right)+'*c1]"]}')
+
     def _applyFlip(self):
-        if not self._status['flip']:
+        if not self._settings['flip']:
             # self._mpv_send('{ "command": ["vf", "add", "mirror"] }')
             pass
         else:

@@ -3,8 +3,10 @@ from __future__ import print_function
 import os
 import threading
 import glob
+import pickle
 import re
 from termcolor import colored
+from pathlib import Path
 
 from core import interfaces
 from core import overlays
@@ -17,6 +19,7 @@ class BasePlayer(object):
 
     name = "DUMMY Player"
     basepath = ["/media/usb/"]
+    settingspath = None
 
     log = {
         'events':   False
@@ -30,15 +33,17 @@ class BasePlayer(object):
     _interfaces = {}
     _overlays = {}
     _status = {
-        'volume':       100,
-        'mute':         False,
-        'loop':         True,
-        'flip':         False,
-        'random':       False,
         'isPlaying':    False,
         'isPaused':     False,
         'media':        None,
         'time':         0
+    }
+    _settings = {
+        'volume':       100,
+        'mute':         False,
+        'loop':         True,
+        'pan':          [100,100],
+        'flip':         False
     }
 
     def __init__(self):
@@ -46,7 +51,7 @@ class BasePlayer(object):
         self.on('end', self.onMediaEnd)
 
     def onMediaEnd(self):
-        if self._status['loop']:
+        if self._settings['loop']:
             self.next()
         else:
             self.stop()
@@ -57,6 +62,9 @@ class BasePlayer(object):
         self.basepath = []
         for base in bpath:
             self.basepath.append(os.path.join(base, ''))
+
+    def persistentSettings(self, spath):
+        self.settingspath = Path(spath)
 
     def addInterface(self, iface, *argv):
         InterfaceClass = interfaces.getInterface(iface)
@@ -216,12 +224,36 @@ class BasePlayer(object):
     def isPaused(self):
         return self._status['isPaused']
 
+    # SETTINGS
+    def settings(self):
+        return self._settings.copy()
+
+    def settings_set(self, id, val):
+        if id in self._settings:
+            self._settings[id] = val
+            self.trigger('settings-update', self._settings.copy())
+            self.settings_save()
+
+    def settings_load(self):
+        if self.settingspath and self.settingspath.is_file():
+            with open(self.settingspath, 'rb') as fd:
+                self._settings = pickle.load(fd)
+                self._applyVolume()
+                self._applyPan()
+                self._applyFlip()
+                print(self.nameP, 'settings loaded:', self._settings)
+
+    def settings_save(self):
+        if self.settingspath:
+            with open(self.settingspath, 'wb') as fd:
+                pickle.dump(self._settings, fd)
     #
     # Player CONTROLS
     #
 
     # START
     def start(self):
+        self.on(['player-ready'], self.settings_load)
         for iface in self._interfaces.values():
             iface.start()
         # for olay in self._overlays.values():
@@ -284,21 +316,6 @@ class BasePlayer(object):
 
         # Play file at index
         with self._lock:
-            if arg >= 0 and arg < len(self._playlist) and os.path.isfile(self._playlist[arg]):
-                self._currentIndex = arg
-                self._status['media'] = self._playlist[arg]
-                self._status['time'] = None
-                self._play(self._playlist[arg])
-            else:
-                self._status['media'] = None
-                self._status['time'] = None
-                if len(self._playlist) == 0:
-                    print(self.nameP, "Empty playlist..")
-                else:
-                    print(self.nameP, "Nothing left to play..")
-                error = True
-                nomedia = True
-
             if 0 <= index < len(self._playlist) and os.path.isfile(self._playlist[index]):
                 self._play(self._playlist[index])
                 self._currentIndex = index
@@ -365,44 +382,51 @@ class BasePlayer(object):
 
     # LOOP
     def loop(self, doloop):
-       self._status['loop'] = doloop
+        self.settings_set('loop', doloop)
 
     # VOLUME
     def volume(self, vol):
-       self._status['volume'] = vol
-       self._applyVolume()
+        self.settings_set('volume', vol)
+        self._applyVolume()
 
     # VOLUME INC
     def volume_inc(self):
-       self._status['volume'] += 1
-       if self._status['volume'] > 100:
-           self._status['volume'] = 100
-       self._applyVolume()
+        vol = self._settings['volume']
+        vol += 1
+        if vol > 100: vol = 100
+        self.settings_set('volume', vol)
+        self._applyVolume()
 
     # VOLUME DEC
     def volume_dec(self):
-       self._status['volume'] -= 1
-       if self._status['volume'] < 0:
-           self._status['volume'] = 0
-       self._applyVolume()
+        vol = self._settings['volume']
+        vol -= 1
+        if vol < 100: vol = 0
+        self.settings_set('volume', vol)
+        self._applyVolume()
 
     # MUTE
     def mute(self, domute):
-       self._status['mute'] = domute
-       self._applyVolume()
+        self.settings_set('mute', domute)
+        self._applyVolume()
 
     # TOGGLE MUTE
     def mute_toggle(self):
-       self.mute(not self._status['mute'])
+        self.mute(not self._settings['mute'])
+
+    # PAN
+    def pan(self, pano):
+        self.settings_set('pan', pano)
+        self._applyPan()
 
     # FLIP
     def flip(self, doflip):
-       self._status['flip'] = doflip
+       self.settings_set('flip', doflip)
        self._applyFlip()
 
     # TOGGLE FLIP
     def flip_toggle(self):
-       self.flip(not self._status['flip'])
+       self.flip(not self._settings['flip'])
 
     #
     # Player INTERNAL actions: Methods to overwrite !
@@ -434,13 +458,16 @@ class BasePlayer(object):
         print(self.nameP, "seek to", milli)
 
     def _applyVolume(self):
-        if not self._status['mute']:
-            print(self.nameP, "volume set to", self._status['volume'])
+        if not self._settings['mute']:
+            print(self.nameP, "volume set to", self._settings['volume'])
         else:
             print(self.nameP, "volume muted")
 
+    def _applyPan(self):
+        print(self.nameP, "pan set to", self._settings['pan'])
+
     def _applyFlip(self):
-        if not self._status['flip']:
+        if not self._settings['flip']:
             print(self.nameP, "screen flipped")
         else:
             print(self.nameP, "screen not flipped")

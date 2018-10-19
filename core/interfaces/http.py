@@ -105,6 +105,16 @@ def BasicHTTPServerHandler(player):
             elif command == 'unmute':
                 self.player.mute(False)
 
+            elif command == 'pan':
+                if len(args) > 1:
+                    self.player.pan(int(args[0]), int(args[1]))
+
+            elif command == 'flip':
+                self.player.flip(True)
+
+            elif command == 'unflip':
+                self.player.flip(False)
+
             elif command == 'status':
                 statusTree = self.player._status
                 while len(args) > 0:

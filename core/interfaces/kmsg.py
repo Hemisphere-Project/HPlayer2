@@ -99,6 +99,9 @@ class KmsgInterface (BaseInterface):
         elif msg.path == "/unmute":
             self.player.mute(False)
 
+        elif msg.path == "/pan":
+            self.player.mute(args[0], args[1])
+
         elif msg.path == "/flip":
             self.player.flip(True)
 

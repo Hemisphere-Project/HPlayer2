@@ -99,6 +99,10 @@ class OscInterface (BaseInterface):
         def unmute(path, args, types):
             self.player.mute(False)
 
+        @osc("/pan")
+        def pan(path, args, types):
+            self.player.pab(args[0], args[1])
+
         @osc("/flip")
         def flip(path, args, types):
             self.player.flip(True)

@@ -23,6 +23,11 @@ def setBasePath(bpath):
     for p in players():
         p.setBasePath(bpath)
 
+def persistentSettings(spath):
+    print(colored('HPlayer2', 'green'), "settings:", spath);
+    for p in players():
+        p.persistentSettings(spath)
+
 def addplayer(ptype, name=None):
     if name and name in players_pool:
         print("player", name, "already exists")

@@ -1,0 +1,167 @@
+<!DOCTYPE HTML>
+<html>
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+
+    <title>Flask-SocketIO Test</title>
+
+    <script type="text/javascript" src="/js/jquery-3.3.1.min.js"></script>
+    <script type="text/javascript" src="/js/socket.io.slim.js"></script>
+
+    <link rel="stylesheet" href="/css/bootstrap.min.css">
+    <script type="text/javascript" src="/js/bootstrap.bundle.min.js"></script>
+
+    <style>
+    body {
+      background-color: #222;
+      color: #DDD;
+      padding-top: 30px;
+    }
+    </style>
+
+    <script type="text/javascript" charset="utf-8">
+        $(document).ready(function() {
+            var socket = io.connect(location.protocol + '//' + document.domain + ':' + location.port);
+            var settings;
+            var last_status;
+            var last_status_str;
+
+            function setBtnClass(sel, style, active) {
+              if (active) {
+                $(sel).addClass('btn-'+style)
+                $(sel).removeClass('btn-outline-'+style)
+              }
+              else {
+                $(sel).removeClass('btn-'+style)
+                $(sel).addClass('btn-outline-'+style)
+              }
+            }
+
+            socket.on('connect', function() {
+                // socket.emit('my_event', {data: 'I\'m connected!'});
+                console.log('SocketIO connected !')
+            });
+
+            socket.on('status', function(msg) {
+                // console.log(msg)
+                var str_msg = JSON.stringify(msg)
+                $('#log1').text(str_msg)
+
+                if (last_status_str != str_msg) {
+
+                  setBtnClass('#play_btn', 'success', msg['isPlaying'])
+                  setBtnClass('#pause_btn', 'warning', msg['isPaused'])
+
+                  last_status = msg
+                  last_status_str = str_msg
+                }
+
+            });
+
+            socket.on('settings', function(msg) {
+                // console.log(msg)
+                var str_msg = JSON.stringify(msg)
+                $('#log2').text(str_msg)
+
+                setBtnClass('#loop_btn', 'info', msg['loop'])
+                setBtnClass('#mute_btn', 'warning', msg['mute'])
+
+                $('#volume_range').val(msg['volume'])
+                $('#left_range').val(msg['pan'][0])
+                $('#right_range').val(msg['pan'][1])
+
+                settings = msg
+            });
+
+            // Handlers for the different forms in the page.
+            // These accept data from the user and send it to the server in a
+            // variety of ways
+            $('#play_btn').click(function(event) {
+              if(!last_status['isPaused']) socket.emit('play');
+              else socket.emit('resume');
+            });
+            $('#pause_btn').click(function(event) {
+              if(!last_status['isPaused']) socket.emit('pause');
+              else socket.emit('resume');
+            });
+            $('#prev_btn').click(function(event) {
+                socket.emit('prev');
+            });
+            $('#next_btn').click(function(event) {
+                socket.emit('next');
+            });
+            $('#stop_btn').click(function(event) {
+                socket.emit('stop');
+            });
+            $('#loop_btn').click(function(event) {
+              if(!settings['loop']) socket.emit('loop');
+              else socket.emit('unloop');
+            });
+            $('#mute_btn').click(function(event) {
+              if(!settings['mute']) socket.emit('mute');
+              else socket.emit('unmute');
+            });
+
+            $('#volume_range').on('input', function(event) {
+              socket.emit('volume', this.value);
+            });
+            $('#left_range').on('input', function(event) {
+              socket.emit('pan', [this.value, $('#right_range').val()]);
+            });
+            $('#right_range').on('input', function(event) {
+              socket.emit('pan', [$('#left_range').val(), this.value]);
+            });
+
+        });
+    </script>
+</head>
+<body>
+    <div class="row">
+      <div class="col-0 col-md-2 col-lg-3"></div>
+      <div class="col-12 col-md-8 col-lg-6">
+        <h1>HPlayer2</h1>
+        <br />
+
+        <form>
+          <div class="form-group float-right">
+            <button type="button" class="btn btn-outline-info" id="loop_btn">loop</button>
+            <button type="button" class="btn btn-outline-warning" id="mute_btn">mute</button>
+          </div>
+
+          <div class="form-group">
+            <button type="button" class="btn btn-outline-success" id="play_btn">play</button>
+            <button type="button" class="btn btn-outline-warning" id="pause_btn">pause</button>
+            <button type="button" class="btn btn-outline-secondary" id="prev_btn">prev</button>
+            <button type="button" class="btn btn-outline-secondary" id="next_btn">next</button>
+            <button type="button" class="btn btn-outline-danger" id="stop_btn">stop</button>
+          </div>
+
+          <br />
+          <br />
+
+          <div class="form-group">
+            <label for="volume_range">Volume</label>
+            <input type="range" class="form-control-range" id="volume_range" min="0" max="100">
+          </div>
+
+          <div class="form-group">
+            <label for="left_range">Left</label>
+            <input type="range" class="form-control-range" id="left_range" min="0" max="100">
+          </div>
+
+          <div class="form-group">
+            <label for="right_range">Right</label>
+            <input type="range" class="form-control-range" id="right_range" min="0" max="100">
+          </div>
+
+        </form>
+
+        <h2>Status:</h2>
+        <div id="log1"></div>
+        <div id="log2"></div>
+
+      </div>
+    </div>
+</body>
+</html>

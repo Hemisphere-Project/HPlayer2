@@ -1,7 +1,7 @@
 from .base import BaseInterface
 import socketio
 import eventlet
-from flask import Flask, render_template, session, request
+from flask import Flask, render_template, session, request, send_from_directory
 from flask_socketio import SocketIO, emit, join_room, leave_room, close_room, rooms, disconnect
 import threading, os, time
 import logging
@@ -35,18 +35,30 @@ class ThreadedHTTPServer(object):
         self.player = player
 
         interface_path = os.path.dirname(os.path.realpath(__file__))
-        templates_path = os.path.join(interface_path, 'http2')
+        templates_path = os.path.join(interface_path, 'http2', 'templates')
+        static_path = os.path.join(interface_path, 'http2', 'static')
 
         app = Flask(__name__, template_folder=templates_path)
         app.config['SECRET_KEY'] = 'secret!'
         socketio = SocketIO(app, async_mode='eventlet')
+
 
         #
         # FLASK Routing
         #
         @app.route('/')
         def index():
-            return render_template('index.html', async_mode=socketio.async_mode)
+            # return render_template('index.html', async_mode=socketio.async_mode)
+            return send_from_directory(templates_path, 'index.html')
+
+
+        @app.route('/js/<path:path>')
+        def send_js(path):
+            return send_from_directory(static_path+'/js', path)
+
+        @app.route('/css/<path:path>')
+        def send_css(path):
+            return send_from_directory(static_path+'/css', path)
 
         #
         # SOCKETIO Routing
@@ -54,11 +66,17 @@ class ThreadedHTTPServer(object):
 
         def background_thread():
             while True:
-                socketio.emit('status', self.player._status)  # {'msg': 'yo', 'timestamp': time.gmtime()}
+                socketio.emit('status', self.player.status())  # {'msg': 'yo', 'timestamp': time.gmtime()}
                 socketio.sleep(0.1)
+
+        def settings_send(arg):
+            socketio.emit('settings', arg)
+
+        self.player.on(['settings-update'], settings_send)
 
         @socketio.on('connect')
         def client_connect():
+            socketio.emit('settings', self.player.settings())
             global thread
             with thread_lock:
                 if thread is None:
@@ -66,7 +84,7 @@ class ThreadedHTTPServer(object):
 
         @socketio.on('play')
         def play_message(message=None):
-            if message['path']:
+            if message and message['path']:
                 self.player.play(message['path'])
             else:
                 self.player.play()
@@ -98,6 +116,48 @@ class ThreadedHTTPServer(object):
         @socketio.on('unloop')
         def unloop_message():
             self.player.loop(False)
+
+        @socketio.on('volume')
+        def volume_message(message=None):
+            if message:
+                self.player.volume(int(message))
+
+        @socketio.on('mute')
+        def mute_message():
+            self.player.mute(True)
+
+        @socketio.on('unmute')
+        def unmute_message():
+            self.player.mute(False)
+
+        @socketio.on('pan')
+        def pan_message(message=None):
+            if message and len(message) == 2:
+                self.player.pan([int(message[0]), int(message[1])])
+
+        @socketio.on('flip')
+        def flip_message():
+            self.player.flip(True)
+
+        @socketio.on('unflip')
+        def unflip_message():
+            self.player.flip(False)
+
+        @socketio.on('status')
+        def status_message():
+            pass
+
+        @socketio.on('ping')
+        def ping_message():
+            socketio.send('pong')
+
+        @socketio.on('event')
+        def event_message(message=None):
+            if message['event']:
+                if message['data']:
+                    self.player.trigger(message['event'], message['data'])
+                else:
+                    self.player.trigger(message['event'])
 
         #
         #

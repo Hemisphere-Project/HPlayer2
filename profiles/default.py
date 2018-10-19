@@ -13,4 +13,5 @@ player.addInterface('http2', 8080)
 
 # RUN
 hplayer.setBasePath("/home/mgr/Videos")
+hplayer.persistentSettings("/home/mgr/hplayer2.cfg")
 hplayer.run()
