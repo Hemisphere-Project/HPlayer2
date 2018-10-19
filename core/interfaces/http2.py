@@ -35,9 +35,9 @@ class ThreadedHTTPServer(object):
         self.player = player
 
         interface_path = os.path.dirname(os.path.realpath(__file__))
-        www_path = os.path.join(interface_path, 'http2', 'templates')
+        www_path = os.path.join(interface_path, 'http2')
 
-        app = Flask(__name__, template_folder=templates_path)
+        app = Flask(__name__, template_folder=www_path)
         app.config['SECRET_KEY'] = 'secret!'
         socketio = SocketIO(app, async_mode='eventlet')
 
@@ -51,7 +51,7 @@ class ThreadedHTTPServer(object):
             return send_from_directory(www_path, 'index.html')
 
 
-        @app.route('/static/<path:path>')
+        @app.route('/<path:path>')
         def send_js(path):
             return send_from_directory(www_path, path)
 
