@@ -3,8 +3,8 @@ BUG
 - Looper Profile doesn't gracefully exit..
 
 CHRD
-- Persistent settings (Volume/PAN/Mute/Loop/Playlist)
-- HTTP2: FileManager
+- Persistent settings: Playlist
+- HTTP2: FileManager ( https://jonmiles.github.io/bootstrap-treeview/)
 
 NEXT
 - Clean up log in player and overlays like in interfaces
