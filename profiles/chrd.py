@@ -2,13 +2,10 @@ from time import sleep
 from core.engine import hplayer
 
 # PLAYER
-player = hplayer.addplayer('mpv', 'looper')
+player = hplayer.addplayer('mpv', 'looper-chrd')
 
 # INTERFACES
 player.addInterface('http2', 8080)
-
-# INTERNAL events
-player.on(['player-ready'], lambda : player.play('*'))
 
 # RUN
 hplayer.setBasePath(["/data/chrd"])
