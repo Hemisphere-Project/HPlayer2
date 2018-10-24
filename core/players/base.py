@@ -43,7 +43,8 @@ class BasePlayer(object):
         'mute':         False,
         'loop':         True,
         'pan':          [100,100],
-        'flip':         False
+        'flip':         False,
+        'autoplay':     False
     }
 
     def __init__(self):
@@ -242,6 +243,8 @@ class BasePlayer(object):
                 self._applyPan()
                 self._applyFlip()
                 print(self.nameP, 'settings loaded:', self._settings)
+                if self._settings['autoplay']:
+                    self.play()
 
     def settings_save(self):
         if self.settingspath:
@@ -383,6 +386,13 @@ class BasePlayer(object):
     # LOOP
     def loop(self, doloop):
         self.settings_set('loop', doloop)
+
+    # AUTOPLAY
+    def autoplay(self, doauto):
+        self.settings_set('autoplay', doauto)
+        if doauto and not self.isPlaying():
+            self.load()
+            self.play()
 
     # VOLUME
     def volume(self, vol):

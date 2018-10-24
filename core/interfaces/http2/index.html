@@ -9,8 +9,19 @@
     <script type="text/javascript" src="/res/jquery-3.3.1.min.js"></script>
     <script type="text/javascript" src="/res/socket.io.slim.js"></script>
 
+    <link href="/res/css/fontawesome.min.css" rel="stylesheet">
+    <link href="/res/css/solid.min.css" rel="stylesheet">
+    <link href="/res/css/regular.min.css" rel="stylesheet">
+
     <link rel="stylesheet" href="/res/bootstrap.min.css">
     <script type="text/javascript" src="/res/bootstrap.bundle.min.js"></script>
+
+    <link rel="stylesheet" href="/res/bootstrap-treeview.min.css">
+    <script type="text/javascript" src="/res/bootstrap-treeview.min.js"></script>
+
+    <link rel="stylesheet" href="/res/jquery.dm-uploader.min.css">
+    <script type="text/javascript" src="/res/jquery.dm-uploader.min.js"></script>
+    <script type="text/javascript" src="/res/uploader-profile.js"></script>
 
     <style>
     body {
@@ -19,10 +30,21 @@
       padding-top: 30px;
       padding-bottom: 30px;
     }
+    #files {
+      overflow-y: auto;
+      background-color: #444;
+      color: #EEE;
+    }
     </style>
 
     <script type="text/javascript" charset="utf-8">
         $(document).ready(function() {
+
+
+            /*
+             *  SOCKETIO
+             */
+
             var socket = io.connect(location.protocol + '//' + document.domain + ':' + location.port);
             var settings;
             var last_status;
@@ -42,6 +64,31 @@
             socket.on('connect', function() {
                 // socket.emit('my_event', {data: 'I\'m connected!'});
                 console.log('SocketIO connected !')
+                socket.emit('fileslist');
+            });
+
+            socket.on('files', function(msg) {
+                // socket.emit('my_event', {data: 'I\'m connected!'});
+                $('#tree').treeview({
+                  data: msg,
+                  selectable: true,
+                  multiSelect: true,
+                  color: "#000000"
+                });
+
+                $('#tree').on('nodeSelected', function(event, data) {
+                  // console.log(event, data)
+
+                });
+
+                if(msg !== null && msg.length > 0) {
+                  $('#delete_btn').show()
+                  $('#empty-tree').hide()
+                }
+                else {
+                  $('#delete_btn').hide()
+                  $('#empty-tree').show()
+                }
             });
 
             socket.on('status', function(msg) {
@@ -53,6 +100,9 @@
 
                   setBtnClass('#play_btn', 'success', msg['isPlaying'])
                   setBtnClass('#pause_btn', 'warning', msg['isPaused'])
+
+                  $('#media_name').text(msg['media'])
+                  $('#time_ellapsed').text(msg['time'])
 
                   last_status = msg
                   last_status_str = str_msg
@@ -67,6 +117,7 @@
 
                 setBtnClass('#loop_btn', 'info', msg['loop'])
                 setBtnClass('#mute_btn', 'warning', msg['mute'])
+                setBtnClass('#auto_btn', 'secondary', msg['autoplay'])
 
                 $('#volume_range').val(msg['volume'])
                 $('#left_range').val(msg['pan'][0])
@@ -103,6 +154,10 @@
               if(!settings['mute']) socket.emit('mute');
               else socket.emit('unmute');
             });
+            $('#auto_btn').click(function(event) {
+              if(!settings['autoplay']) socket.emit('autoplay');
+              else socket.emit('notautoplay');
+            });
 
             $('#volume_range').on('input', function(event) {
               socket.emit('volume', this.value);
@@ -114,6 +169,29 @@
               socket.emit('pan', [$('#left_range').val(), this.value]);
             });
 
+
+            // Files uploader
+            $("#drop-area").dmUploader({
+              url: '/upload',
+              queue: true,
+              //extFilter: ["jpg", "jpeg", "png", "gif"],
+
+              onInit: function(){
+                console.log('Callback: Plugin initialized');
+                $('#upload-list').hide()
+              },
+
+              onNewFile: function(id){
+                $('#upload-list').show()
+              }
+              // ... More callbacks
+            });
+
+            $('#delete_btn').click(function(event) {
+                var selected = $('#tree').treeview('getSelected')
+                var r = confirm("Are you sure ?!");
+                if (r == true) socket.emit('filesdelete', selected)
+            });
         });
     </script>
 </head>
@@ -122,11 +200,13 @@
       <div class="col-0 col-md-2 col-lg-3"></div>
       <div class="col-12 col-md-8 col-lg-6">
         <h1>HPlayer2</h1>
-        <br />
+        <hr />
 
         <form>
+
           <div class="form-group float-right">
             <button type="button" class="btn btn-outline-info" id="loop_btn">loop</button>
+            <button type="button" class="btn btn-outline-secondary" id="auto_btn">autoplay</button>
             <button type="button" class="btn btn-outline-warning" id="mute_btn">mute</button>
           </div>
 
@@ -139,7 +219,10 @@
           </div>
 
           <br />
-          <br />
+
+          Media: <span id="media_name"></span><br />
+          Time: <span id="time_ellapsed"></span>
+          <hr />
 
           <div class="form-group">
             <label for="volume_range">Volume</label>
@@ -158,11 +241,66 @@
 
         </form>
 
-        <br />
+        <hr />
 
-        <h4>Logs</h4>
-        <div id="log1"></div>
-        <div id="log2"></div>
+        <div class="row">
+          <div class="col-md-6 col-sm-12">
+            <div class="card-header"> File List </div>
+            <div id="empty-tree" class="text-muted text-center empty"><br />No file found on device</div>
+            <div id="tree"></div>
+            <br />
+            <div class="form-group float-right">
+              <button type="button" class="btn btn-outline-danger" id="delete_btn">delete selected</button>
+            </div>
+          </div><!-- /files list -->
+
+          <div class="col-md-6 col-sm-12">
+            <div class="card-header"> File Upload </div>
+            <div id="drag-and-drop-zone" class="dm-uploader p-2 text-center">
+              <h3 class="mb-5 mt-5 text-muted">Drag &amp; drop Files here</h3>
+              <div class="btn btn-primary btn-block mb-5">
+                <span>Open the file Browser</span>
+                <input type="file" title='Click to add Files' />
+              </div><!-- /uploader -->
+            </div>
+
+            <div class="card" style="height:300px;" id="upload-list">
+              <ul class="list-unstyled p-2 d-flex flex-column col" id="files">
+                <li class="text-muted text-center empty"></li>
+              </ul>
+            </div>
+          </div><!-- /upload status -->
+        </div>
+
+
+        <!-- File item template -->
+        <script type="text/html" id="files-template">
+          <li class="media">
+            <div class="media-body mb-1">
+              <p class="mb-2">
+                <strong>%%filename%%</strong> - Status: <span class="text-muted">Waiting</span>
+              </p>
+              <div class="progress mb-2">
+                <div class="progress-bar progress-bar-striped progress-bar-animated bg-primary"
+                  role="progressbar"
+                  style="width: 0%"
+                  aria-valuenow="0" aria-valuemin="0" aria-valuemax="100">
+                </div>
+              </div>
+              <hr class="mt-1 mb-1" />
+            </div>
+          </li>
+        </script>
+
+        <hr />
+
+        <div class="row">
+          <div class="col-12">
+            <h4>Logs</h4>
+            <div id="log1"></div>
+            <div id="log2"></div>
+          </div><!-- /logs -->
+        </div>
 
       </div>
     </div>
