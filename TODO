@@ -2,9 +2,6 @@ BUG
 - check if RPi overlay is broken ?
 - Looper Profile doesn't gracefully exit..
 
-CHRD
-- Persistent settings: Playlist
-- HTTP2: FileManager ( https://jonmiles.github.io/bootstrap-treeview/)
 
 NEXT
 - Clean up log in player and overlays like in interfaces
