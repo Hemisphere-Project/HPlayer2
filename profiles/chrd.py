@@ -5,9 +5,9 @@ from core.engine import hplayer
 player = hplayer.addplayer('mpv', 'looper-chrd')
 
 # INTERFACES
-player.addInterface('http2', 8080)
+player.addInterface('http2', 80)
 
 # RUN
-hplayer.setBasePath(["/data/chrd"])
+hplayer.setBasePath(["/data/media"])
 hplayer.persistentSettings("/data/hplayer2-chrd.cfg")
 hplayer.run()
