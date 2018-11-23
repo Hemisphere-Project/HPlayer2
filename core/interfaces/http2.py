@@ -93,6 +93,7 @@ class ThreadedHTTPServer(object):
         @socketio.on('connect')
         def client_connect():
             socketio.emit('settings', self.player.settings())
+            socketio.emit('name', self.player.name)
             global thread
             with thread_lock:
                 if thread is None:
@@ -153,7 +154,7 @@ class ThreadedHTTPServer(object):
         @socketio.on('notautoplay')
         def unmute_message():
             self.player.autoplay(False)
-            
+
         @socketio.on('reboot')
         def reboot_message():
             os.system('reboot')
