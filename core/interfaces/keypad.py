@@ -4,8 +4,6 @@ from time import sleep
 import os
 
 
-
-
 class KeypadInterface (BaseInterface):
 
     buttons = ( (LCD.SELECT, 'Select', (1,1,1)),
@@ -31,7 +29,7 @@ class KeypadInterface (BaseInterface):
 
         self.log("starting KEYPAD listener")
 
-        display = {'new': "", 'last': ""}
+        display = {'line1': "", 'line2': ""}
         pressed = dict.fromkeys(['UP', 'DOWN', 'RIGHT', 'LEFT', 'SEL'], False)
 
         while self.isRunning():
@@ -65,19 +63,25 @@ class KeypadInterface (BaseInterface):
                 pressed['SEL']-=1
                 # self.log("release SEL")
 
+            # Set Line 1 : MEDIA
+            if not self.player.status()['media']: media = '-stop-'
+            else: media = os.path.basename(self.player.status()['media'])[:-4]
+            media = media.ljust(16, ' ')
+            if media != display['line1']:
+                display['line1'] = media
+                self.lcd.set_cursor(0, 0)
+                for char in media:
+                    self.lcd.write8(ord(char), True)
 
-            display['new'] = ""
-            if self.player.status()['media'] is not None:
-                display['new'] = os.path.basename(self.player.status()['media'])[:-4]
-            else:
-                display['new'] = "-stop-"
-            display['new'] += "\n" + 'VOLUME: '+str(self.player.settings()['volume'])
+            # Set Line 2 : VOLUME / TIME
+            volumetime = 'VOLUME: '+str(self.player.settings()['volume'])
             if self.player.status()['time'] is not None:
-                display['new'] += "  \"" + str(int(self.player.status()['time']))
+                volumetime += "  \"" + str(int(self.player.status()['time']))
+            volumetime = volumetime.ljust(16, ' ')
+            if volumetime != display['line2']:
+                display['line2'] = volumetime
+                self.lcd.set_cursor(0, 1)
+                for char in volumetime:
+                    self.lcd.write8(ord(char), True)
 
-            if display['new'] != display['last']:
-                self.lcd.clear()
-                self.lcd.message( display['new'] )
-                display['last'] = display['new']
-
-            sleep(0.02)
+            sleep(0.04)
