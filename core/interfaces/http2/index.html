@@ -76,11 +76,16 @@
                 $('#link-connected').show();
                 $('#link-disconnected').hide();
             });
-            
+
             socket.on('disconnect', function() {
                 console.log('SocketIO disconnected :(')
                 $('#link-connected').hide();
                 $('#link-disconnected').show();
+            });
+
+            socket.on('name', function(name) {
+                console.log('Player name:', name)
+                $('#playerName').html(name);
             });
 
             socket.on('files', function(msg) {
@@ -221,7 +226,8 @@
       <div class="col-12 col-md-8 col-lg-6">
         <span id="link-connected">connected</span>
         <span id="link-disconnected">disconnected</span>
-        <h1>HPlayer2</h1>
+        <h3>HPlayer2</h3>
+        <h4 id="playerName"></h4>
         <hr />
 
         <form>
@@ -324,7 +330,7 @@
             <div id="log2"></div>
           </div><!-- /logs -->
         </div>
-        
+
         <hr />
         sources: <a href="https://github.com/Hemisphere-Project/HPlayer2" target="_blank">https://github.com/Hemisphere-Project/HPlayer2</a><br />
       </div>
