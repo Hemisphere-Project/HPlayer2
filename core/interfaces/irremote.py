@@ -29,14 +29,12 @@ class IrremoteInterface (BaseInterface):
             if event and event.type == ecodes.EV_KEY:
 
                 if event.code == ecodes.KEY_VOLUMEUP:
-                    if event.value == 1:
-                        for i in range(5):
-                            self.player.volume_inc()
+                    if event.value == 1 or event.value == 2:
+                        self.player.volume_inc()
 
                 elif event.code == ecodes.KEY_VOLUMEDOWN:
-                    if event.value == 1:
-                        for i in range(5):
-                            self.player.volume_dec()
+                    if event.value == 1 or event.value == 2:
+                        self.player.volume_dec()
 
                 elif event.code == ecodes.KEY_MUTE:
                     if event.value == 1:
@@ -64,10 +62,10 @@ class IrremoteInterface (BaseInterface):
                         self.player.prev()
 
 
-                else:
-                    self.log("Unbinded event:", categorize(event))
-            else:
-                sleep(0.1)
+                # self.log("unknown event:", categorize(event), event.value)
+                
+            elif not event:
+            	sleep(0.1)
 
         self.remote.ungrab()
 

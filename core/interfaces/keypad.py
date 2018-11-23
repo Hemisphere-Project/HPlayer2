@@ -28,7 +28,7 @@ class KeypadInterface (BaseInterface):
     def listen(self):
         if not self.lcd:
             return
-            
+
         self.log("starting KEYPAD listener")
 
         display = {'new': "", 'last': ""}
@@ -69,11 +69,11 @@ class KeypadInterface (BaseInterface):
             display['new'] = ""
             if self.player.status()['media'] is not None:
                 display['new'] = os.path.basename(self.player.status()['media'])[:-4]
-                if self.player.status()['time'] is not None:
-                    display['new'] += "  \"" + str(int(self.player.status()['time']))
             else:
                 display['new'] = "-stop-"
-            display['new'] += "\n" + 'VOLUME: '+str(self.player.status()['volume'])
+            display['new'] += "\n" + 'VOLUME: '+str(self.player.settings()['volume'])
+            if self.player.status()['time'] is not None:
+                display['new'] += "  \"" + str(int(self.player.status()['time']))
 
             if display['new'] != display['last']:
                 self.lcd.clear()

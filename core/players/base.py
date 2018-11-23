@@ -411,7 +411,7 @@ class BasePlayer(object):
     def volume_dec(self):
         vol = self._settings['volume']
         vol -= 1
-        if vol < 100: vol = 0
+        if vol < 0: vol = 0
         self.settings_set('volume', vol)
         self._applyVolume()
 
