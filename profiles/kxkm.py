@@ -27,8 +27,8 @@ if is_RPi:
 
 # OSC events
 def syncTest():
-    loop = "loop" if player.status()['loop'] else "unloop"
-    screen = "screen" if not player.status()['flip'] else "screenflip"
+    loop = "loop" if player.settings()['loop'] else "unloop"
+    screen = "screen" if not player.settings()['flip'] else "screenflip"
     playing = "playmovie" if player.isPlaying() else "stopmovie"
     media = player.status()['media']
     if media:

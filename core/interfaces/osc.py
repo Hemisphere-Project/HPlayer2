@@ -45,13 +45,13 @@ class OscInterface (BaseInterface):
 
         @osc("/play")
         def play(path, args, types):
-            self.player.loop(False)
+            self.player.loop(0)
             if args[0]: self.player.play(args[0])
             else: self.player.play()
 
         @osc("/playloop")
         def playloop(path, args, types):
-            self.player.loop(True)
+            self.player.loop(1)
             if args[0]: self.player.play(args[0])
             else: self.player.play()
 
@@ -81,11 +81,11 @@ class OscInterface (BaseInterface):
 
         @osc("/loop")
         def loop(path, args, types):
-            self.player.loop(True)
+            self.player.loop(1)
 
         @osc("/unloop")
         def unloop(path, args, types):
-            self.player.loop(False)
+            self.player.loop(0)
 
         @osc("/volume")
         def volume(path, args, types):

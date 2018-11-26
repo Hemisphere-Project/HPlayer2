@@ -87,13 +87,18 @@ def BasicHTTPServerHandler(player):
                 self.player.prev()
 
             elif command == 'loop':
-                doLoop = True
+                doLoop = 2
                 if len(args) > 0:
-                    doLoop = (int(args[0]) == 1)
+                    if args[0] == 'all':
+                        doLoop = 2
+                    elif args[0] == 'one':
+                        doLoop = 1
+                    else:
+                        doLoop = 0
                 self.player.loop(doLoop)
 
             elif command == 'unloop':
-                self.player.loop(False)
+                self.player.loop(0)
 
             elif command == 'volume':
                 if len(args) > 0:

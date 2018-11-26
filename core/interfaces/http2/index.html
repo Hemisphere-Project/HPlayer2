@@ -136,7 +136,8 @@
                 var str_msg = JSON.stringify(msg)
                 $('#log2').text(str_msg)
 
-                setBtnClass('#loop_btn', 'info', msg['loop'])
+                setBtnClass('#loopAll_btn', 'info', (msg['loop'] == 2))
+                setBtnClass('#loopOne_btn', 'info', (msg['loop'] == 1))
                 setBtnClass('#mute_btn', 'warning', msg['mute'])
                 setBtnClass('#auto_btn', 'secondary', msg['autoplay'])
 
@@ -167,8 +168,12 @@
             $('#stop_btn').click(function(event) {
                 socket.emit('stop');
             });
-            $('#loop_btn').click(function(event) {
-              if(!settings['loop']) socket.emit('loop');
+            $('#loopAll_btn').click(function(event) {
+              if(settings['loop'] != 2) socket.emit('loop', 'all');
+              else socket.emit('unloop');
+            });
+            $('#loopOne_btn').click(function(event) {
+              if(settings['loop'] != 1) socket.emit('loop', 'one');
               else socket.emit('unloop');
             });
             $('#mute_btn').click(function(event) {
@@ -233,7 +238,8 @@
         <form>
 
           <div class="form-group float-right">
-            <button type="button" class="btn btn-outline-info" id="loop_btn">loop</button>
+            <button type="button" class="btn btn-outline-info" id="loopOne_btn">loop One</button>
+            <button type="button" class="btn btn-outline-info" id="loopAll_btn">loop All</button>
             <button type="button" class="btn btn-outline-secondary" id="auto_btn">autoplay</button>
             <button type="button" class="btn btn-outline-warning" id="mute_btn">mute</button>
             <button type="button" class="btn btn-outline-danger" id="reboot_btn">reboot</button>

@@ -4,7 +4,7 @@ from core.engine import network
 
 # PLAYER
 player = hplayer.addplayer('mpv', 'audioscope')
-player.loop(True)
+player.loop(1)
 player.log['events'] = True
 
 # Interfaces

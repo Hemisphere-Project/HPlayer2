@@ -41,7 +41,7 @@ class BasePlayer(object):
     _settings = {
         'volume':       100,
         'mute':         False,
-        'loop':         True,
+        'loop':         2,              # 0: no loop / 1: loop one / 2: loop all
         'pan':          [100,100],
         'flip':         False,
         'autoplay':     False
@@ -52,7 +52,9 @@ class BasePlayer(object):
         self.on('end', self.onMediaEnd)
 
     def onMediaEnd(self):
-        if self._settings['loop']:
+        if self._settings['loop'] == 1:     # loop one
+            self.play()
+        elif self._settings['loop'] == 2:   # loop all
             self.next()
         else:
             self.stop()

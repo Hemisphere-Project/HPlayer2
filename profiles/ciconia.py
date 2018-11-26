@@ -6,7 +6,7 @@ regie_ip = "3.0.0.10"
 
 # PLAYER
 player = hplayer.addplayer('mpv', 'ciconia')
-player.loop(False)
+player.loop(0)
 
 # Interfaces
 player.addInterface('osc', 4000, 4001)

@@ -127,12 +127,20 @@ class ThreadedHTTPServer(object):
             self.player.prev()
 
         @socketio.on('loop')
-        def loop_message():
-            self.player.loop(True)
+        def loop_message(mode=None):
+            doLoop = 1
+            if mode:
+                if mode == 'all':
+                    doLoop = 2
+                elif mode == 'one':
+                    doLoop = 1
+                else:
+                    doLoop = 0
+            self.player.loop(doLoop)
 
         @socketio.on('unloop')
         def unloop_message():
-            self.player.loop(False)
+            self.player.loop(0)
 
         @socketio.on('volume')
         def volume_message(message=None):
