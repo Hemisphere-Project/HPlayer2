@@ -124,7 +124,8 @@ class MpvPlayer(BasePlayer):
                             elif mpvsays['name'] == 'core-idle':
                                 self._status['isPlaying'] = not mpvsays['data']
                             elif mpvsays['name'] == 'time-pos':
-                                self._status['time'] = mpvsays['data']
+                                if mpvsays['data']:
+                                    self._status['time'] = round(float(mpvsays['data']),2)
                             else:
                                 pass
                             #    print(self.nameP, "IPC event:", mpvsays)

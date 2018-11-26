@@ -207,9 +207,12 @@ class ThreadedHTTPServer(object):
                     d['selectable'] = False
                 return d
 
-            liste = path_to_dict(self.upload_folder)
-            if 'nodes' in liste:
-                socketio.emit('files', liste['nodes'] )
+            liste = []
+            for bp in self.player.basepath:
+                liste.append(path_to_dict(bp))
+
+            if len(liste) > 0 and 'nodes' in liste[0]:
+                socketio.emit('files', liste )
             else:
                 socketio.emit('files', None )
 
