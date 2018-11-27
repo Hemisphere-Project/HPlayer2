@@ -40,7 +40,7 @@ elif [[ $(command -v pacman) ]]; then
     # libass / ffmpeg / mpv dependencies
     pacman -S freetype2 fribidi fontconfig yasm git --noconfirm --needed
     pacman -S autoconf pkg-config libtool --noconfirm --needed
-    pacman -S lua luajit libvdpau libva libxv libjpeg libxkbcommon libxrandr libv4l libxss libcaca sdl2 --noconfirm --needed 
+    pacman -S lua luajit libvdpau libva libxv libjpeg libxkbcommon libxrandr libv4l libxss libcaca sdl2 --noconfirm --needed
     pacman -S base-devel --noconfirm --needed    ## error ?
     pacman -S libx264 --noconfirm --needed       ## error ?
     pacman -S mesa --noconfirm --needed          ## error ?
@@ -50,11 +50,11 @@ elif [[ $(command -v pacman) ]]; then
     # hplayer2 dependencies
     pacman -S python3 cython liblo --noconfirm --needed
     pacman -S python-pyliblo python-netifaces python-termcolor python-evdev python-flask-socketio  --noconfirm --needed
-    
+
     # GPIO RPi
     if [[ $(uname -m) = armv* ]]; then
-      pacman -S python-pip --noconfirm --needed
-      /usr/bin/yes | pip3 install RPi.GPIO 
+      pacman -S python-pip python-queuelib  --noconfirm --needed
+      /usr/bin/yes | pip3 install RPi.GPIO
       git clone https://github.com/adafruit/Adafruit_Python_CharLCD.git
 	  cd Adafruit_Python_CharLCD
 	  python3 setup.py install

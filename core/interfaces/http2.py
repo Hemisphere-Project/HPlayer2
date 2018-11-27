@@ -93,6 +93,7 @@ class ThreadedHTTPServer(object):
         @socketio.on('connect')
         def client_connect():
             socketio.emit('settings', self.player.settings())
+            socketio.emit('name', self.player.name)
             global thread
             with thread_lock:
                 if thread is None:
@@ -126,12 +127,20 @@ class ThreadedHTTPServer(object):
             self.player.prev()
 
         @socketio.on('loop')
-        def loop_message():
-            self.player.loop(True)
+        def loop_message(mode=None):
+            doLoop = 1
+            if mode:
+                if mode == 'all':
+                    doLoop = 2
+                elif mode == 'one':
+                    doLoop = 1
+                else:
+                    doLoop = 0
+            self.player.loop(doLoop)
 
         @socketio.on('unloop')
         def unloop_message():
-            self.player.loop(False)
+            self.player.loop(0)
 
         @socketio.on('volume')
         def volume_message(message=None):
@@ -153,7 +162,7 @@ class ThreadedHTTPServer(object):
         @socketio.on('notautoplay')
         def unmute_message():
             self.player.autoplay(False)
-            
+
         @socketio.on('reboot')
         def reboot_message():
             os.system('reboot')
@@ -198,9 +207,12 @@ class ThreadedHTTPServer(object):
                     d['selectable'] = False
                 return d
 
-            liste = path_to_dict(self.upload_folder)
-            if 'nodes' in liste:
-                socketio.emit('files', liste['nodes'] )
+            liste = []
+            for bp in self.player.basepath:
+                liste.append(path_to_dict(bp))
+
+            if len(liste) > 0 and 'nodes' in liste[0]:
+                socketio.emit('files', liste )
             else:
                 socketio.emit('files', None )
 

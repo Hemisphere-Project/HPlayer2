@@ -57,12 +57,12 @@ class KmsgInterface (BaseInterface):
             args = data.values()
 
         if msg.path == "/play":
-            self.player.loop(False)
+            self.player.loop(0)
             if args[0]: self.player.play(args[0])
             else: self.player.play()
 
         elif msg.path == "/playloop":
-            self.player.loop(True)
+            self.player.loop(1)
             if args[0]: self.player.play(args[0])
             else: self.player.play()
 
@@ -85,10 +85,10 @@ class KmsgInterface (BaseInterface):
             self.player.prev()
 
         elif msg.path == "/loop":
-            self.player.loop(True)
+            self.player.loop(1)
 
         elif msg.path == "/unloop":
-            self.player.loop(False)
+            self.player.loop(0)
 
         elif msg.path == "/volume":
             self.player.volume(args[0])

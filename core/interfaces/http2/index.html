@@ -1,304 +1,138 @@
 <!DOCTYPE HTML>
 <html>
+
 <head>
-    <meta charset="utf-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
 
-    <title>Flask-SocketIO Test</title>
+  <title>HPlayer2</title>
 
-    <script type="text/javascript" src="/res/jquery-3.3.1.min.js"></script>
-    <script type="text/javascript" src="/res/socket.io.slim.js"></script>
+  <script type="text/javascript" src="/res/jquery-3.3.1.min.js"></script>
+  <script type="text/javascript" src="/res/socket.io.slim.js"></script>
 
-    <link href="/res/css/fontawesome.min.css" rel="stylesheet">
-    <link href="/res/css/solid.min.css" rel="stylesheet">
-    <link href="/res/css/regular.min.css" rel="stylesheet">
+  <link href="/res/css/fontawesome.min.css" rel="stylesheet">
+  <link href="/res/css/solid.min.css" rel="stylesheet">
+  <link href="/res/css/regular.min.css" rel="stylesheet">
 
-    <link rel="stylesheet" href="/res/bootstrap.min.css">
-    <script type="text/javascript" src="/res/bootstrap.bundle.min.js"></script>
+  <link rel="stylesheet" href="/res/bootstrap.min.css">
+  <script type="text/javascript" src="/res/bootstrap.bundle.min.js"></script>
 
-    <link rel="stylesheet" href="/res/bootstrap-treeview.min.css">
-    <script type="text/javascript" src="/res/bootstrap-treeview.min.js"></script>
+  <link rel="stylesheet" href="/res/bootstrap-treeview.min.css">
+  <script type="text/javascript" src="/res/bootstrap-treeview.min.js"></script>
 
-    <link rel="stylesheet" href="/res/jquery.dm-uploader.min.css">
-    <script type="text/javascript" src="/res/jquery.dm-uploader.min.js"></script>
-    <script type="text/javascript" src="/res/uploader-profile.js"></script>
+  <link rel="stylesheet" href="/res/jquery.dm-uploader.min.css">
+  <script type="text/javascript" src="/res/jquery.dm-uploader.min.js"></script>
+  <script type="text/javascript" src="/res/uploader-profile.js"></script>
 
-    <style>
-    body {
-      background-color: #222;
-      color: #DDD;
-      padding-top: 30px;
-      padding-bottom: 30px;
-    }
-    #files {
-      overflow-y: auto;
-      background-color: #444;
-      color: #EEE;
-    }
-    #link-connected {
-      float: right;
-      color: green;
-      display: none;
-    }
-    #link-disconnected {
-      color: red;
-      float: right;
-    }
-    </style>
-
-    <script type="text/javascript" charset="utf-8">
-        $(document).ready(function() {
-
-
-            /*
-             *  SOCKETIO
-             */
-
-            var socket = io.connect(location.protocol + '//' + document.domain + ':' + location.port);
-            var settings;
-            var last_status;
-            var last_status_str;
-
-            function setBtnClass(sel, style, active) {
-              if (active) {
-                $(sel).addClass('btn-'+style)
-                $(sel).removeClass('btn-outline-'+style)
-              }
-              else {
-                $(sel).removeClass('btn-'+style)
-                $(sel).addClass('btn-outline-'+style)
-              }
-            }
-
-            socket.on('connect', function() {
-                console.log('SocketIO connected :)')
-                socket.emit('fileslist');
-                $('#link-connected').show();
-                $('#link-disconnected').hide();
-            });
-            
-            socket.on('disconnect', function() {
-                console.log('SocketIO disconnected :(')
-                $('#link-connected').hide();
-                $('#link-disconnected').show();
-            });
-
-            socket.on('files', function(msg) {
-                // socket.emit('my_event', {data: 'I\'m connected!'});
-                $('#tree').treeview({
-                  data: msg,
-                  selectable: true,
-                  multiSelect: true,
-                  color: "#000000"
-                });
-
-                $('#tree').on('nodeSelected', function(event, data) {
-                  // console.log(event, data)
-
-                });
-
-                if(msg !== null && msg.length > 0) {
-                  $('#delete_btn').show()
-                  $('#empty-tree').hide()
-                }
-                else {
-                  $('#delete_btn').hide()
-                  $('#empty-tree').show()
-                }
-            });
-
-            socket.on('status', function(msg) {
-                // console.log(msg)
-                var str_msg = JSON.stringify(msg)
-                $('#log1').text(str_msg)
-
-                if (last_status_str != str_msg) {
-
-                  setBtnClass('#play_btn', 'success', msg['isPlaying'])
-                  setBtnClass('#pause_btn', 'warning', msg['isPaused'])
-
-                  $('#media_name').text(msg['media'])
-                  $('#time_ellapsed').text(msg['time'])
-
-                  last_status = msg
-                  last_status_str = str_msg
-                }
-
-            });
-
-            socket.on('settings', function(msg) {
-                // console.log(msg)
-                var str_msg = JSON.stringify(msg)
-                $('#log2').text(str_msg)
-
-                setBtnClass('#loop_btn', 'info', msg['loop'])
-                setBtnClass('#mute_btn', 'warning', msg['mute'])
-                setBtnClass('#auto_btn', 'secondary', msg['autoplay'])
-
-                $('#volume_range').val(msg['volume'])
-                $('#left_range').val(msg['pan'][0])
-                $('#right_range').val(msg['pan'][1])
-
-                settings = msg
-            });
-
-            // Handlers for the different forms in the page.
-            // These accept data from the user and send it to the server in a
-            // variety of ways
-            $('#play_btn').click(function(event) {
-              if(!last_status['isPaused']) socket.emit('play');
-              else socket.emit('resume');
-            });
-            $('#pause_btn').click(function(event) {
-              if(!last_status['isPaused']) socket.emit('pause');
-              else socket.emit('resume');
-            });
-            $('#prev_btn').click(function(event) {
-                socket.emit('prev');
-            });
-            $('#next_btn').click(function(event) {
-                socket.emit('next');
-            });
-            $('#stop_btn').click(function(event) {
-                socket.emit('stop');
-            });
-            $('#loop_btn').click(function(event) {
-              if(!settings['loop']) socket.emit('loop');
-              else socket.emit('unloop');
-            });
-            $('#mute_btn').click(function(event) {
-              if(!settings['mute']) socket.emit('mute');
-              else socket.emit('unmute');
-            });
-            $('#auto_btn').click(function(event) {
-              if(!settings['autoplay']) socket.emit('autoplay');
-              else socket.emit('notautoplay');
-            });
-            $('#reboot_btn').click(function(event) {
-              var r = confirm("Reboot the device ?");
-              if (r == true) socket.emit('reboot');
-            });
-
-            $('#volume_range').on('input', function(event) {
-              socket.emit('volume', this.value);
-            });
-            $('#left_range').on('input', function(event) {
-              socket.emit('pan', [this.value, $('#right_range').val()]);
-            });
-            $('#right_range').on('input', function(event) {
-              socket.emit('pan', [$('#left_range').val(), this.value]);
-            });
-
-
-            // Files uploader
-            $("#drop-area").dmUploader({
-              url: '/upload',
-              queue: true,
-              //extFilter: ["jpg", "jpeg", "png", "gif"],
-
-              onInit: function(){
-                console.log('Callback: Plugin initialized');
-                $('#upload-list').hide()
-              },
-
-              onNewFile: function(id){
-                $('#upload-list').show()
-              }
-              // ... More callbacks
-            });
-
-            $('#delete_btn').click(function(event) {
-                var selected = $('#tree').treeview('getSelected')
-                var r = confirm("Are you sure ?!");
-                if (r == true) socket.emit('filesdelete', selected)
-            });
-        });
-    </script>
+  <link rel="stylesheet" href="/style.css?6">
+  <script type="text/javascript" src="/script.js"></script>
 </head>
+
 <body>
-    <div class="row">
-      <div class="col-0 col-md-2 col-lg-3"></div>
-      <div class="col-12 col-md-8 col-lg-6">
-        <span id="link-connected">connected</span>
-        <span id="link-disconnected">disconnected</span>
-        <h1>HPlayer2</h1>
-        <hr />
+  <nav class="navbar navbar-dark bg-dark mb-3">
+    <span class="navbar-brand mb-0 mr-0 h1">HPlayer2</span>
+    <span id="playerName"></span>
+    <span id="link-connected">connected</span>
+    <span id="link-disconnected">disconnected</span>
+  </nav>
 
-        <form>
+  <div class="row panel">
+    <div class="col-sm-0 col-md-1 col-lg-2 col-xl-2"></div>
+    <div class="col-sm-12 col-md-10 col-lg-8 col-xl-8">
 
-          <div class="form-group float-right">
-            <button type="button" class="btn btn-outline-info" id="loop_btn">loop</button>
-            <button type="button" class="btn btn-outline-secondary" id="auto_btn">autoplay</button>
-            <button type="button" class="btn btn-outline-warning" id="mute_btn">mute</button>
-            <button type="button" class="btn btn-outline-danger" id="reboot_btn">reboot</button>
-          </div>
-
+      <div class="row mb-3">
+        <div class="col-12 col-sm-5">
           <div class="form-group">
-            <button type="button" class="btn btn-outline-success" id="play_btn">play</button>
-            <button type="button" class="btn btn-outline-warning" id="pause_btn">pause</button>
-            <button type="button" class="btn btn-outline-secondary" id="prev_btn">prev</button>
-            <button type="button" class="btn btn-outline-secondary" id="next_btn">next</button>
-            <button type="button" class="btn btn-outline-danger" id="stop_btn">stop</button>
+            <button type="button" class="btn btn-outlined-success" id="play_btn"><i class="fas fa-play"></i></button>
+            <button type="button" class="btn btn-outlined-warning" id="pause_btn"><i class="fas fa-pause"></i></button>
+            <button type="button" class="btn btn-outlined-secondary" id="prev_btn"><i class="fas fa-step-backward"></i></button>
+            <button type="button" class="btn btn-outlined-secondary" id="next_btn"><i class="fas fa-step-forward"></i></button>
+            <button type="button" class="btn btn-outlined-danger" id="stop_btn"><i class="fas fa-stop"></i></button>
           </div>
-
-          <br />
-
-          Media: <span id="media_name"></span><br />
-          Time: <span id="time_ellapsed"></span>
-          <hr />
-
-          <div class="form-group">
-            <label for="volume_range">Volume</label>
-            <input type="range" class="form-control-range" id="volume_range" min="0" max="100">
-          </div>
-
-          <div class="form-group">
-            <label for="left_range">Left</label>
-            <input type="range" class="form-control-range" id="left_range" min="0" max="100">
-          </div>
-
-          <div class="form-group">
-            <label for="right_range">Right</label>
-            <input type="range" class="form-control-range" id="right_range" min="0" max="100">
-          </div>
-
-        </form>
-
-        <hr />
-
-        <div class="row">
-          <div class="col-md-6 col-sm-12">
-            <div class="card-header"> File List </div>
-            <div id="empty-tree" class="text-muted text-center empty"><br />No file found on device</div>
-            <div id="tree"></div>
-            <br />
-            <div class="form-group float-right">
-              <button type="button" class="btn btn-outline-danger" id="delete_btn">delete selected</button>
-            </div>
-          </div><!-- /files list -->
-
-          <div class="col-md-6 col-sm-12">
-            <div class="card-header"> File Upload </div>
-            <div id="drag-and-drop-zone" class="dm-uploader p-2 text-center">
-              <h3 class="mb-5 mt-5 text-muted">Drag &amp; drop Files here</h3>
-              <div class="btn btn-primary btn-block mb-5">
-                <span>Open the file Browser</span>
-                <input type="file" title='Click to add Files' />
-              </div><!-- /uploader -->
-            </div>
-
-            <div class="card" style="height:300px;" id="upload-list">
-              <ul class="list-unstyled p-2 d-flex flex-column col" id="files">
-                <li class="text-muted text-center empty"></li>
-              </ul>
-            </div>
-          </div><!-- /upload status -->
         </div>
 
+        <div class="col-12 col-sm-7 text-sm-right">
+          <div class="form-group">
+            <button type="button" class="btn btn-outlined-info" id="loopOne_btn"><i class="fas fa-undo"></i> One</button>
+            <button type="button" class="btn btn-outlined-info" id="loopAll_btn"><i class="fas fa-undo"></i> All</button>
+            <button type="button" class="btn btn-outlined-warning" id="mute_btn"><i class="fas fa-volume-mute"></i></button>
+          </div>
+        </div>
+      </div>
 
-        <!-- File item template -->
-        <script type="text/html" id="files-template">
-          <li class="media">
+      <div class="media-info">
+        <span class="badge badge-secondary mr-2">media</span> <span id="media_name"></span><br />
+        <span class="badge badge-secondary mr-2">time</span> <span id="time_ellapsed"></span>
+      </div>
+
+
+      <div class="row mt-3 mb-3">
+        <div class="col-12 col-lg-12 col-xl-4">
+          <div class="">
+            <span class="badge badge-secondary float-left mr-2 mt-1 vol-main">volume</span><span id="volumeMain"></span>
+            <input type="range" class="" id="volume_range" min="0" max="100">
+          </div>
+        </div>
+
+        <div class="col-12 col-md-6 col-xl-4">
+          <div class="vol-more">
+            <span class="badge badge-secondary mr-2 mt-1">left</span><span id="volumeLeft"></span>
+            <input type="range" class="" id="left_range" min="0" max="100">
+          </div>
+        </div>
+
+        <div class="col-12 col-md-6 col-xl-4">
+          <div class="vol-more">
+            <span class="badge badge-secondary mr-2 mt-1">right</span><span id="volumeRight"></span>
+            <input type="range" class="" id="right_range" min="0" max="100">
+          </div>
+        </div>
+      </div>
+
+      <button type="button" class="btn btn-outline-success" id="playsel_btn"><i class="fas fa-play"></i> selection</button>
+      <button type="button" class="btn btn-outline-danger" id="delete_btn"><i class="far fa-trash-alt"></i> selection</button>
+
+      <div id="trees" class="row mt-2"></div>
+
+      <hr />
+
+      <div class="form-group">
+        <button type="button" class="btn btn-outlined-secondary" id="auto_btn">autoplay</button>
+        <button type="button" class="btn btn-outlined-danger" id="reboot_btn">reboot</button>
+      </div>
+
+      <!-- Modal -->
+      <div class="modal fade" id="uploadModal" tabindex="-1" role="dialog">
+        <div class="modal-dialog modal-dialog-centered" role="document">
+          <div class="modal-content text-white bg-dark">
+            <div class="modal-header">Upload
+              <button type="button" class="close" data-dismiss="modal">&times;</button>
+            </div>
+            <div class="modal-body">
+
+              <div id="drag-and-drop-zone" class="dm-uploader p-2 text-center">
+                <h3 class="mb-5 mt-5 text-muted d-none d-xl-block">Drag &amp; drop Files here</h3>
+                <div class="btn btn-primary btn-block mb-5">
+                  <span>Select files</span>
+                  <input type="file" title='Click to add Files' />
+                </div><!-- /uploader -->
+              </div>
+
+              <div class="card" style="height:300px;" id="upload-list">
+                <ul class="list-unstyled p-2 d-flex flex-column col" id="files">
+                  <li class="text-muted text-center empty"></li>
+                </ul>
+              </div>
+
+            </div>
+          </div>
+        </div>
+      </div>
+
+
+      <!-- File item template -->
+      <script type="text/html" id="files-template">
+        <li class="media">
             <div class="media-body mb-1">
               <p class="mb-2">
                 <strong>%%filename%%</strong> - Status: <span class="text-muted">Waiting</span>
@@ -315,17 +149,20 @@
           </li>
         </script>
 
-        <hr />
+      <hr />
 
-        <div class="row">
-          <div class="col-12">
-            <h4>Logs</h4>
-            <div id="log1"></div>
-            <div id="log2"></div>
-          </div><!-- /logs -->
-        </div>
-
+      <div class="row">
+        <div class="col-12">
+          <h4>Logs</h4>
+          <div id="log1" class="log-data"></div>
+          <div id="log2" class="log-data"></div>
+        </div><!-- /logs -->
       </div>
+
+      <hr />
+      sources<br /><a href="https://github.com/Hemisphere-Project/HPlayer2" target="_blank">https://github.com/Hemisphere-Project/HPlayer2</a><br />
     </div>
+  </div>
 </body>
+
 </html>
