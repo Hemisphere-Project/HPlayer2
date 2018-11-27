@@ -34,7 +34,6 @@ class ThreadedHTTPServer(object):
     def __init__(self, port, player):
 
         self.player = player
-        self.upload_folder = self.player.basepath[0]
 
         interface_path = os.path.dirname(os.path.realpath(__file__))
         www_path = os.path.join(interface_path, 'http2')
@@ -55,20 +54,20 @@ class ThreadedHTTPServer(object):
         @app.route('/upload', methods=['POST'])
         def files_upload():
             if 'file' not in request.files:
-                return 'No file provided'
+                return 'No file provided', 404
 
             file = request.files['file']
 
             if file.filename == '':
-                return 'No file provided'
+                return 'No filename provided', 404
 
             if file and self.player.validExt(file.filename):
                 filename = secure_filename(file.filename)
-                file.save(os.path.join(self.upload_folder, filename))
+                file.save(os.path.join(self.player.basepath[0], filename))
                 fileslist_message()
                 return 'ok'
 
-            return 'No file provided'
+            return 'No valid file provided', 404
 
 
         @app.route('/<path:path>')
@@ -88,7 +87,11 @@ class ThreadedHTTPServer(object):
         def settings_send(arg):
             socketio.emit('settings', arg)
 
+        def playlist_send(arg=None):
+            socketio.emit('playlist', arg)
+
         self.player.on(['settings-update'], settings_send)
+        self.player.on(['playlist-update'], playlist_send)
 
         @socketio.on('connect')
         def client_connect():
@@ -101,14 +104,28 @@ class ThreadedHTTPServer(object):
 
         @socketio.on('play')
         def play_message(message=None):
-            if message and message['path']:
+            if message and 'path' in message:
                 self.player.play(message['path'])
+            elif message and 'index' in message:
+                self.player.play(int(message['index']))
             else:
                 self.player.play()
 
         @socketio.on('stop')
         def stop_message():
             self.player.stop()
+
+        @socketio.on('clear')
+        def clear_message():
+            self.player.clear()
+
+        @socketio.on('add')
+        def add_message(path):
+            self.player.add(path)
+
+        @socketio.on('remove')
+        def rm_message(index):
+            self.player.remove(index)
 
         @socketio.on('pause')
         def pause_message():
@@ -205,6 +222,12 @@ class ThreadedHTTPServer(object):
                     d['nodes'] = [path_to_dict(os.path.join(path,x)) for x in sorted(os.listdir(path))]
                     d['backColor'] = "#EEE"
                     d['selectable'] = False
+                else:
+                    d['selectable'] = True
+                    d['text'] += ' <div class="media-edit float-right">';
+                    d['text'] += '  <span class="badge badge-success" onClick="playlistAdd(\''+path+'\'); event.stopPropagation();"> <i class="fas fa-plus"></i> </span>';
+                    # d['text'] += '  <span class="badge badge-danger ml-2"><i class="far fa-trash-alt"></i> </span>';
+                    d['text'] += ' </div>';
                 return d
 
             liste = []
@@ -221,34 +244,11 @@ class ThreadedHTTPServer(object):
             # print ('delete', message)
             if message:
                 for e in message:
-                    filename = secure_filename(e['text'])
-                    os.remove(os.path.join(self.upload_folder, filename))
-
+                    e = e.replace('/..', '')
+                    for basepath in self.player.basepath:
+                        if e.startswith(basepath):
+                            os.remove(e)
                 fileslist_message()
-
-        #
-        #
-        # @socketio.on('my_broadcast_event', namespace='/hplayer2')
-        # def test_broadcast_message(message):
-        #     session['receive_count'] = session.get('receive_count', 0) + 1
-        #     emit('my_response',
-        #          {'data': message['data'], 'count': session['receive_count']},
-        #          broadcast=True)
-        #
-        #
-        # @socketio.on('join', namespace='/test')
-        # def join(message):
-        #     join_room(message['room'])
-        #     session['receive_count'] = session.get('receive_count', 0) + 1
-        #     emit('my_response',
-        #          {'data': 'In rooms: ' + ', '.join(rooms()),
-        #           'count': session['receive_count']})
-        #
-        #
-        # @socketio.on('my_ping', namespace='/test')
-        # def ping_pong():
-        #     emit('my_pong')
-
 
         @socketio.on('connect', namespace='/test')
         def test_connect():

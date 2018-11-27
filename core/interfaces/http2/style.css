@@ -16,11 +16,15 @@ body {
 }
 
 .media-info {
-  font-size: 0.9em;
+  /* font-size: 0.9em; */
 }
 
 .log-data {
   overflow-y: scroll;
+}
+
+.btn-sm {
+  padding: 0.0rem .25rem;
 }
 
 #files {

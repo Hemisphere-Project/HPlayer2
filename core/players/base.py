@@ -25,8 +25,6 @@ class BasePlayer(object):
         'events':   False
     }
 
-    _playlist = []
-    _currentIndex = -1
     _validExt = ['.mp4', '.m4v', '.mkv', 'avi', '.mov', '.flv', '.mpg', 'wmv', '.3gp', '.mp3', '.aac', '.wma', '.wav', '.flac', '.aiff', '.m4a', '.ogg', '.opus', '.webm']
 
     _events = {}
@@ -36,6 +34,7 @@ class BasePlayer(object):
         'isPlaying':    False,
         'isPaused':     False,
         'media':        None,
+        'index':        -1,
         'time':         0
     }
     _settings = {
@@ -44,7 +43,8 @@ class BasePlayer(object):
         'loop':         2,              # 0: no loop / 1: loop one / 2: loop all
         'pan':          [100,100],
         'flip':         False,
-        'autoplay':     False
+        'autoplay':     False,
+        'playlist':     []
     }
 
     def __init__(self):
@@ -191,7 +191,7 @@ class BasePlayer(object):
             self._events['*'](event, args)
 
         if event in self._events:
-            if args:
+            if args is not None:
                 self._events[event](args)
             else:
                 self._events[event]()
@@ -234,7 +234,7 @@ class BasePlayer(object):
     def settings_set(self, id, val):
         if id in self._settings:
             self._settings[id] = val
-            self.trigger('settings-update', self._settings.copy())
+            self.trigger('settings-update', self.settings())
             self.settings_save()
 
     def settings_load(self):
@@ -263,7 +263,7 @@ class BasePlayer(object):
             iface.start()
         # for olay in self._overlays.values():
         #     olay.start()
-        self.load()             # Load default playlist based on basepath provided
+        # self.load()             # Load default playlist based on basepath provided
         self.isRunning(True)
         self._start()
 
@@ -276,6 +276,40 @@ class BasePlayer(object):
         self._quit()
         self.isRunning(False)
 
+    # CLEAR Playlist
+    def clear(self):
+        print(self.nameP, "clear playlist")
+        self.stop()
+        with self._lock:
+            self.settings_set('playlist', [])
+
+    # ADD to Playlist
+    def add(self, media):
+        if not type(media) is list:
+            media = [media]
+
+        for m in media:
+            if os.path.isfile(m) and self.validExt(m):
+                print(self.nameP, "add to playlist", m)
+                liste = self.settings()['playlist']
+                liste.append(m)
+                self.settings_set('playlist', liste)
+                if len( self.settings()['playlist'] ) == 1 and self.settings()['autoplay']:
+                    self.play(0)
+
+    # REMOVE from Playlist
+    def remove(self, index):
+        index = int(index)
+        if len(self.settings()['playlist']) > index:
+            print(self.nameP, "remove from playlist",self.settings()['playlist'])
+            liste = self.settings()['playlist']
+            del liste[index]
+            self.settings_set('playlist', liste)
+            if index == self._status['index']:
+                self.stop()
+            elif index < self._status['index']:
+                self._status['index'] -= 1
+
     # LOAD A PLAYLIST
     def load(self, playlist=None):
 
@@ -285,16 +319,15 @@ class BasePlayer(object):
             playlist = [playlist]
 
         with self._lock:
-            self._playlist = self.buildList(playlist)
-            self._currentIndex = -1
+            self.settings_set('playlist', self.buildList(playlist))
+            self._status['index'] = -1
 
-        print(self.nameP, "playlist loaded:", self._playlist)
-        # print("Current playlist: ", self._playlist)
+        print(self.nameP, "playlist loaded:", self.settings()['playlist'])
 
     # PLAY A Playlist or Index
     def play(self, arg=None):
 
-        index = self._currentIndex
+        index = self._status['index']
         if index == -1:
             index = 0
 
@@ -310,21 +343,22 @@ class BasePlayer(object):
         valid = False
 
         # empty playlist: try a re-scan
-        if len(self._playlist) == 0:
+        playlist = self.settings()['playlist']
+        if len(playlist) == 0:
             self.load()
             index = 0
 
         # media not found: try a res-can
-        if 0 <= index < len(self._playlist) and not os.path.isfile(self._playlist[index]):
+        if 0 <= index < len(playlist) and not os.path.isfile(playlist[index]):
             self.load()
             index = 0
 
         # Play file at index
         with self._lock:
-            if 0 <= index < len(self._playlist) and os.path.isfile(self._playlist[index]):
-                self._play(self._playlist[index])
-                self._currentIndex = index
-                self._status['media'] = self._playlist[index]
+            if 0 <= index < len(playlist) and os.path.isfile(playlist[index]):
+                self._play(playlist[index])
+                self._status['index'] = index
+                self._status['media'] = playlist[index]
                 valid = True
 
         # Emit play event
@@ -337,12 +371,12 @@ class BasePlayer(object):
                 self.stop()
             self.trigger('nomedia')
 
-            if len(self._playlist) == 0:
+            if len(playlist) == 0:
                 print(self.nameP, "No media found in", self.basepath)
-            elif not (0 <= index < len(self._playlist)):
-                print(self.nameP, "Index out of playlist range:", index, self._playlist)
+            elif not (0 <= index < len(playlist)):
+                print(self.nameP, "Index out of playlist range:", index, playlist)
             else:
-                print(self.nameP, "Media not found:", self._playlist[index])
+                print(self.nameP, "Media not found:", playlist[index])
 
 
     # STOP Playback
@@ -352,7 +386,7 @@ class BasePlayer(object):
             if self.isPlaying():
                 self._stop()
             else:
-                self._currentIndex = -1
+                self._status['index'] = -1
         self._status['media'] = None
         self._status['time'] = 0
         self.trigger('stop')
@@ -368,18 +402,18 @@ class BasePlayer(object):
     # NEXT item in playlist
     def next(self):
         with self._lock:
-            self._currentIndex += 1
-            if self._currentIndex >= len(self._playlist):
-                self._currentIndex = 0
-        self.play(self._currentIndex)
+            self._status['index'] += 1
+            if self._status['index'] >= len(self.settings()['playlist']):
+                self._status['index'] = 0
+        self.play(self._status['index'])
 
     # PREVIOUS item in playlist
     def prev(self):
         with self._lock:
-            self._currentIndex -= 1
-            if self._currentIndex < 0:
-                self._currentIndex = len(self._playlist)-1
-        self.play(self._currentIndex)
+            self._status['index'] -= 1
+            if self._status['index'] < 0:
+                self._status['index'] = len(self.settings()['playlist'])-1
+        self.play(self._status['index'])
 
      # SEEK to position
     def seekTo(self, milli):

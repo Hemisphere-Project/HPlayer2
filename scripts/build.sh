@@ -21,7 +21,7 @@ if [[ $(command -v apt) ]]; then
 
     # hplayer2 dependencies
     apt install python3-pip python3-liblo -y
-    /usr/bin/yes | pip3 install netifaces termcolor evdev socketio flask-socketio
+    /usr/bin/yes | pip3 install netifaces termcolor evdev socketio flask-socketio eventlet
 
     # GPIO RPi
     if [[ $(uname -m) = armv* ]]; then

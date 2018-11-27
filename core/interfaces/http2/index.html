@@ -18,7 +18,7 @@
   <script type="text/javascript" src="/res/bootstrap.bundle.min.js"></script>
 
   <link rel="stylesheet" href="/res/bootstrap-treeview.min.css">
-  <script type="text/javascript" src="/res/bootstrap-treeview.min.js"></script>
+  <script type="text/javascript" src="/res/bootstrap-treeview-custom.js"></script>
 
   <link rel="stylesheet" href="/res/jquery.dm-uploader.min.css">
   <script type="text/javascript" src="/res/jquery.dm-uploader.min.js"></script>
@@ -37,11 +37,12 @@
   </nav>
 
   <div class="row panel">
-    <div class="col-sm-0 col-md-1 col-lg-2 col-xl-2"></div>
-    <div class="col-sm-12 col-md-10 col-lg-8 col-xl-8">
+    <div class="col-sm-0 col-md-0 col-lg-0 col-xl-1"></div>
+    <div class="col-sm-12 col-md-12 col-lg-12 col-xl-10">
 
-      <div class="row mb-3">
-        <div class="col-12 col-sm-5">
+      <div class="row">
+
+        <div class="col-12 col-sm-6">
           <div class="form-group">
             <button type="button" class="btn btn-outlined-success" id="play_btn"><i class="fas fa-play"></i></button>
             <button type="button" class="btn btn-outlined-warning" id="pause_btn"><i class="fas fa-pause"></i></button>
@@ -51,48 +52,74 @@
           </div>
         </div>
 
-        <div class="col-12 col-sm-7 text-sm-right">
+        <div class="col-12 col-sm-6 text-sm-right">
           <div class="form-group">
             <button type="button" class="btn btn-outlined-info" id="loopOne_btn"><i class="fas fa-undo"></i> One</button>
             <button type="button" class="btn btn-outlined-info" id="loopAll_btn"><i class="fas fa-undo"></i> All</button>
             <button type="button" class="btn btn-outlined-warning" id="mute_btn"><i class="fas fa-volume-mute"></i></button>
           </div>
         </div>
-      </div>
 
-      <div class="media-info">
-        <span class="badge badge-secondary mr-2">media</span> <span id="media_name"></span><br />
-        <span class="badge badge-secondary mr-2">time</span> <span id="time_ellapsed"></span>
-      </div>
+        <div class="col-12">
+          <div class="media-info">
+            <span class="badge badge-secondary mr-2">media</span> <span id="media_name"></span>
+          </div>
+        </div>
 
+        <div class="col-12">
+          <div class="media-info">
+            <span class="badge badge-secondary mr-2">time</span> <span id="time_ellapsed"></span>
+          </div>
+        </div>
 
-      <div class="row mt-3 mb-3">
         <div class="col-12 col-lg-12 col-xl-4">
           <div class="">
-            <span class="badge badge-secondary float-left mr-2 mt-1 vol-main">volume</span><span id="volumeMain"></span>
+            <span class="badge badge-secondary mr-2 vol-main">volume</span><span id="volumeMain"></span>
             <input type="range" class="" id="volume_range" min="0" max="100">
           </div>
         </div>
 
         <div class="col-12 col-md-6 col-xl-4">
           <div class="vol-more">
-            <span class="badge badge-secondary mr-2 mt-1">left</span><span id="volumeLeft"></span>
+            <span class="badge badge-secondary mr-2">left</span><span id="volumeLeft"></span>
             <input type="range" class="" id="left_range" min="0" max="100">
           </div>
         </div>
 
         <div class="col-12 col-md-6 col-xl-4">
           <div class="vol-more">
-            <span class="badge badge-secondary mr-2 mt-1">right</span><span id="volumeRight"></span>
+            <span class="badge badge-secondary mr-2">right</span><span id="volumeRight"></span>
             <input type="range" class="" id="right_range" min="0" max="100">
           </div>
         </div>
+
       </div>
 
-      <button type="button" class="btn btn-outline-success" id="playsel_btn"><i class="fas fa-play"></i> selection</button>
-      <button type="button" class="btn btn-outline-danger" id="delete_btn"><i class="far fa-trash-alt"></i> selection</button>
+      <div class="row mt-2">
 
-      <div id="trees" class="row mt-2"></div>
+
+        <div class="col-12 col-md-6 col-xl-4 mb-4">
+          <div class="card-header text-white bg-dark">
+            Playlist
+            <button type="button" class="btn btn-warning btn-sm float-right" id="clear_btn">clear</button>
+          </div>
+          <div id="playlist" class=""></div>
+        </div>
+
+        <div class="col-12 col-md-6 col-xl-8">
+          <div class="card-header text-white bg-dark">
+            Files
+            <div class=" float-right">
+              <!-- <span class="badge badge-secondary mr-2">selection</span> -->
+              <button type="button" class="btn btn-sm btn-outline-secondary" id="selall_btn"><i class="fas fa-check"></i> all</button>
+              <button type="button" class="btn btn-sm btn-outline-secondary" id="selnone_btn"><i class="fas fa-ban"></i> none</button>
+              <button type="button" class="btn btn-sm btn-outline-success" id="playsel_btn"><i class="fas fa-plus"></i> to playlist</button>
+              <button type="button" class="btn btn-sm btn-outline-danger" id="delsel_btn"><i class="far fa-trash-alt"></i> delete</button>
+            </div>
+          </div>
+          <div id="trees" class="row mt-2"></div>
+        </div>
+      </div>
 
       <hr />
 

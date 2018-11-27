@@ -1,12 +1,9 @@
 $(document).ready(function() {
 
-
-    /*
-     *  SOCKETIO
-     */
+    var settings;
+    var playlist;
 
     var socket = io.connect(location.protocol + '//' + document.domain + ':' + location.port);
-    var settings;
     var last_status;
     var last_status_str;
 
@@ -20,6 +17,10 @@ $(document).ready(function() {
         $(sel).addClass('btn-outlined-'+style)
       }
     }
+
+    /*
+      SOCKETIO
+    */
 
     socket.on('connect', function() {
         console.log('SocketIO connected :)')
@@ -41,16 +42,15 @@ $(document).ready(function() {
 
     socket.on('files', function(msg) {
 
-        console.log(msg)
-
         $('#trees').empty()
 
         msg.forEach(function(element) {
           var col = $('<div class="col-xl-6 col-lg-12 col-md-12 col-sm-12 " />').appendTo($('#trees'))
           var head = $('<div class="card-header text-white bg-dark">').html('<span>'+element['path']+'</span>').appendTo(col)
-            $('<span class="badge badge-info float-right">upload</span>').appendTo(head).on('click', function(){
+            var upload = $('<span class="badge badge-info float-right">upload</span>').appendTo(head).on('click', function(){
               $('#uploadModal').modal()
             })
+
           var tree = $('<div class="tree mb-3" />').appendTo(col)
           // $('<br />').appendTo($('#trees'))
 
@@ -58,54 +58,34 @@ $(document).ready(function() {
             data: element['nodes'],
             selectable: true,
             multiSelect: true,
-            color: "#000000"
+            color: "#000000",
+            showTags: true
           });
           tree.on('nodeSelected', function(event, data) {
             // console.log(event, data)
           });
+          // tree.treeview('collapseAll')
         });
-
-/*
-
-.
-
-        $('#tree').treeview({
-          data: msg,
-          selectable: true,
-          multiSelect: true,
-          color: "#000000"
-        });
-
-        $('#tree').on('nodeSelected', function(event, data) {
-          // console.log(event, data)
-        });
-
-        if(msg !== null && msg.length > 0) {
-          $('#delete_btn').show()
-          $('#empty-tree').hide()
-        }
-        else {
-          $('#delete_btn').hide()
-          $('#empty-tree').show()
-        }
-        */
     });
 
     socket.on('status', function(msg) {
-        // console.log(msg)
+
+        // TIME
+        $('#time_ellapsed').text(msg['time'])
+        delete msg['time']
+
+        // STATUS
         var str_msg = JSON.stringify(msg)
         $('#log1').text(str_msg)
-
         if (last_status_str != str_msg) {
+          last_status = msg
+          last_status_str = str_msg
 
           setBtnClass('#play_btn', 'success', msg['isPlaying'])
           setBtnClass('#pause_btn', 'warning', msg['isPaused'])
 
           $('#media_name').text(msg['media'])
-          $('#time_ellapsed').text(msg['time'])
-
-          last_status = msg
-          last_status_str = str_msg
+          playlistMedia()
 
           $("button").blur();
         }
@@ -131,14 +111,17 @@ $(document).ready(function() {
         $('#right_range').val(msg['pan'][1])
         $('#volumeRight').html(msg['pan'][1])
 
+        playlistUpdate(msg['playlist'])
+
         $("button").blur();
 
         settings = msg
     });
 
-    // Handlers for the different forms in the page.
-    // These accept data from the user and send it to the server in a
-    // variety of ways
+    /*
+      PLAYBACK
+    */
+
     $('#play_btn').click(function(event) {
       if(!last_status['isPaused']) socket.emit('play');
       else socket.emit('resume');
@@ -192,36 +175,101 @@ $(document).ready(function() {
     $('.vol-more').hide()
 
 
-    // Files uploader
-    $("#drop-area").dmUploader({
-      url: '/upload',
-      queue: true,
-      //extFilter: ["jpg", "jpeg", "png", "gif"],
+    /*
+      SELECTION
+    */
 
-      onInit: function(){
-        console.log('Callback: Plugin initialized');
-        $('#upload-list').hide()
-      },
-
-      onNewFile: function(id){
-        $('#upload-list').show()
-      }
-      // ... More callbacks
-    });
-
-    $('#delete_btn').click(function(event) {
+    $('#delsel_btn').click(function(event) {
         var selected = []
         $(".tree").each(function( index ) {
-          selected.push.apply(selected, $( this ).treeview('getSelected'))
+          $( this ).treeview('getSelected').forEach(function(el){
+            selected.push(el.path)
+          })
         });
         var r = confirm("Are you sure ?!");
-        if (r == true) socket.emit('filesdelete', selected)
+        if (r == true) {
+          socket.emit('filesdelete', selected)
+          $(".tree").each(function( index ) { $( this ).treeview('unselectAll') });
+        }
     });
     $('#playsel_btn').click(function(event) {
         var selected = []
         $(".tree").each(function( index ) {
-          selected.push.apply(selected, $( this ).treeview('getSelected'))
+          $( this ).treeview('getSelected').forEach(function(el){
+            selected.push(el.path)
+          })
         });
-        socket.emit('playlist', selected)
+        socket.emit('add', selected)
+        $(".tree").each(function( index ) { $( this ).treeview('unselectAll') });
     });
+    $('#selall_btn').click(function(event) {
+        $(".tree").each(function( index ) {
+          $( this ).treeview('selectAll')
+        });
+    });
+
+    $('#selnone_btn').click(function(event) {
+        $(".tree").each(function( index ) {
+          $( this ).treeview('unselectAll')
+        });
+    });
+
+    /*
+      PLAYLIST
+    */
+    $('#clear_btn').click(function(event) {
+        socket.emit('clear')
+    });
+
+    playlistAdd = function(path) {
+      socket.emit('add', path)
+      return false;
+    };
+
+    playlistRemove = function(path) {
+      socket.emit('remove', path)
+      return false;
+    };
+
+    playlistMedia = function() {
+      $('#playlist').treeview('getNodes').forEach(function(node){
+        if (last_status && (node.nodeId == last_status['index'])) node.backColor = "#343"
+        else node.backColor = "#333"
+      });
+      $('#playlist').treeview('render')
+    }
+
+    playlistUpdate = function(msg) {
+      var liste = [];
+      msg.forEach(function(el){
+
+        var txt = el+'<div class="media-edit float-right">'
+        txt += ' <span class="badge badge-danger" onClick="playlistRemove(\''+liste.length+'\'); event.stopPropagation();"> <i class="fas fa-ban"></i> </span>'
+        txt += '</div>'
+
+        liste.push({
+          text:txt,
+          path: el,
+          selectable: false
+        })
+      });
+
+      var tree = $('#playlist')
+      tree.treeview({
+        data: liste,
+        selectable: false,
+        multiSelect: false,
+        color: "#eee",
+        backColor: "#333",
+        onhoverColor: "#555",
+        showTags: true
+      })
+
+      tree.on('nodeClicked', function(event, data) {
+        socket.emit('play', {index: data.nodeId});
+      });
+
+      playlistMedia()
+    }
+
 });
