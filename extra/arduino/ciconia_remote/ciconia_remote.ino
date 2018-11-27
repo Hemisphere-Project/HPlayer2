@@ -4,6 +4,7 @@
 #define CR_VERSION  0.01  // Init
 #define CR_VERSION  0.02  // Fix on disconnect
 #define CR_VERSION  0.03  // Remove touch 
+#define CR_VERSION  0.04  // OTA
 
 /*
    INCLUDES
@@ -57,7 +58,6 @@ void setup() {
 
   // Wifi
   wifi_static("3.0.0.10");
-  //wifi_connect("interweb", "superspeed37");
   wifi_connect("ciconia");
   wifi_ota( "ciconia-remote v" + String(CR_VERSION, 2) );
   wifi_onConnect(doOnConnect);
@@ -140,6 +140,8 @@ void loop() {
       media = media.substring(0, media.length() - 1);
     }
     dispStatus(media);*/
+
+    wifi_otaCheck();
     
   }
   else {
