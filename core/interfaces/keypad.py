@@ -30,38 +30,40 @@ class KeypadInterface (BaseInterface):
         self.log("starting KEYPAD listener")
 
         display = {'line1': "", 'line2': ""}
-        pressed = dict.fromkeys(['UP', 'DOWN', 'RIGHT', 'LEFT', 'SEL'], False)
+        pressed = dict.fromkeys(['UP', 'DOWN', 'RIGHT', 'LEFT', 'SEL'], 0)
+        debounce = 5
 
         while self.isRunning():
 
-            if self.lcd.is_pressed(LCD.UP):
-                self.player.volume_inc()
+            if self.lcd.is_pressed(LCD.UP) and pressed['UP'] == 0:
+                self.player.trigger('keypad-up')
+                pressed['UP'] = debounce
+            elif pressed['UP'] > 0:
+                pressed['UP']-=1
 
-            if self.lcd.is_pressed(LCD.DOWN):
-                self.player.volume_dec()
+            if self.lcd.is_pressed(LCD.DOWN) and pressed['DOWN'] == 0:
+                self.player.trigger('keypad-down')
+                pressed['DOWN'] = debounce
+            elif pressed['DOWN'] > 0:
+                pressed['DOWN']-=1
 
             if self.lcd.is_pressed(LCD.RIGHT) and pressed['RIGHT'] == 0:
-                self.player.next()
-                pressed['RIGHT'] = 8
+                self.player.trigger('keypad-right')
+                pressed['RIGHT'] = debounce
             elif pressed['RIGHT'] > 0:
                 pressed['RIGHT']-=1
 
             if self.lcd.is_pressed(LCD.LEFT) and pressed['LEFT'] == 0:
-                self.player.prev()
-                pressed['LEFT'] = 8
+                self.player.trigger('keypad-left')
+                pressed['LEFT'] = debounce
             elif pressed['LEFT'] > 0:
                 pressed['LEFT']-=1
 
             if self.lcd.is_pressed(LCD.SELECT) and pressed['SEL'] == 0:
-                self.player.stop()
-                # else:
-                #     self.player.load()
-                #     self.player.play()
-                pressed['SEL'] = 10
-                # self.log("pressed SEL")
+                self.player.trigger('keypad-select')
+                pressed['SEL'] = debounce
             elif pressed['SEL'] > 0:
                 pressed['SEL']-=1
-                # self.log("release SEL")
 
             # Set Line 1 : MEDIA
             if not self.player.status()['media']: media = '-stop-'

@@ -40,7 +40,7 @@ class ThreadedHTTPServer(object):
 
         app = Flask(__name__, template_folder=www_path)
         app.config['SECRET_KEY'] = 'secret!'
-        socketio = SocketIO(app, async_mode='eventlet')
+        socketio = SocketIO(app)
 
 
         #

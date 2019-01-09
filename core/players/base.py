@@ -327,6 +327,8 @@ class BasePlayer(object):
     # PLAY A Playlist or Index
     def play(self, arg=None):
 
+        playlist = self.settings()['playlist']
+
         index = self._status['index']
         if index == -1:
             index = 0
@@ -338,19 +340,21 @@ class BasePlayer(object):
         # new playlist or media provided
         elif arg is not None:
             self.load(arg)
+            playlist = self.settings()['playlist']
             index = 0
 
         valid = False
 
         # empty playlist: try a re-scan
-        playlist = self.settings()['playlist']
         if len(playlist) == 0:
             self.load()
+            playlist = self.settings()['playlist']
             index = 0
 
         # media not found: try a res-can
         if 0 <= index < len(playlist) and not os.path.isfile(playlist[index]):
             self.load()
+            playlist = self.settings()['playlist']
             index = 0
 
         # Play file at index
