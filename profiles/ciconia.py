@@ -17,7 +17,7 @@ player.addInterface('keypad')
 # Bind Keypad events
 player.on(['keypad-up'], player.volume_inc)
 player.on(['keypad-down'], player.volume_dec)
-player.on(['keypad-right'], player.next)
+player.on(['keypad-right'], player.next) 
 player.on(['keypad-left'], player.prev)
 player.on(['keypad-select'], player.stop)
 

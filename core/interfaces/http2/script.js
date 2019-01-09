@@ -241,6 +241,7 @@ $(document).ready(function() {
 
     playlistUpdate = function(msg) {
       var liste = [];
+      if (msg)
       msg.forEach(function(el){
 
         var txt = el+'<div class="media-edit float-right">'
