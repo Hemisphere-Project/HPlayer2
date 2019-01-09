@@ -15,11 +15,10 @@ player.addInterface('http', 8037)
 player.addInterface('http2', 8080)
 player.addInterface('keypad')
 
-# OSC out = broadcast
-player.getInterface('osc').hostOut = network.get_broadcast()
 
 # Broadcast Order on OSC
 def broadcast(path, args=None):
+	player.getInterface('osc').hostOut = network.get_broadcast()
 	player.getInterface('osc').send(path, args)
 
 # Bind Keypad
