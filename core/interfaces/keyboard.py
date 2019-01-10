@@ -1,5 +1,7 @@
 from .base import BaseInterface
 from evdev import InputDevice, categorize, ecodes
+from watchdog.observers import Observer
+from watchdog.events import FileSystemEventHandler
 from time import sleep
 import sys
 
@@ -10,45 +12,76 @@ class KeyboardInterface (BaseInterface):
         # Interface settings
         super(KeyboardInterface, self).__init__(player, "Keyboard")
 
+        # keyboard connection watchdog
+        event_handler = FileSystemEventHandler()
+        event_handler.on_created = self.bind
+        event_handler.on_deleted = self.unbind
+        self.observer = Observer()
+        self.observer.schedule(event_handler, '/dev/input/', recursive=False)
+        self.observer.start()
+
+        self.bind('/dev/input/event0')
+
+
+    # Bind to interface
+    def bind(self, iface):
+        if not isinstance(iface, str):
+            iface = iface.src_path
+        if iface != '/dev/input/event0': return
         try:
-            self.remote = InputDevice("/dev/input/event0")
+            self.remote = InputDevice(iface)
             self.remote.grab()
+            self.log("Keyboard connected ...")
         except:
-            self.log("Keyboard not found ...")
             self.remote = None
+            self.log("Keyboard not found ...")
+
+    def unbind(self, iface):
+        if not isinstance(iface, str):
+            iface = iface.src_path
+        if iface != '/dev/input/event0': return
+        self.remote = None
+        self.log("Keyboard disconnected ...")
 
     # Remote receiver THREAD
     def listen(self):
-        if not self.remote:
-            return
 
         self.log("starting Keyboard listener")
 
         while self.isRunning():
-            event = self.remote.read_one()
-            if event and event.type == ecodes.EV_KEY:
+            if not self.remote:
+                sleep(0.5)
+                continue
 
-                keycode = ecodes.KEY[event.code]
-                keymode = ''
+            try:
+                event = self.remote.read_one()
+                if event and event.type == ecodes.EV_KEY:
 
-                # KEY Event 1
-                if event.value == 1:
-                    keymode = 'down'
-                elif event.value == 2:
-                    keymode = 'hold'
-                elif event.value == 0:
-                    keymode = 'up'
+                    keycode = ecodes.KEY[event.code]
+                    keymode = ''
 
-                self.player.trigger('key-'+keymode, event.code)
-                self.player.trigger(keycode+'-'+keymode)
+                    # KEY Event 1
+                    if event.value == 1:
+                        keymode = 'down'
+                    elif event.value == 2:
+                        keymode = 'hold'
+                    elif event.value == 0:
+                        keymode = 'up'
 
-                # self.log("keyboard event:", categorize(event), event.value)
-                # self.log("keyboard event:", categorize(event), event.value)
+                    self.player.trigger('key-'+keymode, event.code)
+                    self.player.trigger(keycode+'-'+keymode)
 
-            elif not event:
-            	sleep(0.1)
+                    # self.log("keyboard event:", categorize(event), event.value)
+                    # self.log("keyboard event:", categorize(event), event.value)
 
-        self.remote.ungrab()
+                elif not event:
+                	sleep(0.1)
+
+            except:
+                sleep(0.5)
+
+        if self.remote:
+            self.remote.ungrab()
 
 
     def asIRremote(self):
