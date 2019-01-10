@@ -4,15 +4,15 @@ HPlayer2 is a modular media player designed to allow multiple ways of control, o
 It is build in a modular way: you can choose the player engine (mpv, vlc, omxplayer, ...),  
 i/o interfaces (osc, http, rfid, ble, gpio, ...) and patch everything up.
 
-HPlayer2 is focused on Raspberry Pi, but is based on python code wrapping 3rd parties engines and libraries, so as long as those 3rd parties components are supported on other platform, HPlayer2 should run on it ! 
+HPlayer2 is focused on Raspberry Pi, but is based on python code wrapping 3rd parties engines and libraries, so as long as those 3rd parties components are supported on other platform, HPlayer2 should run on it !
 
 HPlayer2 is under development, some features might not be fully available or sometimes broken, feel free to ask for help and open issues, i'll do my best to cover it. Pull requests are also welcomed !
 
 ## Media engine
 Hplayer2 abstracts the concept of player (media list, play, pause, stop, volume, position, ...),
-and then bind to an existing player engine. 
+and then bind to an existing player engine.
 
-On Raspberry Pi, i only managed to use 3 engines with Hardware acceleration on H.264 decoding: 
+On Raspberry Pi, i only managed to use 3 engines with Hardware acceleration on H.264 decoding:
  - omxplayer: the 1st HPlayer was based on via ofxOMXPlayer, but using OF on Pi was a bit tricky at the time
  - vlc: works great, but was tricky to compile on RPi when i tried it couple years ago
  - mpv: has a great build script, works very well and offers ipc interface to communicate with
@@ -62,13 +62,13 @@ The idea here is for you to program you own profile !
 Start reading the files in **profiles/** to see examples on how profiles are made.  
 It's very simplified and *patching* oriented: an interface event can be plugged to a player action and vice-versa.
 
-The idea in a profile is: 
- - create a player 
+The idea in a profile is:
+ - create a player
  - attach interfaces modules (OSC, HTTP, RFID, GPIO, ...)
  - patch events from interfaces to action on the player (NB: some events are already patched inside the modules)
  - run
 
- You can check those profiles: 
+ You can check those profiles:
  - hpod: OSC player with video fade support (on RPi)
  - gadagne: HTTP and GPIO basic player
  - audioscope: RFID/NFC player (using PN532-like shield)
@@ -85,10 +85,10 @@ Available interfaces:
  - GPIO: allows patching RPi gpio event to player action
  - OSC: patching OSC message to player actions to control it from TouchOSC / MaxMSP / etc...
  - HTTP: bootstrap a basic HTTP server to control and get status of the player over a network
- - iRRemote: interface usb infrared remotes like [this one](https://goo.gl/sz7rie)
+ - Keyboard: keyboard usb and infrared remotes like [this one](https://goo.gl/sz7rie)
  - Keypad: interface LCD+Keypad RPi shield like [this one](https://www.adafruit.com/product/1110)
  - NFC: interface RFID/NFC tag reader based on PN532 like [this one](https://www.adafruit.com/product/364)
- 
+
 
 
 ## CREDITS

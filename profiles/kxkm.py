@@ -12,7 +12,7 @@ player = hplayer.addplayer('mpv', playerName)
 player.addInterface('http2', 8080)
 player.addInterface('osc', 1222, 3737)
 player.addInterface('keypad')
-player.addInterface('irremote')
+player.addInterface('keyboard').asIRremote()
 
 #
 ## HPOD (Régie Max)

@@ -21,7 +21,7 @@ class BasePlayer(object):
     basepath = ["/media/usb/"]
     settingspath = None
 
-    log = {
+    doLog = {
         'events':   False
     }
 
@@ -184,7 +184,7 @@ class BasePlayer(object):
 
     # EVENT Trigger callback
     def trigger(self, event, args=None):
-        if self.log['events']:
+        if self.doLog['events']:
             print(self.nameP, "event:", event, "/ args:", args)
 
         if '*' in self._events:
@@ -349,7 +349,8 @@ class BasePlayer(object):
         if len(playlist) == 0:
             self.load()
             playlist = self.settings()['playlist']
-            index = 0
+            if index >= len(playlist):
+                index = 0
 
         # media not found: try a res-can
         if 0 <= index < len(playlist) and not os.path.isfile(playlist[index]):

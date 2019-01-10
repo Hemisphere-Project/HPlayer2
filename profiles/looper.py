@@ -5,7 +5,7 @@ from core.engine import hplayer
 player = hplayer.addplayer('mpv', 'looper')
 
 # INTERFACES
-player.addInterface('irremote')
+player.addInterface('keyboard').asIRremote()
 
 def playloop():
 	print("No Media... Retrying")
