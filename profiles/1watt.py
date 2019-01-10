@@ -59,5 +59,5 @@ player.on(['/synctest'], syncTest)
 
 
 # RUN
-hplayer.setBasePath(["/data/media", "/mnt/usb"])        # Media base path
+hplayer.setBasePath(["/mnt/usb"])        # Media base path
 hplayer.run()                               # TODO: non blocking
