@@ -40,8 +40,8 @@ def play_media(args):
 				player.play( available_files.index(f) )
 
 def play_activedir(index):
-	available_files = [f for f in next(os.walk(current_dir()))[2] if not f.startswith('.')]
-	media = available_files[index]
+	#available_files = [f for f in next(os.walk(current_dir()))[2] if not f.startswith('.')]
+	#media = available_files[index]
 	broadcast('/playmedia', active_dir, index)
 
 def current_dir():
