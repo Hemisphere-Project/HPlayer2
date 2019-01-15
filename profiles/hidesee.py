@@ -47,7 +47,7 @@ def vol_dec():
 # Broadcast Order on OSC to other Pi's
 def broadcast(path, *args):
 	if path.startswith('/play'):
-		player.getInterface('zyre').node.broadcast(path, list(args), 434)
+		player.getInterface('zyre').node.broadcast(path, list(args), 0)   ## WARNING LATENCY !! (1WATT 434ms)
 	else:
 		player.getInterface('zyre').node.broadcast(path, list(args))
 
