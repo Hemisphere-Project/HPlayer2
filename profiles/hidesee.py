@@ -142,6 +142,10 @@ player.on(['btn1', 'KEY_NUMLOCK-down'], 		lambda: play_activedir(0))
 player.on(['btn2', 'KEY_KPSLASH-down'], 		lambda: play_activedir(1))
 player.on(['btn3', 'KEY_KPASTERISK-down'], 		lambda: play_activedir(2))
 player.on(['btn4', 'KEY_BACKSPACE-down'], 		lambda: play_activedir(3))
+player.on(['btn5'], 		lambda: play_activedir(4))
+player.on(['btn6'], 		lambda: play_activedir(5))
+player.on(['btn7'], 		lambda: play_activedir(6))
+player.on(['btn8'], 		lambda: broadcast('/stop'))
 player.on(['inc'], 			remote_inc)
 player.on(['dec'], 			remote_dec)
 player.on(['push'], 		switch_mode)
@@ -153,13 +157,14 @@ def syncTest(arg):
 	if remote_page == 0:
 		#SCENE
 		display = available_dir[active_dir].replace("scene ", "S.")[:6].ljust(6)
+		display += "#"
 
 		# MEDIA
 		media = player.status()['media']
-		for i in range(4):
+		for i in range(7):
 			# if i == player.status()['index'] and media.startswith(current_dir()): display += str(i+1)
-			if i < active_dir_length: display += '-'
-			else : display += '.'
+			if i < active_dir_length: display += ' *'
+			else : display += ' .'
 
 		display += "#"
 		if not player.status()['media']: display += '-stop-'
@@ -192,7 +197,8 @@ def lcd_update(self):
 	# Line 2 : MEDIA
 	if not self.player.status()['media']: lines[1] = '-stop-'
 	else: lines[1] = os.path.basename(self.player.status()['media'])[:-4]
-	lines[1] = lines[1].ljust(16, ' ')[:16]
+	lines[1] = lines[1].ljust(14, ' ')[:14]
+	lines[1] += str(player.getInterface('zyre').activeCount()).rjust(2, ' ')[:2]
 
 	return lines
 
