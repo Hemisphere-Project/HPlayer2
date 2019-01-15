@@ -115,33 +115,54 @@ set_activedir(0)
 player.on(['/scene'], 			change_scene)
 
 # Bind Keypad
-player.on(['keypad-left'], 		lambda: play_firstdir(0))
-player.on(['keypad-up'], 		lambda: play_firstdir(1))
-player.on(['keypad-down'], 		lambda: play_firstdir(2))
-player.on(['keypad-right'], 	lambda: play_firstdir(3))
-player.on(['keypad-select'], 	lambda: broadcast('/stop'))
+# player.on(['keypad-left'], 		lambda: play_firstdir(0))
+# player.on(['keypad-up'], 		lambda: play_firstdir(1))
+# player.on(['keypad-down'], 		lambda: play_firstdir(2))
+# player.on(['keypad-right'], 	lambda: play_firstdir(3))
+# player.on(['keypad-select'], 	lambda: broadcast('/stop'))
 
 # Bind Keyboard
-player.on(['KEY_KP0-down'], 	lambda: set_activedir(0))
-player.on(['KEY_KP1-down'], 	lambda: set_activedir(1))
-player.on(['KEY_KP2-down'], 	lambda: set_activedir(2))
-player.on(['KEY_KP3-down'], 	lambda: set_activedir(3))
-player.on(['KEY_KP4-down'], 	lambda: set_activedir(4))
-player.on(['KEY_KP5-down'], 	lambda: set_activedir(5))
-player.on(['KEY_KP6-down'], 	lambda: set_activedir(6))
-player.on(['KEY_KP7-down'], 	lambda: set_activedir(7))
-player.on(['KEY_KP8-down'], 	lambda: set_activedir(8))
-player.on(['KEY_KP9-down'], 	lambda: set_activedir(9))
-player.on(['KEY_KPDOT-down'], 	lambda: sel_lastdir())
+tabPressed = False
+
+def keyboard_tab(switch):
+	global tabPressed
+	tabPressed = switch
+
+def keyboard_numbers(n):
+	global tabPressed
+	if tabPressed:
+		set_activedir(n)
+	elif n > 0: 
+		play_activedir(n-1)
+
+def keyboard_dot():
+	global tabPressed
+	if tabPressed:
+		sel_lastdir()
+
+player.on(['KEY_TAB-down'], 	lambda: keyboard_tab(True))
+player.on(['KEY_TAB-up'], 		lambda: keyboard_tab(False))
+
+player.on(['KEY_KP0-down'], 	lambda: keyboard_numbers(0))
+player.on(['KEY_KP1-down'], 	lambda: keyboard_numbers(1))
+player.on(['KEY_KP2-down'], 	lambda: keyboard_numbers(2))
+player.on(['KEY_KP3-down'], 	lambda: keyboard_numbers(3))
+player.on(['KEY_KP4-down'], 	lambda: keyboard_numbers(4))
+player.on(['KEY_KP5-down'], 	lambda: keyboard_numbers(5))
+player.on(['KEY_KP6-down'], 	lambda: keyboard_numbers(6))
+player.on(['KEY_KP7-down'], 	lambda: keyboard_numbers(7))
+player.on(['KEY_KP8-down'], 	lambda: keyboard_numbers(8))
+player.on(['KEY_KP9-down'], 	lambda: keyboard_numbers(9))
+player.on(['KEY_KPDOT-down'], 	lambda: keyboard_dot())
 player.on(['KEY_KPENTER-down'], lambda: broadcast('/stop'))
 player.on(['KEY_KPPLUS-down', 'KEY_KPPLUS-hold'], 	vol_inc)
 player.on(['KEY_KPMINUS-down', 'KEY_KPMINUS-hold'], vol_dec)
 
-# Bind HTTP remotes + Keyboard
-player.on(['btn1', 'KEY_NUMLOCK-down'], 		lambda: play_activedir(0))
-player.on(['btn2', 'KEY_KPSLASH-down'], 		lambda: play_activedir(1))
-player.on(['btn3', 'KEY_KPASTERISK-down'], 		lambda: play_activedir(2))
-player.on(['btn4', 'KEY_BACKSPACE-down'], 		lambda: play_activedir(3))
+# Bind HTTP remotes
+player.on(['btn1'], 		lambda: play_activedir(0))
+player.on(['btn2'], 		lambda: play_activedir(1))
+player.on(['btn3'], 		lambda: play_activedir(2))
+player.on(['btn4'], 		lambda: play_activedir(3))
 player.on(['btn5'], 		lambda: play_activedir(4))
 player.on(['btn6'], 		lambda: play_activedir(5))
 player.on(['btn7'], 		lambda: play_activedir(6))
