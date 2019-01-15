@@ -163,5 +163,6 @@ if is_RPi:
 
 
 # RUN
-#hplayer.setBasePath(["/mnt/usb"])        	# Media base path
+hplayer.setBasePath(["/mnt/usb"])        	# Media base path
+hplayer.persistentSettings("/data/hplayer2-kxkm.cfg")   # Path to persitent config
 hplayer.run()                               # TODO: non blocking
