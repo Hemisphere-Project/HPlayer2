@@ -1,4 +1,4 @@
-#include <ESP8266HTTPClient.h>
+#include <HTTPClient.h>
 
 HTTPClient http;
 
@@ -13,8 +13,9 @@ void http_init() {
  * HTTP request 
  */
 String http_get(String url) {
+  LOG(url);
   if (!wifi_isok()) {
-    LOG("httpGet CANCELLED: no wifi...");
+    LOG("request CANCELLED: no wifi...");
     return "";
   }
   http.begin( http_path + url);

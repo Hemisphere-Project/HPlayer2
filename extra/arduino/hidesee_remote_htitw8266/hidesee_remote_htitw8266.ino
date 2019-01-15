@@ -24,9 +24,7 @@ long lastInfo = 0;
 long lastNews = 0;
 
 // IP
-String myIP = "10.0.0.";
-
-String hostIP = "10.0.0.1";
+String hostIP = "3.0.0.1"; //AP wifi
 int hostPORT_http = 8037;
 int hostPORT_osc = 4000;
 
@@ -82,7 +80,7 @@ void setup(void) {
   settings_load( keys );
 
   // Settings SET EEPROM !
-  settings_set("id", 5);
+  settings_set("id", 4);
   settings_set("model", 2);   // 0: ciconia (2btn) -- 1: 1watt v1 (square) -- 2: 1watt v2 (inline)
 
   // Oled
@@ -90,10 +88,8 @@ void setup(void) {
   oled2_status("hello");
 
   // Wifi
-  myIP += String(settings_get("id")+100);
-  wifi_static(myIP);
-  wifi_connect("24watt");
-  wifi_ota( "watt-remote v" + String(CR_VERSION, 2) );
+  wifi_connect("hsremote");
+  wifi_ota( "hidesee-remote v" + String(CR_VERSION, 2) );
   wifi_onConnect(doOnConnect);
   wifi_onDisconnect(doOnDisconnect);
 

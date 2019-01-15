@@ -11,7 +11,7 @@ player.loop(1)
 # player.doLog['events'] = True
 
 # Interfaces
-player.addInterface('zyre')
+player.addInterface('zyre', 'wlan0')
 player.addInterface('osc', 4000, 4000).hostOut = '3.0.0.255'	# remote
 player.addInterface('http', 8037)
 player.addInterface('keyboard')
@@ -47,9 +47,10 @@ def vol_dec():
 # Broadcast Order on OSC to other Pi's
 def broadcast(path, *args):
 	if path.startswith('/play'):
-		player.getInterface('zyre').node.broadcast(path, list(args), 434)
+		player.getInterface('zyre').node.broadcast(path, list(args), 434)   ## WARNING LATENCY !! (1WATT 434ms)
 	else:
 		player.getInterface('zyre').node.broadcast(path, list(args))
+
 	# player.getInterface('osc').hostOut = network.get_broadcast('wlan0')
 	# player.getInterface('osc').sendBurst(path, *args)
 
@@ -114,33 +115,58 @@ set_activedir(0)
 player.on(['/scene'], 			change_scene)
 
 # Bind Keypad
-player.on(['keypad-left'], 		lambda: play_firstdir(0))
-player.on(['keypad-up'], 		lambda: play_firstdir(1))
-player.on(['keypad-down'], 		lambda: play_firstdir(2))
-player.on(['keypad-right'], 	lambda: play_firstdir(3))
-player.on(['keypad-select'], 	lambda: broadcast('/stop'))
+# player.on(['keypad-left'], 		lambda: play_firstdir(0))
+# player.on(['keypad-up'], 		lambda: play_firstdir(1))
+# player.on(['keypad-down'], 		lambda: play_firstdir(2))
+# player.on(['keypad-right'], 	lambda: play_firstdir(3))
+# player.on(['keypad-select'], 	lambda: broadcast('/stop'))
 
 # Bind Keyboard
-player.on(['KEY_KP0-down'], 	lambda: set_activedir(0))
-player.on(['KEY_KP1-down'], 	lambda: set_activedir(1))
-player.on(['KEY_KP2-down'], 	lambda: set_activedir(2))
-player.on(['KEY_KP3-down'], 	lambda: set_activedir(3))
-player.on(['KEY_KP4-down'], 	lambda: set_activedir(4))
-player.on(['KEY_KP5-down'], 	lambda: set_activedir(5))
-player.on(['KEY_KP6-down'], 	lambda: set_activedir(6))
-player.on(['KEY_KP7-down'], 	lambda: set_activedir(7))
-player.on(['KEY_KP8-down'], 	lambda: set_activedir(8))
-player.on(['KEY_KP9-down'], 	lambda: set_activedir(9))
-player.on(['KEY_KPDOT-down'], 	lambda: sel_lastdir())
+tabPressed = False
+
+def keyboard_tab(switch):
+	global tabPressed
+	tabPressed = switch
+
+def keyboard_numbers(n):
+	global tabPressed
+	if tabPressed:
+		set_activedir(n)
+	elif n > 0: 
+		play_activedir(n-1)
+
+def keyboard_dot():
+	global tabPressed
+	if tabPressed:
+		sel_lastdir()
+
+player.on(['KEY_TAB-down'], 	lambda: keyboard_tab(True))
+player.on(['KEY_TAB-up'], 		lambda: keyboard_tab(False))
+
+player.on(['KEY_KP0-down'], 	lambda: keyboard_numbers(0))
+player.on(['KEY_KP1-down'], 	lambda: keyboard_numbers(1))
+player.on(['KEY_KP2-down'], 	lambda: keyboard_numbers(2))
+player.on(['KEY_KP3-down'], 	lambda: keyboard_numbers(3))
+player.on(['KEY_KP4-down'], 	lambda: keyboard_numbers(4))
+player.on(['KEY_KP5-down'], 	lambda: keyboard_numbers(5))
+player.on(['KEY_KP6-down'], 	lambda: keyboard_numbers(6))
+player.on(['KEY_KP7-down'], 	lambda: keyboard_numbers(7))
+player.on(['KEY_KP8-down'], 	lambda: keyboard_numbers(8))
+player.on(['KEY_KP9-down'], 	lambda: keyboard_numbers(9))
+player.on(['KEY_KPDOT-down'], 	lambda: keyboard_dot())
 player.on(['KEY_KPENTER-down'], lambda: broadcast('/stop'))
 player.on(['KEY_KPPLUS-down', 'KEY_KPPLUS-hold'], 	vol_inc)
 player.on(['KEY_KPMINUS-down', 'KEY_KPMINUS-hold'], vol_dec)
 
-# Bind HTTP remotes + Keyboard
-player.on(['btn1', 'KEY_NUMLOCK-down'], 		lambda: play_activedir(0))
-player.on(['btn2', 'KEY_KPSLASH-down'], 		lambda: play_activedir(1))
-player.on(['btn3', 'KEY_KPASTERISK-down'], 		lambda: play_activedir(2))
-player.on(['btn4', 'KEY_BACKSPACE-down'], 		lambda: play_activedir(3))
+# Bind HTTP remotes
+player.on(['btn1'], 		lambda: play_activedir(0))
+player.on(['btn2'], 		lambda: play_activedir(1))
+player.on(['btn3'], 		lambda: play_activedir(2))
+player.on(['btn4'], 		lambda: play_activedir(3))
+player.on(['btn5'], 		lambda: play_activedir(4))
+player.on(['btn6'], 		lambda: play_activedir(5))
+player.on(['btn7'], 		lambda: play_activedir(6))
+player.on(['btn8'], 		lambda: broadcast('/stop'))
 player.on(['inc'], 			remote_inc)
 player.on(['dec'], 			remote_dec)
 player.on(['push'], 		switch_mode)
@@ -152,13 +178,14 @@ def syncTest(arg):
 	if remote_page == 0:
 		#SCENE
 		display = available_dir[active_dir].replace("scene ", "S.")[:6].ljust(6)
+		display += "#"
 
 		# MEDIA
 		media = player.status()['media']
-		for i in range(4):
+		for i in range(7):
 			# if i == player.status()['index'] and media.startswith(current_dir()): display += str(i+1)
-			if i < active_dir_length: display += '-'
-			else : display += '.'
+			if i < active_dir_length: display += ' *'
+			else : display += ' .'
 
 		display += "#"
 		if not player.status()['media']: display += '-stop-'
@@ -191,7 +218,8 @@ def lcd_update(self):
 	# Line 2 : MEDIA
 	if not self.player.status()['media']: lines[1] = '-stop-'
 	else: lines[1] = os.path.basename(self.player.status()['media'])[:-4]
-	lines[1] = lines[1].ljust(16, ' ')[:16]
+	lines[1] = lines[1].ljust(14, ' ')[:14]
+	lines[1] += str(player.getInterface('zyre').activeCount()).rjust(2, ' ')[:2]
 
 	return lines
 

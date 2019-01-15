@@ -170,7 +170,7 @@ class TimeBook():
 
     def gone(self, uuid):
         with self._lock:
-            if uuid in self.phonebook:
+            if uuid in self.phonebook and self.phonebook[uuid]['active']:
                 self.phonebook[uuid]['active'] = False
                 self.activePeers -= 1
 
@@ -247,14 +247,17 @@ class TimeServer():
 #  NODE zyre peers discovery, sync and communication
 #
 class ZyreNode ():
-    def  __init__(self, processor=None):
+    def  __init__(self, processor=None, iface=None):
         self.processor = processor
 
         self.timebook = TimeBook()
         self.timeserver = TimeServer()
 
         self._actor_fn = zactor_fn(self.actor_fn) # ctypes function reference must live as long as the actor.
-        self.actor = Zactor(self._actor_fn, create_string_buffer(b"Zyre node"))
+
+        if iface:
+            iface = create_string_buffer(str.encode(iface))
+        self.actor = Zactor(self._actor_fn, iface)
         self.done = False
 
         self.deltadelay = 0
@@ -321,11 +324,13 @@ class ZyreNode ():
 
 
     # ZYRE Zactor
-    def actor_fn(self, pipe, arg):
+    def actor_fn(self, pipe, iface):
         internal_pipe = Zsock(pipe, False) # We don't own the pipe, so False.
-        arg = string_at(arg)
 
         zyre_node = Zyre(None)
+        if iface:
+            zyre_node.set_interface( string_at(iface) )
+            print("ZYRE Node forced iface: ", string_at(iface) )
         zyre_node.set_header (b"TS-PORT", str(self.timeserver.port).encode());
         zyre_node.start()
         zyre_node.join(b"broadcast")
@@ -435,9 +440,9 @@ class ZyreNode ():
 #
 class ZyreInterface (BaseInterface):
 
-    def  __init__(self, player):
+    def  __init__(self, player, iface=None):
         super().__init__(player, "ZYRE")
-        self.node = ZyreNode(self.processor)
+        self.node = ZyreNode(self.processor, iface)
 
     def listen(self):
         self.log( "interface ready")
