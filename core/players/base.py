@@ -25,8 +25,8 @@ class BasePlayer(object):
         'events':   False
     }
 
-    _validExt = ['.mp4', '.m4v', '.mkv', 'avi', '.mov', '.flv', '.mpg', 'wmv', '.3gp', '.mp3', '.aac', '.wma', '.wav', '.flac', '.aiff', '.m4a', '.ogg', '.opus', '.webm']
-    _validExt.extend(['.jpg', '.jpeg', '.gif', '.png', '.tif'])
+    _validVideo = ['.mp4', '.m4v', '.mkv', 'avi', '.mov', '.flv', '.mpg', 'wmv', '.3gp', '.mp3', '.aac', '.wma', '.wav', '.flac', '.aiff', '.m4a', '.ogg', '.opus', '.webm']
+    _validImage = ['.jpg', '.jpeg', '.gif', '.png', '.tif']
 
     _events = {} 
     _interfaces = {}
@@ -99,7 +99,34 @@ class BasePlayer(object):
     def validExt(self, filename):
         if os.path.basename(filename).startswith('.'):
             return False
-        vExt = self._validExt
+        vExt = self._validVideo
+        vExt.extend(self._validImage)
+        if not type(vExt) is list:
+            vExt = [vExt]
+        for ext in vExt:
+            if ext == '*':
+                return True
+            elif filename.lower().endswith(ext.lower()):
+                return True
+        return False
+
+    def validVideo(self, filename):
+        if os.path.basename(filename).startswith('.'):
+            return False
+        vExt = self._validVideo
+        if not type(vExt) is list:
+            vExt = [vExt]
+        for ext in vExt:
+            if ext == '*':
+                return True
+            elif filename.lower().endswith(ext.lower()):
+                return True
+        return False
+
+    def validImage(self, filename):
+        if os.path.basename(filename).startswith('.'):
+            return False
+        vExt = self._validImage
         if not type(vExt) is list:
             vExt = [vExt]
         for ext in vExt:

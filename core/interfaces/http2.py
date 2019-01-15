@@ -6,6 +6,7 @@ from flask_socketio import SocketIO, emit, join_room, leave_room, close_room, ro
 from werkzeug.utils import secure_filename
 import threading, os, time
 import logging
+from PIL import Image
 
 thread = None
 thread_lock = threading.Lock()
@@ -72,6 +73,16 @@ class ThreadedHTTPServer(object):
                     prefix, ext = os.path.splitext(filepath)
                     filepath = prefix + '-' + ext
                 file.save(filepath)
+                
+                if self.player.validImage(filepath):
+                    size = (1920, 1080)
+                    try:
+                        im = Image.open(filepath)
+                        im.thumbnail(size, Image.ANTIALIAS)
+                        im.save(filepath)
+                    except IOError:
+                        print("cannot resize", filepath)
+
                 fileslist_message()
                 self.player.add(filepath)
                 return 'ok'
