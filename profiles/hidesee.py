@@ -11,7 +11,7 @@ player.loop(1)
 # player.doLog['events'] = True
 
 # Interfaces
-player.addInterface('zyre')
+player.addInterface('zyre', 'wlan0')
 player.addInterface('osc', 4000, 4000).hostOut = '3.0.0.255'	# remote
 player.addInterface('http', 8037)
 player.addInterface('keyboard')
@@ -50,6 +50,7 @@ def broadcast(path, *args):
 		player.getInterface('zyre').node.broadcast(path, list(args), 434)
 	else:
 		player.getInterface('zyre').node.broadcast(path, list(args))
+
 	# player.getInterface('osc').hostOut = network.get_broadcast('wlan0')
 	# player.getInterface('osc').sendBurst(path, *args)
 
