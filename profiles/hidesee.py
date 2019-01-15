@@ -12,7 +12,7 @@ player.loop(1)
 
 # Interfaces
 player.addInterface('zyre')
-player.addInterface('osc', 4000, 4000).hostOut = '255.255.255.255'
+player.addInterface('osc', 4000, 4000).hostOut = '192.168.43.87'	# remote
 player.addInterface('http', 8037)
 player.addInterface('keyboard')
 
@@ -107,8 +107,7 @@ available_dir = [d for d in next(os.walk(base_path))[1] if not d.startswith('.')
 available_dir.sort()
 active_dir_length = 0
 if len(available_dir) == 0: available_dir.insert(0,'')
-if len(available_dir) >= 2: set_activedir(1)
-else: set_activedir(0)
+set_activedir(0)
 
 
 
@@ -152,7 +151,7 @@ player.on(['push'], 		switch_mode)
 def syncTest(arg):
 	if remote_page == 0:
 		#SCENE
-		display = available_dir[active_dir].replace("scene ", "S.")[:5].ljust(5) + " "
+		display = available_dir[active_dir].replace("scene ", "S.")[:6].ljust(6)
 
 		# MEDIA
 		media = player.status()['media']
@@ -163,7 +162,7 @@ def syncTest(arg):
 
 		display += "#"
 		if not player.status()['media']: display += '-stop-'
-		else: display += media[:-4].replace(base_path, '').replace("/scene ", "S.").replace("/", " / ")
+		else: display += media[:-4].replace(base_path, '')[1:].replace("scene", "S.").replace("/", " / ")
 
 	elif remote_page == 1:
 		# VOLUME
