@@ -170,7 +170,7 @@ class TimeBook():
 
     def gone(self, uuid):
         with self._lock:
-            if uuid in self.phonebook:
+            if uuid in self.phonebook and self.phonebook[uuid]['active']:
                 self.phonebook[uuid]['active'] = False
                 self.activePeers -= 1
 
