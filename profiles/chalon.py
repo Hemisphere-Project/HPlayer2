@@ -12,6 +12,7 @@ player.loop(1)
 
 # Interfaces
 player.addInterface('zyre', 'wlan0')
+player.addInterface('http2', 8080)
 player.addInterface('http', 8037)
 player.addInterface('keyboard')
 
