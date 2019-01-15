@@ -12,7 +12,7 @@ player.loop(1)
 
 # Interfaces
 player.addInterface('zyre')
-player.addInterface('osc', 4000, 4000).hostOut = '192.168.43.87'	# remote
+player.addInterface('osc', 4000, 4000).hostOut = '3.0.0.255'	# remote
 player.addInterface('http', 8037)
 player.addInterface('keyboard')
 
