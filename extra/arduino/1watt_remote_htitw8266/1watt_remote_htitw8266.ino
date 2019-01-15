@@ -43,6 +43,35 @@ int pinout[3][7] = {  {},                           // ciconia
                       {D3, D7, D6, SCL, SDA, RX, TX}     // remote v2 (inline)
                     };
 
+void ICACHE_RAM_ATTR pin0() {
+  event_trigger(pins[0], [](){ 
+    http_get("/event/btn1");  
+  });
+}
+
+void ICACHE_RAM_ATTR pin1() {
+  event_trigger(pins[1], [](){ 
+    http_get("/event/btn2");  
+  });
+}
+
+void ICACHE_RAM_ATTR pin2() {
+  event_trigger(pins[2], [](){ 
+    http_get("/event/btn3");  
+  });
+}
+
+void ICACHE_RAM_ATTR pin3() {
+  event_trigger(pins[3], [](){ 
+    http_get("/event/btn4");  
+  });
+}
+
+void ICACHE_RAM_ATTR pin4() {
+  event_trigger(pins[4], [](){ 
+    http_get("/event/push");
+  });
+}
 
 void setup(void) {
   LOGSETUP();
@@ -53,7 +82,7 @@ void setup(void) {
   settings_load( keys );
 
   // Settings SET EEPROM !
-  settings_set("id", 4);
+  settings_set("id", 5);
   settings_set("model", 2);   // 0: ciconia (2btn) -- 1: 1watt v1 (square) -- 2: 1watt v2 (inline)
 
   // Oled
@@ -78,29 +107,19 @@ void setup(void) {
   for(int k=0; k<5; k++) pinMode(pins[k], INPUT_PULLUP);
   
   // media1 
-  attachInterrupt(digitalPinToInterrupt(pins[0]), []() {
-    event_trigger(pins[0], media1);
-  }, FALLING);
+  attachInterrupt(digitalPinToInterrupt(pins[0]), pin0, FALLING);
 
   // media2
-  attachInterrupt(digitalPinToInterrupt(pins[1]), []() {
-    event_trigger(pins[1], media2);
-  }, FALLING);
+  attachInterrupt(digitalPinToInterrupt(pins[1]), pin1, FALLING);
 
   // media3
-  attachInterrupt(digitalPinToInterrupt(pins[2]), []() {
-    event_trigger(pins[2], media3);
-  }, FALLING);
+  attachInterrupt(digitalPinToInterrupt(pins[2]), pin2, FALLING);
 
   // media4 
-  attachInterrupt(digitalPinToInterrupt(pins[3]), []() {
-    event_trigger(pins[3], media4);
-  }, FALLING);
+  attachInterrupt(digitalPinToInterrupt(pins[3]), pin3, FALLING);
 
   // PUSH EN
-  attachInterrupt(digitalPinToInterrupt(pins[4]), []() {
-    event_trigger(pins[4], push);
-  }, FALLING);
+  attachInterrupt(digitalPinToInterrupt(pins[4]), pin4, FALLING);
 
   // ENCODER
 #ifdef DEBUG
@@ -143,6 +162,7 @@ void loop(void) {
       msg.send(udp_out);
       udp_out.endPacket();
       lastInfo = millis() - 50;
+      LOG("sync");
     }
 
     if (millis() - lastNews > 1500) {
@@ -177,21 +197,7 @@ void doOnDisconnect() {
   if (!shuttingDown) oled2_status("-no wifi");
 }
 
-void media1() {
-  http_get("/event/btn1");
-}
 
-void media2() {
-  http_get("/event/btn2");
-}
-
-void media3() {
-  http_get("/event/btn3");
-}
-
-void media4() {
-  http_get("/event/btn4");
-}
 
 void incr() {
   http_get("/event/inc");
@@ -201,9 +207,6 @@ void decr() {
   http_get("/event/dec");
 }
 
-void push() {
-  http_get("/event/push");
-}
 
 void shutdown() {
   shuttingDown = true;
