@@ -26,8 +26,9 @@ class BasePlayer(object):
     }
 
     _validExt = ['.mp4', '.m4v', '.mkv', 'avi', '.mov', '.flv', '.mpg', 'wmv', '.3gp', '.mp3', '.aac', '.wma', '.wav', '.flac', '.aiff', '.m4a', '.ogg', '.opus', '.webm']
+    _validExt.extend(['.jpg', '.jpeg', '.gif', '.png', '.tif'])
 
-    _events = {}
+    _events = {} 
     _interfaces = {}
     _overlays = {}
     _status = {

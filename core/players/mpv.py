@@ -178,6 +178,7 @@ class MpvPlayer(BasePlayer):
                             [script_path+'/../../bin/mpv', '--input-ipc-server=' + self._mpv_socketpath + '',
                                 '--idle=yes', '--no-osc', '--msg-level=ipc=v', '--quiet', '--fs','--keep-open'
                                 ,'--window-scale=' + str(self._mpv_scale)
+                                ,'--image-display-duration=3'
                                 #,'--force-window=yes'
                                 ],
                             stdout=subprocess.PIPE, stdin=subprocess.PIPE, stderr = subprocess.STDOUT,

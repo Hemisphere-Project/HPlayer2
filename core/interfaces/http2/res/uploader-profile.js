@@ -135,7 +135,7 @@ $(function(){
       // A file was successfully uploaded
       ui_add_log('Server Response for file #' + id + ': ' + JSON.stringify(data));
       ui_add_log('Upload of file #' + id + ' COMPLETED', 'success');
-      ui_multi_update_file_status(id, 'success', 'Upload Complete');
+      ui_multi_update_file_status(id, 'success', 'OK');
       ui_multi_update_file_progress(id, 100, 'success', false);
     },
     onUploadError: function(id, xhr, status, message){
