@@ -12,7 +12,7 @@ player.loop(1)
 
 # Interfaces
 player.addInterface('zyre')
-player.addInterface('osc', 4000, 4000).hostOut = '192.168.43.87'	# remote
+player.addInterface('osc', 4000, 4000).hostOut = '3.0.0.255'	# remote
 player.addInterface('http', 8037)
 player.addInterface('keyboard')
 
@@ -47,7 +47,7 @@ def vol_dec():
 # Broadcast Order on OSC to other Pi's
 def broadcast(path, *args):
 	if path.startswith('/play'):
-		player.getInterface('zyre').node.broadcast(path, list(args), 434)
+		player.getInterface('zyre').node.broadcast(path, list(args), 0)   ## WARNING LATENCY !! (1WATT 434ms)
 	else:
 		player.getInterface('zyre').node.broadcast(path, list(args))
 	# player.getInterface('osc').hostOut = network.get_broadcast('wlan0')
