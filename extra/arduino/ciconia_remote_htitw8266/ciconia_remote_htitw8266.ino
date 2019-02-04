@@ -10,8 +10,8 @@
 
 bool ready1 = false;
 long doNext = 0;
+long doPrev = 0;
 long doStop = 0;
-
 
 
 //UDP
@@ -23,7 +23,8 @@ long lastInfo = 0;
 long lastNews = 0;
 
 //BTN
-const byte interruptPin = 22;
+const byte nextPin = 5;   //D1
+const byte prevPin = 13;  //D7
 
 
 void setup(void) {
@@ -36,7 +37,7 @@ void setup(void) {
   // Wifi
   //wifi_static("3.0.0.10");
   //wifi_connect("ciconia");
-  wifi_connect("interweb", "superspeed37");
+  wifi_connect("kxkm-wifi", "KOMPLEXKAPHARNAUM");
   wifi_ota( "ciconia-remote v" + String(CR_VERSION, 2) );
   wifi_onConnect(doOnConnect);
   wifi_onDisconnect(doOnDisconnect);
@@ -44,8 +45,10 @@ void setup(void) {
   http_init();
 
   // Btn
-  pinMode(interruptPin, INPUT_PULLUP);
-  attachInterrupt(digitalPinToInterrupt(interruptPin), next, FALLING);
+  pinMode(nextPin, INPUT_PULLUP);
+  attachInterrupt(digitalPinToInterrupt(nextPin), next, FALLING);
+  pinMode(prevPin, INPUT_PULLUP);
+  attachInterrupt(digitalPinToInterrupt(prevPin), prev, FALLING);
 
   //UDP
   // input socket
@@ -61,17 +64,23 @@ void loop(void) {
     // Commands
     if (doNext == 1) {
       http_get("/next");
-      doNext = millis()+200;
+      doNext = millis()+100;
+    }
+    if (doPrev == 1) {
+      http_get("/prev");
+      doPrev = millis()+100;
     }
     if (doStop == 1) {
       http_get("/stop");
-      doStop = millis()+200;
+      doStop = millis()+100;
     }
 
     if (doNext >= 10 && doNext < millis()) doNext = 2;
+    if (doPrev >= 10 && doPrev < millis()) doPrev = 2;
     if (doStop >= 10 && doStop < millis()) doStop = 2;
     
     if (doNext == 2) doNext = 0;
+    if (doPrev == 2) doPrev = 0;
     if (doStop == 2) doStop = 0;
 
     if (udp_in.parsePacket()) {
@@ -123,12 +132,22 @@ void doOnDisconnect() {
 }
 
 /*
- * TOUCH 2 (GPIO 2)
+ * BTN NEXT
  */
 void next() {
   if (ready1 && doNext == 0) {
-    LOG("TOUCH 2 (gpio 2)");
+    LOG("NEXT");
     doNext = 1;
+  }
+}
+
+/*
+ * BTN PREV
+ */
+void prev() {
+  if (ready1 && doPrev == 0) {
+    LOG("PREV");
+    doPrev = 1;
   }
 }
 
