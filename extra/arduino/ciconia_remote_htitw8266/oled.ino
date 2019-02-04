@@ -16,11 +16,15 @@ void oled_hello() {
   u8x8.draw2x2String(0,2,"World");
 }
 
+void oled_clear2() {
+  u8x8.draw2x2String(0,2,"        ");
+}
+
 /*
  * Show status
  */
 void oled_status(String stat) {
-  oled_status(stat, "");
+  oled_status(stat, "       ");
 }
 void oled_status(String stat, String stat2) {
 

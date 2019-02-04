@@ -8,6 +8,8 @@
 #include "debug.h"
 #include "wifi.h"
 
+bool shuttingDown = false;
+
 bool ready1 = false;
 long doNext = 0;
 long doPrev = 0;
@@ -23,21 +25,22 @@ long lastInfo = 0;
 long lastNews = 0;
 
 //BTN
-const byte nextPin = 5;   //D1
+const byte nextPin = 3;   //RX
 const byte prevPin = 13;  //D7
 
 
 void setup(void) {
   LOGSETUP();
+  LOG("hello");
   
   // Oled
   oled_init();
   oled_status("hello");
 
   // Wifi
-  //wifi_static("3.0.0.10");
-  //wifi_connect("ciconia");
-  wifi_connect("kxkm-wifi", "KOMPLEXKAPHARNAUM");
+  wifi_static("3.0.0.10");
+  wifi_connect("ciconia");
+  //wifi_connect("kxkm-wifi", "KOMPLEXKAPHARNAUM");
   wifi_ota( "ciconia-remote v" + String(CR_VERSION, 2) );
   wifi_onConnect(doOnConnect);
   wifi_onDisconnect(doOnDisconnect);
@@ -64,15 +67,18 @@ void loop(void) {
     // Commands
     if (doNext == 1) {
       http_get("/next");
-      doNext = millis()+100;
+      doNext = millis()+150;
+      oled_clear2();
     }
     if (doPrev == 1) {
       http_get("/prev");
-      doPrev = millis()+100;
+      doPrev = millis()+150;
+      oled_clear2();
     }
     if (doStop == 1) {
       http_get("/stop");
-      doStop = millis()+100;
+      doStop = millis()+150;
+      oled_clear2();
     }
 
     if (doNext >= 10 && doNext < millis()) doNext = 2;
@@ -89,7 +95,7 @@ void loop(void) {
       if (len >= 0) {
         udpPacket[len] = 0;
         LOGF("UDP: packet received: %s\n", udpPacket);
-        oled_status( getValue(udpPacket, '/', 0), getValue(udpPacket, '/', 1) );
+        oled_status( getValue(udpPacket, '"', 0), "    "+getValue(udpPacket, '"', 1) );
         lastInfo = millis();
         lastNews = millis();
       }
@@ -111,9 +117,14 @@ void loop(void) {
     }
   }
   else {
-    oled_status("-no wifi");
+    oled_status("+no wifi");
   }
   delay(50);
+
+  if (millis()-lastNews > 120*1000) {
+    shutdown();
+  }
+  //LOG("loop");
 }
 
 
@@ -128,7 +139,7 @@ void doOnConnect() {
    on Disconnect
 */
 void doOnDisconnect() {
-  oled_status("-no wifi");
+  if (!shuttingDown) oled_status("-no wifi");
 }
 
 /*
@@ -159,4 +170,14 @@ void stop() {
     LOG("TOUCH 8 (gpio 33)");
     doStop = 1;
   }
+}
+
+void shutdown() {
+  shuttingDown = true;
+  wifi_disarm();
+  oled_status("          ","          ");
+  WiFi.mode(WIFI_OFF);
+  ESP.wdtDisable();
+  //ESP.deepSleep(999999999*999999999U, WAKE_NO_RFCAL);
+  ESP.deepSleep(0);
 }
