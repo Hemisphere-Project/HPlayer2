@@ -28,6 +28,8 @@ String wifi_nameDevice = "esp32";
 void (*wifi_conClbck)();
 void (*wifi_disconClbck)();
 
+bool disarming = false;
+
 /*
  * Setup OTA
  */
@@ -80,11 +82,15 @@ void wifi_static(String ip) {
  * Connect as STATION
  */
 void wifi_connect(const char* ssid, const char* password) {
+  WiFi.mode(WIFI_OFF);
+  delay(1);
   WiFi.mode(WIFI_STA);
   WiFi.onEvent(_wifi_event);
   WiFi.begin(ssid, password);
 }
 void wifi_connect(const char* ssid) {
+  WiFi.mode(WIFI_OFF);
+  delay(1);
   WiFi.mode(WIFI_STA);
   WiFi.onEvent(_wifi_event);
   WiFi.begin(ssid);
@@ -132,6 +138,7 @@ void _wifi_disconnected() {
  * Internal callback
  */
 void _wifi_event(WiFiEvent_t event) {
+  if (disarming) return;
   if (event == WIFI_EVENT_STAMODE_DISCONNECTED) {
     if (wifi_available) LOG("WIFI: disconnected");
     wifi_available = false;
@@ -171,4 +178,8 @@ bool wifi_wait(int timeout, bool restart) {
 
 bool wifi_wait(int timeout) {
   wifi_wait(timeout, false);
+}
+
+void wifi_disarm() {
+  disarming = true;
 }
