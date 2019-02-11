@@ -53,6 +53,14 @@ class OscInterface (BaseInterface):
         def play(path, args, types):
             if args and len(args) >= 1: self.player.play(args[0])
 
+        @osc("/playlist")
+        def play(path, args, types):
+            if args:
+                if len(args) >= 1:
+                    self.player.load(args[0])
+                    if len(args) >= 2: self.player.play(args[1])
+                    else: self.player.play()
+
         @osc("/playloop")
         def playloop(path, args, types):
             self.player.loop(1)

@@ -4,14 +4,12 @@
 #define CR_VERSION  0.01  // Init
 #define CR_VERSION  0.02  // 1watt teleco
 
-#define SLEEPTIME 5       // minutes before going to sleep
+#define SLEEPTIME 3       // minutes before going to sleep
 
 #include <Arduino.h>
 #include <OSCMessage.h> //https://github.com/stahlnow/OSCLib-for-ESP8266
 #include "debug.h"
 #include "wifi.h"
-
-enum events { NEXT, PREV, STOP };
 
 bool shuttingDown = false;
 
@@ -27,16 +25,16 @@ long lastNews = 0;
 void setup(void) {
   LOGSETUP();
   LOG("hello");
-  
+
   // Oled
   oled_init();
   oled_status("hello");
 
   // Wifi
-  wifi_static("3.0.0.10");
-  wifi_connect("ciconia");
+  //wifi_static("3.0.0.10");
+  wifi_connect("hmspi");
   //wifi_connect("kxkm-wifi", "KOMPLEXKAPHARNAUM");
-  wifi_ota( "ciconia-remote v" + String(CR_VERSION, 2) );
+  wifi_ota( "hmspi-remote v" + String(CR_VERSION, 2) );
   wifi_onConnect(doOnConnect);
   wifi_onDisconnect(doOnDisconnect);
 
@@ -57,11 +55,11 @@ void setup(void) {
   // SCL: RED
   pinMode(14, INPUT_PULLUP);
   attachInterrupt(digitalPinToInterrupt(14), [](){ event_trigger(14, media4); }, FALLING);
-  
+
   // SDA: PUSH ENC   ----  OK
   pinMode(2, INPUT_PULLUP);
   attachInterrupt(digitalPinToInterrupt(2), [](){ event_trigger(2, stop); }, FALLING);
-  
+
   // ENCODER
   encoder_init(3, 1);
   encoder_inc( next );
@@ -75,7 +73,7 @@ void setup(void) {
 void loop(void) {
   encoder_loop();
   event_loop();
-  
+
   if (wifi_isok()) {
     wifi_otaCheck();
 
@@ -90,12 +88,11 @@ void loop(void) {
         lastNews = millis();
       }
     }
-    
+
     if (millis()-lastInfo > 200) {
       // STATUS check
       LOG("sending synctest");
       udp_out.beginPacket("3.0.0.1", 4000);
-      //udp_out.beginPacket("192.168.0.26", 4000);
       OSCMessage msg("/synctest");
       msg.send(udp_out);
       udp_out.endPacket();
