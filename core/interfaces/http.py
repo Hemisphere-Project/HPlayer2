@@ -71,6 +71,10 @@ def BasicHTTPServerHandler(player):
                 else:
                     self.player.play()
 
+            elif command == 'playindex':
+                if len(args) > 0:
+                    self.player.play(int(args[0]))
+
             elif command == 'stop':
                 self.player.stop()
 
