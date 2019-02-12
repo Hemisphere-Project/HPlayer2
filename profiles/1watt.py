@@ -18,15 +18,15 @@ player.addInterface('keypad')
 player.addInterface('keyboard')
 
 # Brodcast IPs
-remotes_broadcast = network.get_broadcast("wlan1")
-rpis_broadcast = network.get_broadcast("eth0")
-if rpis_broadcast == '127.0.0.1': rpis_broadcast = network.get_broadcast("wlan0")
+# remotes_broadcast = network.get_broadcast("wlan1")
+# rpis_broadcast = network.get_broadcast("eth0")
+# if rpis_broadcast == '127.0.0.1': rpis_broadcast = network.get_broadcast("wlan0")
 
 # Remote modes
 remote_mode = True
 
 # Sub folders
-base_path = '/data/media'
+base_path = '/mnt/usb'
 available_dir = [d for d in next(os.walk(base_path))[1] if not d.startswith('.')]
 available_dir.sort()
 if len(available_dir) == 0:
@@ -62,7 +62,7 @@ def remote_dec():
 
 # Broadcast Order on OSC to other Pi's
 def broadcast(path, *args):
-	player.getInterface('osc').hostOut = rpis_broadcast
+	# player.getInterface('osc').hostOut = rpis_broadcast
 	player.getInterface('osc').send(path, *args)
 
 def play_inlist(index):
@@ -108,7 +108,7 @@ def syncTest(arg):
 	else:
 		display = "VOLUME#"+str(player.settings()['volume'])
 
-	player.getInterface('osc').hostOut = remotes_broadcast
+	# player.getInterface('osc').hostOut = remotes_broadcast
 	player.getInterface('osc').send(display)
 
 player.on(['/synctest'], syncTest)
