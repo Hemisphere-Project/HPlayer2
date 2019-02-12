@@ -3,7 +3,7 @@ from evdev import InputDevice, categorize, ecodes
 from watchdog.observers import Observer
 from watchdog.events import FileSystemEventHandler
 from time import sleep
-import sys
+import sys, subprocess
 
 class KeyboardInterface (BaseInterface):
 
@@ -19,15 +19,24 @@ class KeyboardInterface (BaseInterface):
         self.observer = Observer()
         self.observer.schedule(event_handler, '/dev/input/', recursive=False)
         self.observer.start()
+        self.remote = None
 
-        self.bind('/dev/input/event0')
+        self.bind(self.detect())
 
+
+    # Find Keyboard
+    def detect(self):
+        kbd = subprocess.Popen("ls -la /dev/input/by-id/ | grep event-kbd | awk -F \"/\" '{print $NF}' ", shell=True, stdout=subprocess.PIPE).stdout.read().decode("utf-8").strip()
+        if kbd:
+            return '/dev/input/'+kbd
+        else:
+            return None
 
     # Bind to interface
     def bind(self, iface):
-        if not isinstance(iface, str):
+        if iface and not isinstance(iface, str):
             iface = iface.src_path
-        if iface != '/dev/input/event0': return
+        if iface != self.detect(): return
         try:
             self.remote = InputDevice(iface)
             self.remote.grab()
@@ -39,7 +48,7 @@ class KeyboardInterface (BaseInterface):
     def unbind(self, iface):
         if not isinstance(iface, str):
             iface = iface.src_path
-        if iface != '/dev/input/event0': return
+        if iface != self.detect(): return
         self.remote = None
         self.log("Keyboard disconnected ...")
 

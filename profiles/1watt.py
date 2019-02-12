@@ -47,6 +47,16 @@ def prev_dir():
 	active_dir -= 1
 	if active_dir < 0: active_dir=len(available_dir)-1
 
+def last_dir():
+	global active_dir
+	active_dir = len(available_dir)-1
+
+def sel_dir(dir):
+	dir = dir[0]
+	if dir in available_dir:
+		global active_dir
+		active_dir = available_dir.index(dir)
+
 def switch_mode():
 	global remote_mode
 	remote_mode = not remote_mode
@@ -67,6 +77,14 @@ def broadcast(path, *args):
 
 def play_inlist(index):
 	broadcast('/playlist', current_dir(), index)
+	broadcast('/scene', available_dir[active_dir])
+
+def play_final(index):
+	last_dir()
+	play_inlist(index)
+
+
+player.on(['/scene'], 			sel_dir)
 
 # Bind Keypad
 player.on(['keypad-left'], 		lambda: play_inlist(0))
@@ -76,15 +94,15 @@ player.on(['keypad-right'], 	lambda: play_inlist(3))
 player.on(['keypad-select'], 	lambda: broadcast('/stop'))
 
 # Bind Keyboard
-player.on(['KEY_KP1-down'], 	lambda: play_inlist(0))
-player.on(['KEY_KP2-down'], 	lambda: play_inlist(1))
-player.on(['KEY_KP3-down'], 	lambda: play_inlist(2))
-player.on(['KEY_KP4-down'], 	lambda: play_inlist(3))
-player.on(['KEY_KP5-down'], 	lambda: play_inlist(4))
-player.on(['KEY_KP6-down'], 	lambda: play_inlist(5))
-player.on(['KEY_KP7-down'], 	lambda: play_inlist(6))
-player.on(['KEY_KP8-down'], 	lambda: play_inlist(7))
-player.on(['KEY_KP9-down'], 	lambda: play_inlist(8))
+player.on(['KEY_KP1-down'], 	lambda: play_final(0))
+player.on(['KEY_KP2-down'], 	lambda: play_final(1))
+player.on(['KEY_KP3-down'], 	lambda: play_final(2))
+player.on(['KEY_KP4-down'], 	lambda: play_final(3))
+player.on(['KEY_KP5-down'], 	lambda: play_final(4))
+player.on(['KEY_KP6-down'], 	lambda: play_final(5))
+player.on(['KEY_KP7-down'], 	lambda: play_final(6))
+player.on(['KEY_KP8-down'], 	lambda: play_final(7))
+player.on(['KEY_KP9-down'], 	lambda: play_final(8))
 player.on(['KEY_KPENTER-down'], lambda: broadcast('/stop'))
 
 # Bind HTTP remotes
