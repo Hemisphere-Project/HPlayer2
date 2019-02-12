@@ -13,7 +13,6 @@ player.loop(1)
 # Interfaces
 player.addInterface('osc', 4000, 4000).hostOut = network.get_broadcast()
 player.addInterface('http', 8037)
-player.addInterface('http2', 8080)
 player.addInterface('keypad')
 player.addInterface('keyboard')
 
