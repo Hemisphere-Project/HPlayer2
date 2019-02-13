@@ -11,7 +11,7 @@ player.loop(1)
 # player.doLog['events'] = True
 
 # Interfaces
-player.addInterface('osc', 4000, 4000).hostOut = network.get_broadcast()
+player.addInterface('osc', 4000, 4000).hostOut = network.get_broadcast('wlan0')
 player.addInterface('http', 8037)
 player.addInterface('keypad')
 player.addInterface('keyboard')
@@ -49,6 +49,10 @@ def prev_dir():
 def last_dir():
 	global active_dir
 	active_dir = len(available_dir)-1
+	
+def first_dir():
+	global active_dir
+	active_dir = 0
 
 def sel_dir(dir):
 	dir = dir[0]
@@ -71,8 +75,10 @@ def remote_dec():
 
 # Broadcast Order on OSC to other Pi's
 def broadcast(path, *args):
-	# player.getInterface('osc').hostOut = rpis_broadcast
+	if player.getInterface('osc').hostOut == '127.0.0.1':
+		player.getInterface('osc').hostOut = network.get_broadcast('wlan0')
 	player.getInterface('osc').send(path, *args)
+	print("broadcast to", player.getInterface('osc').hostOut)
 
 def play_inlist(index):
 	broadcast('/playlist', current_dir(), index)
@@ -81,15 +87,19 @@ def play_inlist(index):
 def play_final(index):
 	last_dir()
 	play_inlist(index)
+	
+def play_panic(index):
+	first_dir()
+	play_inlist(index)	
 
 
 player.on(['/scene'], 			sel_dir)
 
 # Bind Keypad
-player.on(['keypad-left'], 		lambda: play_inlist(0))
-player.on(['keypad-up'], 		lambda: play_inlist(1))
-player.on(['keypad-down'], 		lambda: play_inlist(2))
-player.on(['keypad-right'], 	lambda: play_inlist(3))
+player.on(['keypad-left'], 		lambda: play_panic(0))
+player.on(['keypad-up'], 		lambda: play_panic(1))
+player.on(['keypad-down'], 		lambda: play_panic(2))
+player.on(['keypad-right'], 	lambda: play_panic(3))
 player.on(['keypad-select'], 	lambda: broadcast('/stop'))
 
 # Bind Keyboard
