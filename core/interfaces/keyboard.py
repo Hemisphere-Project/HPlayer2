@@ -80,8 +80,8 @@ class KeyboardInterface (BaseInterface):
                     self.player.trigger('key-'+keymode, event.code)
                     self.player.trigger(keycode+'-'+keymode)
 
-                    # self.log("keyboard event:", categorize(event), event.value)
-                    # self.log("keyboard event:", categorize(event), event.value)
+                    # self.log("keyboard event:", categorize(event), event.code, event.value)
+                    # self.log("keyboard event:", keycode+'-'+keymode)
 
                 elif not event:
                 	sleep(0.1)
