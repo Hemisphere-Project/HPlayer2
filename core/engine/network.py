@@ -59,3 +59,6 @@ def get_broadcast(iface=None):
 def get_hostname():
     import socket
     return socket.gethostname()
+
+def get_ethmac():
+    return ni.ifaddresses('eth0')[AF_LINK][0]['addr']

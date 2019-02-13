@@ -88,7 +88,8 @@ def vol_dec():
 # Broadcast Order on OSC to other Pi's
 def broadcast(path, *args):
 	player.getInterface('osc').hostOut = network.get_broadcast('wlan0')
-	player.getInterface('osc').send(path, *args)
+	# player.getInterface('osc').send(path, *args)
+	player.getInterface('osc').sendBurst(path, *args)
 	# print("broadcast to", player.getInterface('osc').hostOut)
 
 def play_activedir(index):
