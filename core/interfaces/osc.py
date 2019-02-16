@@ -1,5 +1,10 @@
 from .base import BaseInterface
+from core.engine import network
 import liblo
+import random
+from sys import getsizeof
+
+current_milli_time = lambda: int(round(time.time() * 1000))
 
 def oscdump(path, args, types):
     print("OSC Received:", path, args)
@@ -13,12 +18,23 @@ class OscInterface (BaseInterface):
         self._portOut = out_port
         self.hostOut = '127.0.0.1'
 
+        self.burstCounter = random.randint(1,10000)
+        self.ethMac = network.get_ethmac()
+        self.burstMem = {}
+
 
     # OSC sender
     def send(self, path, *args):
         target = liblo.Address("osc.udp://"+self.hostOut+":"+str(self._portOut))
         liblo.send(target, path, *args)
         # self.log("sent OSC", path, args ," to ","osc.udp://"+self.hostOut+":"+str(self._portOut))
+
+    # OSC send BURST using stamp
+    def sendBurst(self, path, *args):
+        self.burstCounter += 1
+        target = liblo.Address("osc.udp://"+self.hostOut+":"+str(self._portOut))
+        for i in range(5):
+            liblo.send(target, '/burst', self.ethMac, self.burstCounter, path, *args)
 
     # OSC receiver THREAD
     def listen(self):
@@ -42,6 +58,18 @@ class OscInterface (BaseInterface):
                 return func
             return handler
 
+        @osc("/burst")
+        def burst(path, args, types):
+            if len(args) < 2: return
+            mac = args.pop(0)
+            stamp = args.pop(0)
+            if not mac in self.burstMem or self.burstMem[mac] != stamp:
+                self.burstMem[mac] = stamp
+                path = args.pop(0)
+                types = types[2:]
+                # print("relaying bursted frame", path, args, types)
+                target = liblo.Address("osc.udp://127.0.0.1:"+str(self._portIn))
+                liblo.send(target, path, *args)
 
         @osc("/play")
         def play(path, args, types):

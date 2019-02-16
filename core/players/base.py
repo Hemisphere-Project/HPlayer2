@@ -18,7 +18,7 @@ class BasePlayer(object):
     _running.set()
 
     name = "DUMMY Player"
-    basepath = ["/media/usb/"]
+    basepath = ["/dummy"]
     settingspath = None
 
     doLog = {
@@ -96,6 +96,8 @@ class BasePlayer(object):
 
     # CHECK EXT
     def validExt(self, filename):
+        if os.path.basename(filename).startswith('.'):
+            return False
         vExt = self._validExt
         if not type(vExt) is list:
             vExt = [vExt]
@@ -119,7 +121,7 @@ class BasePlayer(object):
 
             # full path directory -> add content recursively
             if os.path.isdir(entry):
-                dirContent = [os.path.join(entry, f) for f in os.listdir(entry)]
+                dirContent = [os.path.join(entry, f) for f in os.listdir(entry) if not f.startswith('.')]
                 dirContent.sort()
                 liste.extend(self.buildList( dirContent ))
 
@@ -437,24 +439,18 @@ class BasePlayer(object):
 
     # VOLUME
     def volume(self, vol):
+        if (vol < 0): vol = 0
+        if (vol > 100): vol = 100
         self.settings_set('volume', vol)
         self._applyVolume()
 
     # VOLUME INC
     def volume_inc(self):
-        vol = self._settings['volume']
-        vol += 1
-        if vol > 100: vol = 100
-        self.settings_set('volume', vol)
-        self._applyVolume()
+        volume(self._settings['volume']+1)
 
     # VOLUME DEC
     def volume_dec(self):
-        vol = self._settings['volume']
-        vol -= 1
-        if vol < 0: vol = 0
-        self.settings_set('volume', vol)
-        self._applyVolume()
+        volume(self._settings['volume']-1)
 
     # MUTE
     def mute(self, domute):

@@ -151,7 +151,8 @@ def BasicHTTPServerHandler(player):
                 elif len(args) > 0:
                     self.player.trigger(args[0])
 
-            self.wfile.write( ("<html><body><h1>Command: "+command+" - Args: "+','.join(args)+"</h1></body></html>").encode() )
+            #self.wfile.write( ("<html><body><h1>Command: "+command+" - Args: "+','.join(args)+"</h1></body></html>").encode() )
+            self.wfile.write( ("").encode() )
             # print("GET", self.path)
 
 
