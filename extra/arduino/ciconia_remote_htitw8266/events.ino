@@ -1,4 +1,4 @@
-#define DEBOUNCE_TIME 100
+#define DEBOUNCE_TIME 150
 #define EVENTS_MAX 64
 
 long event_last[EVENTS_MAX];

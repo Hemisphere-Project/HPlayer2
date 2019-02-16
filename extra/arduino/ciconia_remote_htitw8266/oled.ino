@@ -18,6 +18,7 @@ void oled_hello() {
 
 void oled_clear2() {
   u8x8.draw2x2String(0,2,"        ");
+  u8x8.draw2x2String(0,2,"#");
 }
 
 /*
