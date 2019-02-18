@@ -12,6 +12,8 @@ class KeypadInterface (BaseInterface):
                 (LCD.DOWN,   'Down'  , (0,1,0)),
                 (LCD.RIGHT, 'Right' , (1,0,1)) )
 
+    display = ["", ""]
+
     def __init__(self, player):
         super(KeypadInterface, self).__init__(player, "KEYPAD")
 
@@ -22,6 +24,35 @@ class KeypadInterface (BaseInterface):
             self.log("LCD Keypad not found ...")
             self.lcd = None
 
+    def update(self):
+        lines = ["", ""]
+
+        # Line 1 : MEDIA
+        if not self.player.status()['media']: lines[0] = '-stop-'
+        else: lines[0] = os.path.basename(self.player.status()['media'])[:-4]
+        lines[0] = lines[0].ljust(16, ' ')[:16]
+
+        # Line 2 : VOLUME / TIME
+        lines[1] = 'VOLUME: '+str(self.player.settings()['volume'])
+        if self.player.status()['time'] is not None:
+            lines[1] += "  \"" + str(int(self.player.status()['time']))
+        lines[1] = lines[1].ljust(16, ' ')[:16]
+
+        return lines
+
+
+    def draw(self):
+        lines = self.update()
+        if lines[0] != self.display[0]:
+            self.display[0] = lines[0]
+            self.lcd.set_cursor(0, 0)
+            for char in lines[0]:
+                self.lcd.write8(ord(char), True)
+        if lines[1] != self.display[1]:
+            self.display[1] = lines[1]
+            self.lcd.set_cursor(0, 1)
+            for char in lines[1]:
+                self.lcd.write8(ord(char), True)
 
     def listen(self):
         if not self.lcd:
@@ -29,7 +60,6 @@ class KeypadInterface (BaseInterface):
 
         self.log("starting KEYPAD listener")
 
-        display = {'line1': "", 'line2': ""}
         pressed = dict.fromkeys(['UP', 'DOWN', 'RIGHT', 'LEFT', 'SEL'], 0)
         debounce = 5
 
@@ -65,25 +95,6 @@ class KeypadInterface (BaseInterface):
             elif pressed['SEL'] > 0:
                 pressed['SEL']-=1
 
-            # Set Line 1 : MEDIA
-            if not self.player.status()['media']: media = '-stop-'
-            else: media = os.path.basename(self.player.status()['media'])[:-4]
-            media = media.ljust(16, ' ')
-            if media != display['line1']:
-                display['line1'] = media
-                self.lcd.set_cursor(0, 0)
-                for char in media:
-                    self.lcd.write8(ord(char), True)
-
-            # Set Line 2 : VOLUME / TIME
-            volumetime = 'VOLUME: '+str(self.player.settings()['volume'])
-            if self.player.status()['time'] is not None:
-                volumetime += "  \"" + str(int(self.player.status()['time']))
-            volumetime = volumetime.ljust(16, ' ')
-            if volumetime != display['line2']:
-                display['line2'] = volumetime
-                self.lcd.set_cursor(0, 1)
-                for char in volumetime:
-                    self.lcd.write8(ord(char), True)
+            self.draw()
 
             sleep(0.04)

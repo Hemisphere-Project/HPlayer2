@@ -446,24 +446,18 @@ class BasePlayer(object):
 
     # VOLUME
     def volume(self, vol):
+        if (vol < 0): vol = 0
+        if (vol > 100): vol = 100
         self.settings_set('volume', vol)
         self._applyVolume()
 
     # VOLUME INC
     def volume_inc(self):
-        vol = self._settings['volume']
-        vol += 1
-        if vol > 100: vol = 100
-        self.settings_set('volume', vol)
-        self._applyVolume()
+        volume(self._settings['volume']+1)
 
     # VOLUME DEC
     def volume_dec(self):
-        vol = self._settings['volume']
-        vol -= 1
-        if vol < 0: vol = 0
-        self.settings_set('volume', vol)
-        self._applyVolume()
+        volume(self._settings['volume']-1)
 
     # MUTE
     def mute(self, domute):
