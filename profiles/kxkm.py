@@ -77,6 +77,19 @@ player.on(['/unpause'],     player.resume)
 player.on(['/fade'],        fadeColor)
 player.on(['/unfade'],      unfadeColor)
 
+
+# Touch OSC multiPAD
+def on_event(event, args):
+    # print('YO', event, args)
+    if event.startswith('/1/multipush1') and args[0] == 1.0:
+        e = event.split('/')
+        x = int(e[4])-1
+        y = 4-int(e[3])
+        i = y*4+x
+        player.play(i)
+        print('trig ', i)
+player.on(['*'], on_event)
+
 # RUN
 hplayer.setBasePath(["/data/media", "/mnt/usb"])        # Media base path
 hplayer.persistentSettings("/data/hplayer2-kxkm.cfg")   # Path to persitent config

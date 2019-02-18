@@ -162,10 +162,8 @@ class OscInterface (BaseInterface):
 
         @osc(None, None)
         def fallback(path, args, types, src):
-        	self.player.trigger(path, args)
-            #print (nameP, "unknown message", path, "from", src.url)
-            #for a, t in zip(args, types):
-                #print (nameP, "argument of type", t, ":", a)
+            self.player.trigger(path, args)
+            # self.log(path, args, "from", src.url)
 
         # loop and dispatch messages every 100ms
         while self.isRunning():

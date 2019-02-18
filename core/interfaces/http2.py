@@ -64,6 +64,9 @@ class ThreadedHTTPServer(object):
             if file and self.player.validExt(file.filename):
                 filename = secure_filename(file.filename)
                 filepath = os.path.join(self.player.basepath[0], filename)
+                if os.path.exists(filepath):
+                    prefix, ext = os.path.splitext(filepath)
+                    filepath = prefix + '-' + ext
                 file.save(filepath)
                 fileslist_message()
                 self.player.add(filepath)
