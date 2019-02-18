@@ -87,10 +87,10 @@ def on_event(event, args):
         y = 4-int(e[3])
         i = y*4+x
         player.play(i)
-        print('trig ', i)
+        # print('trig ', i)
 player.on(['*'], on_event)
 
 # RUN
-hplayer.setBasePath(["/data/media", "/mnt/usb"])        # Media base path
+hplayer.setBasePath(["/mnt/usb"])        # Media base path
 hplayer.persistentSettings("/data/hplayer2-kxkm.cfg")   # Path to persitent config
 hplayer.run()

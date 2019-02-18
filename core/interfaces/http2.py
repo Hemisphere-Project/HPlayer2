@@ -221,10 +221,13 @@ class ThreadedHTTPServer(object):
         @socketio.on('fileslist')
         def fileslist_message():
             def path_to_dict(path):
+                if os.path.basename(path).startswith('.'):
+                    return None
                 d = {'text': os.path.basename(path),
                      'path': path}
                 if os.path.isdir(path):
-                    d['nodes'] = [path_to_dict(os.path.join(path,x)) for x in sorted(os.listdir(path))]
+                    n = filter (None, [path_to_dict(os.path.join(path,x)) for x in sorted(os.listdir(path))])
+                    d['nodes'] = [x for x in n if x is not None]
                     d['backColor'] = "#EEE"
                     d['selectable'] = False
                 else:
@@ -237,7 +240,10 @@ class ThreadedHTTPServer(object):
 
             liste = []
             for bp in self.player.basepath:
-                liste.append(path_to_dict(bp))
+                br = path_to_dict(bp)
+                if br is not None:
+                    print(br)
+                    liste.append(br)
 
             if len(liste) > 0 and 'nodes' in liste[0]:
                 socketio.emit('files', liste )
