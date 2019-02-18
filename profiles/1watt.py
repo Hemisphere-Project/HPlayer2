@@ -11,7 +11,7 @@ player.loop(1)
 # player.doLog['events'] = True
 
 # Interfaces
-player.addInterface('osc', 4000, 4000).hostOut = network.get_broadcast()
+player.addInterface('osc', 4000, 4000).hostOut = '10.0.0.255'
 player.addInterface('http', 8037)
 player.addInterface('keypad')
 player.addInterface('keyboard')

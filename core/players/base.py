@@ -297,7 +297,7 @@ class BasePlayer(object):
                 liste.append(m)
                 self.settings_set('playlist', liste)
                 if len( self.settings()['playlist'] ) == 1 and self.settings()['autoplay']:
-                    self.play(0)
+                    self.last()  # play last item
 
     # REMOVE from Playlist
     def remove(self, index):
@@ -308,7 +308,8 @@ class BasePlayer(object):
             del liste[index]
             self.settings_set('playlist', liste)
             if index == self._status['index']:
-                self.stop()
+                #self.stop()
+                if self.isPlaying(): self.next()
             elif index < self._status['index']:
                 self._status['index'] -= 1
 
@@ -420,6 +421,12 @@ class BasePlayer(object):
             self._status['index'] -= 1
             if self._status['index'] < 0:
                 self._status['index'] = len(self.settings()['playlist'])-1
+        self.play(self._status['index'])
+
+    # LAST item
+    def last(self):
+        with self._lock:
+            self._status['index'] = len(self.settings()['playlist'])-1
         self.play(self._status['index'])
 
      # SEEK to position

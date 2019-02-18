@@ -63,8 +63,10 @@ class ThreadedHTTPServer(object):
 
             if file and self.player.validExt(file.filename):
                 filename = secure_filename(file.filename)
-                file.save(os.path.join(self.player.basepath[0], filename))
+                filepath = os.path.join(self.player.basepath[0], filename)
+                file.save(filepath)
                 fileslist_message()
+                self.player.add(filepath)
                 return 'ok'
 
             return 'No valid file provided', 404
