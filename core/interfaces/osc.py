@@ -97,7 +97,8 @@ class OscInterface (BaseInterface):
 
         @osc("/load")
         def load(path, args, types):
-            self.player.load(args[0])
+            if args and len(args) >= 1:
+                self.player.load(args[0])
 
         @osc("/stop")
         def stop(path, args, types):
@@ -129,7 +130,8 @@ class OscInterface (BaseInterface):
 
         @osc("/volume")
         def volume(path, args, types):
-            self.player.volume(args[0])
+            if args and len(args) >= 1:
+                self.player.volume(args[0])
 
         @osc("/mute")
         def mute(path, args, types):

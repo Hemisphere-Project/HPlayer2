@@ -61,4 +61,12 @@ def get_hostname():
     return socket.gethostname()
 
 def get_ethmac():
-    return ni.ifaddresses('eth0')[AF_LINK][0]['addr']
+    mac = None
+    ifaces = ni.interfaces()
+    for iface in ifaces:
+        if iface.startswith("e"):
+            try:
+                mac = ni.ifaddresses(iface)[AF_INET][0]['addr']
+            except:
+                pass
+    return mac

@@ -6,23 +6,16 @@ import os, types, platform
 playerName = network.get_hostname()
 
 # PLAYER
-player = hplayer.addplayer('mpv', '1watt')
+player = hplayer.addplayer('mpv', '2watt')
 player.loop(1)
-# player.doLog['events'] = True
 
 # Interfaces
-player.addInterface('osc', 4000, 4000).hostOut = network.get_broadcast('wlan0')
-player.addInterface('http', 8037)
-player.addInterface('keyboard')
+player.addInterface('zyre')
 
 is_RPi = platform.machine().startswith('armv')
 if is_RPi:
 	player.addInterface('keypad')
 
-# Brodcast IPs
-# remotes_broadcast = network.get_broadcast("wlan1")
-# rpis_broadcast = network.get_broadcast("eth0")
-# if rpis_broadcast == '127.0.0.1': rpis_broadcast = network.get_broadcast("wlan0")
 
 # Remote modes
 remote_mode = True

@@ -1,6 +1,6 @@
 from .base import BaseInterface
 from evdev import InputDevice, categorize, ecodes
-from watchdog.observers import Observer
+from watchdog.observers import Observer                 # python3-watchdog ?
 from watchdog.events import FileSystemEventHandler
 from time import sleep
 import sys, subprocess
