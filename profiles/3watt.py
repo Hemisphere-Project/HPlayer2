@@ -9,20 +9,29 @@ is_RPi = platform.machine().startswith('armv')
 playerName = network.get_hostname()
 
 # PLAYER
-player = hplayer.addplayer('mpv', '2watt')
+player = hplayer.addplayer('mpv', '3watt')
 player.loop(1)
 # player.doLog['events'] = True
 
 # Interfaces
 player.addInterface('zyre')
+player.addInterface('osc', 4000, 4000)
 if is_RPi:
-	player.addInterface('osc', 4000, 4000).hostOut = network.get_broadcast('wlan0')
 	player.addInterface('http', 8037)
 	player.addInterface('keyboard')
 	player.addInterface('keypad')
 
 
+
+def yo(args):
+	print ('/yo', args)
+	player.getInterface('zyre').node.broadcast('/yeah', args, 3000)
+
+player.on(['/yo'], yo)
+
 player.on(['/yeah'], lambda args: print("YEAH", args))
+
+
 
 
 # Remote modes

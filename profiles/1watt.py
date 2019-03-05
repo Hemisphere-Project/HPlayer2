@@ -19,10 +19,6 @@ is_RPi = platform.machine().startswith('armv')
 if is_RPi:
 	player.addInterface('keypad')
 
-# Brodcast IPs
-# remotes_broadcast = network.get_broadcast("wlan1")
-# rpis_broadcast = network.get_broadcast("eth0")
-# if rpis_broadcast == '127.0.0.1': rpis_broadcast = network.get_broadcast("wlan0")
 
 # Remote modes
 remote_mode = True

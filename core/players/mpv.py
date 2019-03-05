@@ -201,11 +201,11 @@ class MpvPlayer(BasePlayer):
         self.isRunning(False)
 
         if self._mpv_procThread:
-            print(self.nameP, "stopping process thread")
+            # print(self.nameP, "stopping process thread")
             self._mpv_procThread.join()
 
         if self._mpv_recvThread:
-            print(self.nameP, "stopping socket thread")
+            # print(self.nameP, "stopping socket thread")
             self._mpv_recvThread.join()
 
         print(self.nameP, "stopped")
