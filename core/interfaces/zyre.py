@@ -223,7 +223,7 @@ class TimeServer():
 #
 #  NODE zyre peers discovery, sync and communication
 #
-class KyreNode ():
+class ZyreNode ():
     def  __init__(self, processor=None):
         self.processor = processor
 
@@ -400,7 +400,7 @@ class ZyreInterface (BaseInterface):
 
     def  __init__(self, player):
         super().__init__(player, "ZYRE")
-        self.node = KyreNode(self.processor)
+        self.node = ZyreNode(self.processor)
 
     def listen(self):
         self.log( "interface ready")
