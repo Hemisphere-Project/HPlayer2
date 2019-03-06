@@ -14,7 +14,7 @@ player.loop(1)
 # player.doLog['events'] = True
 
 # Interfaces
-player.addInterface('kyre')
+player.addInterface('zyre')
 player.addInterface('osc', 4000, 4000)
 if is_RPi:
 	player.addInterface('http', 8037)
