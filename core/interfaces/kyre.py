@@ -24,7 +24,7 @@ def zlist_strlist(zlist):
 
 
 PRECISION = 1000000
-SAMPLER_SIZE = 100
+SAMPLER_SIZE = 2
 
 
 #
@@ -197,23 +197,23 @@ class TimeServer():
         # print('TimeServer started on port', self.port)
         terminated = False
         while not terminated:
-            sock = poller.wait(1000)
-            if not sock: continue
-
-            # REQ received
-            if sock == reply_sock:
-                msgin = Zmsg.recv(reply_sock)
-                # sleep(0.001+random.randint(1,9)/1000)
-                msg = Zmsg()
-                msg.addstr(str(int(time.time()*PRECISION)).encode())
-                Zmsg.send( msg, reply_sock )
-                # self.log("Go")
-
-            # INTERNAL commands
-            elif sock == internal_pipe:
-                msg = Zmsg.recv(internal_pipe)
-                if not msg or msg.popstr() == b"$TERM":
-                    break
+            # time.sleep(1)
+            # sock = poller.wait(1000)
+            # if not sock: continue
+            #
+            # # REQ received
+            # if sock == reply_sock:
+            msgin = Zmsg.recv(reply_sock)
+            msg = Zmsg()
+            msg.addstr(str(int(time.time()*PRECISION)).encode())
+            Zmsg.send( msg, reply_sock )
+            # self.log("Go")
+            #
+            # # INTERNAL commands
+            # elif sock == internal_pipe:
+            #     msg = Zmsg.recv(internal_pipe)
+            #     if not msg or msg.popstr() == b"$TERM":
+            #         break
 
         # print('TimeServer stopped')
         self.done = True
@@ -223,7 +223,7 @@ class TimeServer():
 #
 #  NODE zyre peers discovery, sync and communication
 #
-class ZyreNode ():
+class KyreNode ():
     def  __init__(self, processor=None):
         self.processor = processor
 
@@ -292,27 +292,30 @@ class ZyreNode ():
         zyre_node.set_header (b"TS-PORT", str(self.timeserver.port).encode());
         zyre_node.start()
         zyre_node.join(b"broadcast")
+        zyre_node.join(b"sync")
         zyre_pipe = zyre_node.socket()
 
         poller = Zpoller(zyre_pipe, internal_pipe)
 
         internal_pipe.signal(0)
 
-        # print('ZYRE Node started')
+        print('ZYRE Node started')
         terminated = False
         while not terminated:
-            sock = poller.wait(2000)
-            if not sock: continue
-
+            # time.sleep(1)
+            # sock = poller.wait(1000)
+            # if not sock:
+            #     continue
+            #
             #
             # ZYRE receive
             #
-            if sock == zyre_pipe:
+            # if sock == zyre_pipe:
                 e = ZyreEvent(zyre_node)
 
                 # ANY
                 if e.type() != b"EVASIVE":
-                    # e.print()
+                    e.print()
                     pass
 
                 # ENTER: add to phonebook for external contact (i.e. TimeSync)
@@ -347,40 +350,40 @@ class ZyreNode ():
                     else: data['group'] = 'whisper'
 
                     self.eventProc(data)
-
-
             #
-            # INTERNAL commands
             #
-            elif sock == internal_pipe:
-                msg = Zmsg.recv(internal_pipe)
-                if not msg: break
-
-                command = msg.popstr()
-                if command == b"$TERM":
-                    print('ZYRE Node TERM')
-                    break
-
-                elif command == b"JOIN":
-                    group = msg.popstr()
-                    zyre_node.join(group)
-
-                elif command == b"LEAVE":
-                    group = msg.popstr()
-                    zyre_node.leave(group)
-
-                elif command == b"SHOUT":
-                    group = msg.popstr()
-                    data = msg.popstr()
-                    zyre_node.shouts(group, data)
-
-                    # if own group -> send to self too !
-                    groups = zlist_strlist( zyre_node.own_groups() )
-                    if group.decode() in groups:
-                        data = json.loads(data.decode())
-                        data['from'] = 'self'
-                        data['group'] = group.decode()
-                        self.eventProc(data)
+            # #
+            # # INTERNAL commands
+            # #
+            # elif sock == internal_pipe:
+            #     msg = Zmsg.recv(internal_pipe)
+            #     if not msg: break
+            #
+            #     command = msg.popstr()
+            #     if command == b"$TERM":
+            #         print('ZYRE Node TERM')
+            #         break
+            #
+            #     elif command == b"JOIN":
+            #         group = msg.popstr()
+            #         zyre_node.join(group)
+            #
+            #     elif command == b"LEAVE":
+            #         group = msg.popstr()
+            #         zyre_node.leave(group)
+            #
+            #     elif command == b"SHOUT":
+            #         group = msg.popstr()
+            #         data = msg.popstr()
+            #         zyre_node.shouts(group, data)
+            #
+            #         # if own group -> send to self too !
+            #         groups = zlist_strlist( zyre_node.own_groups() )
+            #         if group.decode() in groups:
+            #             data = json.loads(data.decode())
+            #             data['from'] = 'self'
+            #             data['group'] = group.decode()
+            #             self.eventProc(data)
 
 
         # zyre_node.stop()  # HANGS !
@@ -397,8 +400,7 @@ class ZyreInterface (BaseInterface):
 
     def  __init__(self, player):
         super().__init__(player, "ZYRE")
-        self.node = ZyreNode(self.processor)
-        self.node.join('sync')
+        self.node = KyreNode(self.processor)
 
     def listen(self):
         self.log( "interface ready")

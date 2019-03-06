@@ -16,8 +16,8 @@ player.loop(1)
 # Interfaces
 player.addInterface('zyre')
 if is_RPi:
-	player.addInterface('osc', 4000, 4000).hostOut = network.get_broadcast('wlan0')
-	player.addInterface('http', 8037)
+	# player.addInterface('osc', 4000, 4000).hostOut = network.get_broadcast('wlan0')
+	# player.addInterface('http', 8037)
 	player.addInterface('keyboard')
 	player.addInterface('keypad')
 
