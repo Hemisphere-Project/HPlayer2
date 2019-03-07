@@ -24,19 +24,19 @@ long lastInfo = 0;
 long lastNews = 0;
 
 // IP
-String myIP = "3.0.0.";
+String myIP = "10.0.0.";
 
-String hostIP = "3.0.0.1";
+String hostIP = "10.0.0.1";
 int hostPORT_http = 8037;
 int hostPORT_osc = 4000;
-int remotePORT_osc = 4001;
 
 // Pinout: {media1, media2, media3, media4, push, dec, inc}
 // SCL = 14 / SDA = 2 / RX = 3 / TX = 1
 //
 int *pins;
-int pinout[1][2] = {  {D6, D7}                           // model 0 : ciconia 1                   
-                      //{D3, D7, D6, 14, 2, 3, 1}    
+int pinout[3][7] = {  {},                           // ciconia
+                      {2, D3, D7, 14, D6, 3, 1},    // remote v1 (square)                        
+                      {D3, D7, D6, 14, 2, 3, 1}     // remote v2 (inline)
                     };
 
 
@@ -49,8 +49,8 @@ void setup(void) {
   settings_load( keys );
 
   // Settings SET EEPROM !
-  // settings_set("id", 2);
-  // settings_set("model", 0);   // 0: remote ciconia 
+  settings_set("id", 3);
+  settings_set("model", 2);   // 0: remote ciconia -- 1: remote v1 (square) -- 2: remote v2 (inline)
 
   // Oled
   oled_init();
@@ -58,9 +58,9 @@ void setup(void) {
 
   // Wifi
   myIP += String(settings_get("id")+100);
-  // wifi_static(myIP);
-  wifi_connect("ciconia");
-  wifi_ota( "ciconia v" + String(CR_VERSION, 2) );
+  wifi_static(myIP);
+  wifi_connect("24watt");
+  wifi_ota( "watt-remote v" + String(CR_VERSION, 2) );
   wifi_onConnect(doOnConnect);
   wifi_onDisconnect(doOnDisconnect);
 
@@ -73,22 +73,46 @@ void setup(void) {
   // SET PULLUP
   for(int k=0; k<5; k++) pinMode(pins[k], INPUT_PULLUP);
   
-  // next 
+  // media1 
   attachInterrupt(digitalPinToInterrupt(pins[0]), []() {
-    event_trigger(pins[0], next);
+    event_trigger(pins[0], media1);
   }, FALLING);
 
-  // prev
+  // media2
   attachInterrupt(digitalPinToInterrupt(pins[1]), []() {
-    event_trigger(pins[1], prev);
+    event_trigger(pins[1], media2);
   }, FALLING);
+
+  // media3
+  attachInterrupt(digitalPinToInterrupt(pins[2]), []() {
+    event_trigger(pins[2], media3);
+  }, FALLING);
+
+  // media4 
+  attachInterrupt(digitalPinToInterrupt(pins[3]), []() {
+    event_trigger(pins[3], media4);
+  }, FALLING);
+
+  // PUSH EN
+  attachInterrupt(digitalPinToInterrupt(pins[4]), []() {
+    event_trigger(pins[4], push);
+  }, FALLING);
+
+  // ENCODER
+#ifdef DEBUG
+#else
+  encoder_init(3, 1);
+  encoder_inc( incr );
+  encoder_dec( decr );
+#endif
 
   //UDP
   // input socket
-  udp_in.begin(remotePORT_osc);
+  udp_in.begin(hostPORT_osc);
 }
 
 void loop(void) {
+  encoder_loop();
   event_loop();
 
   if (wifi_isok()) {
@@ -100,7 +124,7 @@ void loop(void) {
         udpPacket[len] = 0;
         LOGF("UDP: packet received: %s\n", udpPacket);
         if (udpPacket[0] != '/') {
-          oled_status( getValue(udpPacket, '"', 0), String("  ")+getValue(udpPacket, '"', 1) );
+          oled_status( getValue(udpPacket, '#', 0), getValue(udpPacket, '#', 1) );
           lastInfo = millis();
           lastNews = millis();
         }
@@ -147,12 +171,32 @@ void doOnDisconnect() {
   if (!shuttingDown) oled_status("-no wifi");
 }
 
-void next() {
-  http_get("/next");
+void media1() {
+  http_get("/event/btn1");
 }
 
-void prev() {
-  http_get("/prev");
+void media2() {
+  http_get("/event/btn2");
+}
+
+void media3() {
+  http_get("/event/btn3");
+}
+
+void media4() {
+  http_get("/event/btn4");
+}
+
+void incr() {
+  http_get("/event/inc");
+}
+
+void decr() {
+  http_get("/event/dec");
+}
+
+void push() {
+  http_get("/event/push");
 }
 
 void shutdown() {
