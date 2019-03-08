@@ -21,7 +21,7 @@ if is_RPi:
 	player.addInterface('keyboard')
 	player.addInterface('keypad')
 
-# 
+#
 #
 # def yo(args):
 # 	print ('/yo', args)
@@ -104,7 +104,7 @@ def broadcast(path, *args):
 	# player.getInterface('osc').hostOut = network.get_broadcast('wlan0')
 	# player.getInterface('osc').sendBurst(path, *args)
 	if path.startswith('/play'):
-		player.getInterface('zyre').node.broadcast(path, args, 1000)
+		player.getInterface('zyre').node.broadcast(path, args, 300)
 	else:
 		player.getInterface('zyre').node.broadcast(path, args)
 
