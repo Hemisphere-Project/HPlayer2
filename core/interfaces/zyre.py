@@ -275,7 +275,9 @@ class ZyreNode ():
         # Set timer
         if 'at' in data:
             data['at'] -= self.timebook.cs( data['from'] )
-            delay =  (data['at']-self.deltadelay) / PRECISION - time.time()
+            # delay =  (data['at']-self.deltadelay) / PRECISION - time.time()
+            delay =  (data['at']) / PRECISION - time.time()
+
 
             if delay <= 0:
                 self.preProcessor2(data)
