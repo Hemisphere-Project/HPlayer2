@@ -235,6 +235,8 @@ class ZyreNode ():
         self.actor = Zactor(self._actor_fn, create_string_buffer(b"Zyre node"))
         self.done = False
 
+        self.deltadelay = 0
+
     def stop(self):
         self.timeserver.stop()
         self.timebook.stop()
@@ -267,20 +269,29 @@ class ZyreNode ():
     def leave(self, group):
         self.actor.sock().send(b"ss", b"LEAVE", group.encode())
 
-    def eventProc(self, data):
+    def preProcessor1(self, data):
 
         # if a programmed time is provided, correct it with peer CS
         # Set timer
         if 'at' in data:
             data['at'] -= self.timebook.cs( data['from'] )
-            delay =  data['at'] / PRECISION - time.time()
-            print('programmed event in', delay, 'seconds')
-            t = Timer( delay, self.processor, args=[data])
-            t.start()
+            delay =  (data['at']-self.deltadelay) / PRECISION - time.time()
+
+            if delay <= 0:
+                self.preProcessor2(data)
+            else:
+                print('programmed event in', delay, 'seconds')
+                t = Timer( delay, self.preProcessor2, args=[data])
+                t.start()
 
         elif self.processor:
-            self.processor(data)
+            self.preProcessor2(data)
 
+    def preProcessor2(self, data):
+        if 'at' in data:
+            self.deltadelay += int(time.time()*PRECISION)-data['at']
+
+        self.processor(data)
 
 
 
@@ -349,7 +360,7 @@ class ZyreNode ():
                     if e.type() == b"SHOUT": data['group'] = e.group().decode()
                     else: data['group'] = 'whisper'
 
-                    self.eventProc(data)
+                    self.preProcessor1(data)
 
 
             #
@@ -383,7 +394,7 @@ class ZyreNode ():
                         data = json.loads(data.decode())
                         data['from'] = 'self'
                         data['group'] = group.decode()
-                        self.eventProc(data)
+                        self.preProcessor1(data)
 
 
         # zyre_node.stop()  # HANGS !
