@@ -1,11 +1,9 @@
-from .base import BaseInterface
 from zyre import Zyre, ZyreEvent
 from czmq import *
 import time, random
 from time import sleep
 import json
 from threading import Timer
-
 
 from ctypes import string_at
 from sys import getsizeof
@@ -25,7 +23,7 @@ def zlist_strlist(zlist):
 
 PRECISION = 1000000
 SAMPLER_SIZE = 1000
-KEEP_SAMPLE = [0.1, 0.4]
+KEEP_SAMPLE = 0.3
 
 
 #
@@ -72,7 +70,7 @@ class TimeClient():
     def compute(self, sampler):
         if len(sampler) >= SAMPLER_SIZE:
             RTTs = sorted(sampler, key=lambda x: x.RTT)
-            RTTs = RTTs[int(len(RTTs) * KEEP_SAMPLE[0]) : int(len(RTTs) * KEEP_SAMPLE[1])]
+            RTTs = RTTs[2 : int(len(RTTs) * KEEP_SAMPLE)]
             sampler = RTTs
             sampler.reverse()
 
@@ -101,7 +99,7 @@ class TimeClient():
         internal_pipe.signal(0)
         retry = 0
 
-        # print("TimeClient: Starts sampling", self.peer['ip'])
+        print("TimeClient: Starts sampling", self.peer['ip'])
 
         sampler = []
         sample = TimeSample(req_sock)
@@ -131,7 +129,7 @@ class TimeClient():
                 if not msg or msg.popstr() == b"$TERM":
                     return
 
-        # print("TimeClient: Sampling done", self.peer['ip'])
+        print("TimeClient: Sampling done", self.peer['ip'])
         self.compute(sampler)
         self.done = True
 
@@ -316,7 +314,7 @@ class ZyreNode ():
 
                 # ANY
                 if e.type() != b"EVASIVE":
-                    # e.print()
+                    e.print()
                     pass
 
                 # ENTER: add to phonebook for external contact (i.e. TimeSync)
@@ -394,103 +392,20 @@ class ZyreNode ():
         self.done = True
 
 
-#
-#  HPLAYER2 Zyre interface
-#
-class ZyreInterface (BaseInterface):
 
-    def  __init__(self, player):
-        super().__init__(player, "ZYRE")
-        self.node = ZyreNode(self.processor)
 
-    def listen(self):
-        self.log( "interface ready")
-        self.stopped.wait()
-        self.node.stop()
-        self.log( "closing sockets...") # CLOSING is messy !
+
+def proc(data):
+    print('PROC', data)
+
+node = ZyreNode(proc)
+
+while True:
+    try:
         sleep(1)
+    except KeyboardInterrupt:
+        break
 
-    def processor(self, data):
-
-        self.log('Received: ', data)
-
-        if 'at' in data:
-            self.log('DELTA', int(time.time()*PRECISION)-data['at'], 'ns' )
-
-        if not self.player:
-            return
-
-        path = data['event']
-        args = data['args']
-
-        if path == '/play':
-            self.player.loop(0)
-            if args and len(args) >= 1:
-                self.player.play(args[0])
-            else:
-                self.player.play()
-
-        elif path == '/playloop':
-            self.player.loop(1)
-            if args and len(args) >= 1:
-                self.player.play(args[0])
-            else:
-                self.player.play()
-
-        elif path == '/playindex':
-            if args and len(args) >= 1:
-                self.player.play(args[0])
-
-        elif path == '/playlist':
-            if args and len(args) >= 1:
-                self.player.load(args[0])
-                if len(args) >= 2: self.player.play(args[1])
-                else: self.player.play()
-
-        elif path == '/load':
-            if args and len(args) >= 1:
-                self.player.load(args[0])
-
-        elif path == '/stop':
-            self.player.stop()
-
-        elif path == '/pause':
-            self.player.pause()
-
-        elif path == '/resume':
-            self.player.resume()
-
-        elif path == '/next':
-            self.player.next()
-
-        elif path == '/prev':
-            self.player.prev()
-
-        elif path == '/loop':
-            self.player.loop(1)
-
-        elif path == '/unloop':
-            self.player.loop(0)
-
-        elif path == '/volume':
-            if args and len(args) >= 1:
-                self.player.volume(args[0])
-
-        elif path == '/mute':
-            self.player.mute(True)
-
-        elif path == '/unmute':
-            self.player.mute(False)
-
-        elif path == '/pan':
-            if args and len(args) >= 2:
-                self.player.pan(args[0], args[1])
-
-        elif path == '/flip':
-            self.player.flip(True)
-
-        elif path == '/unflip':
-            self.player.flip(False)
-
-        else:
-            self.player.trigger(path, args)
+node.stop()
+sleep(1)
+print("Bye!")
