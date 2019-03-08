@@ -276,8 +276,8 @@ class ZyreNode ():
         # Set timer
         if 'at' in data:
             data['at'] -= self.timebook.cs( data['from'] )
-            delay =  (data['at']-self.deltadelay) / PRECISION - time.time()
-            #delay =  (data['at']) / PRECISION - time.time()
+            #delay =  (data['at']-self.deltadelay) / PRECISION - time.time()
+            delay =  (data['at']) / PRECISION - time.time()
 
 
             if delay <= 0:
@@ -292,7 +292,7 @@ class ZyreNode ():
 
     def preProcessor2(self, data):
         if 'at' in data:
-            self.deltadelay += (int(time.time()*PRECISION)-data['at'])/2
+            self.deltadelay += (int(time.time()*PRECISION)-data['at'])  # Might get crazy..
 
         self.processor(data)
 

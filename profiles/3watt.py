@@ -104,7 +104,7 @@ def broadcast(path, *args):
 	# player.getInterface('osc').hostOut = network.get_broadcast('wlan0')
 	# player.getInterface('osc').sendBurst(path, *args)
 	if path.startswith('/play'):
-		player.getInterface('zyre').node.broadcast(path, list(args), 300)
+		player.getInterface('zyre').node.broadcast(path, list(args), 500)
 	else:
 		player.getInterface('zyre').node.broadcast(path, list(args))
 
