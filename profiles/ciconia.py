@@ -37,6 +37,7 @@ def syncTest(arg):
 player.on(['/synctest'], syncTest)
 
 
+player.volume(50)
 
 # RUN
 hplayer.setBasePath(["/data/media", "/mnt/usb"])        # Media base path

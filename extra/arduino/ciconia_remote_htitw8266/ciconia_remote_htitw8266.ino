@@ -58,7 +58,7 @@ void setup(void) {
 
   // Wifi
   myIP += String(settings_get("id")+100);
-  // wifi_static(myIP);
+  wifi_static(myIP);
   wifi_connect("ciconia");
   wifi_ota( "ciconia v" + String(CR_VERSION, 2) );
   wifi_onConnect(doOnConnect);
