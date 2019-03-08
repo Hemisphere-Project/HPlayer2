@@ -157,8 +157,8 @@ class TimeBook():
     def sync(self, uuid):
         if uuid in self.phonebook:
             ip = self.phonebook[uuid]['ip']
-            if not ip in self.peers:
-                self.peers[ip] = TimeClient(self.phonebook[uuid])
+            # if not ip in self.peers:
+            self.peers[ip] = TimeClient(self.phonebook[uuid])
 
     def cs(self, uuid):
         if uuid in self.phonebook:

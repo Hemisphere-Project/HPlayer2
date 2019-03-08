@@ -11,7 +11,7 @@ playerName = network.get_hostname()
 # PLAYER
 player = hplayer.addplayer('mpv', '3watt')
 player.loop(1)
-# player.doLog['events'] = True
+player.doLog['events'] = True
 
 # Interfaces
 player.addInterface('zyre')
@@ -103,7 +103,10 @@ def vol_dec():
 def broadcast(path, *args):
 	# player.getInterface('osc').hostOut = network.get_broadcast('wlan0')
 	# player.getInterface('osc').sendBurst(path, *args)
-	player.getInterface('zyre').node.broadcast(path, args, 1000)
+	if path.startswith('/play'):
+		player.getInterface('zyre').node.broadcast(path, args, 1000)
+	else:
+		player.getInterface('zyre').node.broadcast(path, args)
 
 
 def play_activedir(index):
