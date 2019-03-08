@@ -103,7 +103,7 @@ def vol_dec():
 def broadcast(path, *args):
 	# player.getInterface('osc').hostOut = network.get_broadcast('wlan0')
 	# player.getInterface('osc').sendBurst(path, *args)
-	player.getInterface('zyre').node.broadcast(path, args, 3000)
+	player.getInterface('zyre').node.broadcast(path, args, 1000)
 
 
 def play_activedir(index):
