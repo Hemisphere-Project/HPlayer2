@@ -11,7 +11,7 @@ playerName = network.get_hostname()
 # PLAYER
 player = hplayer.addplayer('mpv', '3watt')
 player.loop(1)
-player.doLog['events'] = True
+# player.doLog['events'] = True
 
 # Interfaces
 player.addInterface('zyre')
@@ -21,15 +21,15 @@ if is_RPi:
 	player.addInterface('keyboard')
 	player.addInterface('keypad')
 
-
-
-def yo(args):
-	print ('/yo', args)
-	player.getInterface('zyre').node.broadcast('/yeah', args, 3000)
-
-player.on(['/yo'], yo)
-
-player.on(['/yeah'], lambda args: print("YEAH", args))
+# 
+#
+# def yo(args):
+# 	print ('/yo', args)
+# 	player.getInterface('zyre').node.broadcast('/yeah', args, 3000)
+#
+# player.on(['/yo'], yo)
+#
+# player.on(['/yeah'], lambda args: print("YEAH", args))
 
 
 
