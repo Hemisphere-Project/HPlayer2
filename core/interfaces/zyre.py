@@ -24,8 +24,8 @@ def zlist_strlist(zlist):
 
 
 PRECISION = 1000000
-SAMPLER_SIZE = 1000
-KEEP_SAMPLE = [0.1, 0.4]
+SAMPLER_SIZE = 500
+KEEP_SAMPLE = [0.05, 0.5]
 
 
 #
