@@ -303,7 +303,6 @@ class ZyreNode ():
         print('ZYRE Node started')
         terminated = False
         while not terminated:
-            time.sleep(1)
             sock = poller.wait(1000)
             if not sock:
                 continue
