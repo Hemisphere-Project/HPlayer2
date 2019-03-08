@@ -11,6 +11,7 @@ player.loop(1)
 # player.doLog['events'] = True
 
 # Interfaces
+player.addInterface('zyre')
 player.addInterface('osc', 4000, 4000).hostOut = network.get_broadcast('wlan0')
 player.addInterface('http', 8037)
 player.addInterface('keyboard')
@@ -87,10 +88,12 @@ def vol_dec():
 
 # Broadcast Order on OSC to other Pi's
 def broadcast(path, *args):
-	player.getInterface('osc').hostOut = network.get_broadcast('wlan0')
-	# player.getInterface('osc').send(path, *args)
-	player.getInterface('osc').sendBurst(path, *args)
-	# print("broadcast to", player.getInterface('osc').hostOut)
+	if path.startswith('/play'):
+		player.getInterface('zyre').node.broadcast(path, list(args), 500)
+	else:
+		player.getInterface('zyre').node.broadcast(path, list(args))
+	# player.getInterface('osc').hostOut = network.get_broadcast('wlan0')
+	# player.getInterface('osc').sendBurst(path, *args)
 
 def play_activedir(index):
 	broadcast('/playlist', current_dir(), index)

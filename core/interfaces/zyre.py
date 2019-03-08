@@ -428,7 +428,8 @@ class ZyreInterface (BaseInterface):
         self.log('Received: ', data)
 
         if 'at' in data:
-            self.log('DELTA', int(time.time()*PRECISION)-data['at'], 'ns' )
+            # self.log('DELTA', int(time.time()*PRECISION)-data['at'], 'ns' )
+            pass
 
         if not self.player:
             return
@@ -459,6 +460,7 @@ class ZyreInterface (BaseInterface):
                 self.player.load(args[0])
                 if len(args) >= 2: self.player.play(args[1])
                 else: self.player.play()
+                # self.log('DELTA PLAY', int(time.time()*PRECISION)-data['at'], 'ns' )
 
         elif path == '/load':
             if args and len(args) >= 1:
