@@ -4,7 +4,7 @@ from czmq import *
 import time, random
 from time import sleep
 import json
-from threading import Timer
+from threading import Timer, Lock
 
 
 from ctypes import string_at
@@ -142,30 +142,52 @@ class TimeBook():
     def  __init__(self):
         self.peers = {}
         self.phonebook = {}
+        self.activePeers = 0
+        self._lock = Lock()
 
     def stop(self):
-        for peer in self.peers.values():
-            peer.stop()
+        with self._lock:
+            for peer in self.peers.values():
+                peer.stop()
 
     def newpeer(self, uuid, addr, port):
-        self.phonebook[uuid] = {}
-        self.phonebook[uuid]['uuid'] = uuid
-        self.phonebook[uuid]['ip'] = extract_ip(addr)
-        self.phonebook[uuid]['port'] = port.decode()
-        print("New Peer detected", self.phonebook[uuid])
+        self.gone(uuid)
+        with self._lock:
+            self.phonebook[uuid] = {}
+            self.phonebook[uuid]['uuid'] = uuid
+            self.phonebook[uuid]['ip'] = extract_ip(addr)
+            self.phonebook[uuid]['port'] = port.decode()
+            self.phonebook[uuid]['active'] = True
+            self.activePeers += 1
+            print("New Peer detected", self.phonebook[uuid])
 
     def sync(self, uuid):
-        if uuid in self.phonebook:
-            ip = self.phonebook[uuid]['ip']
-            # if not ip in self.peers:
-            self.peers[ip] = TimeClient(self.phonebook[uuid])
+        with self._lock:
+            if uuid in self.phonebook:
+                ip = self.phonebook[uuid]['ip']
+                # if not ip in self.peers:
+                self.peers[ip] = TimeClient(self.phonebook[uuid])
+
+    def gone(self, uuid):
+        with self._lock:
+            if uuid in self.phonebook:
+                self.phonebook[uuid]['active'] = False
+                self.activePeers -= 1
+
+    def activeCount(self):
+        c = 0
+        with self._lock:
+            c = self.activePeers
+        return c
 
     def cs(self, uuid):
-        if uuid in self.phonebook:
-            ip = self.phonebook[uuid]['ip']
-            if ip in self.peers:
-                return self.peers[ip].clockshift
-        return 0
+        shift = 0
+        with self._lock:
+            if uuid in self.phonebook:
+                ip = self.phonebook[uuid]['ip']
+                if ip in self.peers:
+                    shift = self.peers[ip].clockshift
+        return shift
 
 
 
@@ -338,6 +360,7 @@ class ZyreNode ():
 
                 # EXIT
                 elif e.type() == b"EXIT":
+                    self.timebook.gone(e.peer_uuid())
                     print( "ZYRE Node: peer is gone..")
 
                 # JOIN
@@ -422,6 +445,10 @@ class ZyreInterface (BaseInterface):
         self.node.stop()
         self.log( "closing sockets...") # CLOSING is messy !
         sleep(1)
+
+    def activeCount(self):
+        c = self.node.timebook.activeCount()+1
+        return c
 
     def processor(self, data):
 

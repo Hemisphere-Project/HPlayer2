@@ -12,7 +12,7 @@ player.loop(1)
 
 # Interfaces
 player.addInterface('zyre')
-player.addInterface('osc', 4000, 4000).hostOut = network.get_broadcast('wlan0')
+player.addInterface('osc', 4000, 4000).hostOut = '10.0.0.255'
 player.addInterface('http', 8037)
 player.addInterface('keyboard')
 
@@ -24,48 +24,6 @@ if is_RPi:
 # Remote modes
 remote_mode = True
 
-# Sub folders
-if is_RPi: base_path = '/mnt/usb'
-else: base_path = '/home/mgr/Videos'
-available_dir = [d for d in next(os.walk(base_path))[1] if not d.startswith('.')]
-available_dir.sort()
-if len(available_dir) == 0: available_dir.insert(0,'')
-if len(available_dir) >= 2: active_dir = 1
-else: active_dir = 0
-
-
-def current_dir():
-	return os.path.join(base_path, available_dir[active_dir])
-
-def next_dir():
-	new_dir = active_dir+1
-	if new_dir  >= len(available_dir): new_dir=0
-	set_activedir(new_dir)
-
-def prev_dir():
-	new_dir = active_dir-1
-	if new_dir < 0: new_dir=len(available_dir)-1
-	set_activedir(new_dir)
-
-def sel_lastdir():
-	set_activedir(len(available_dir)-1)
-
-def sel_firstdir():
-	set_activedir(0)
-
-def set_activedir(index):
-	if index >= 0 and index < len(available_dir):
-		global active_dir
-		active_dir = index
-		broadcast('/scene', available_dir[active_dir])
-
-def change_scene(dir):
-	if isinstance(dir, list):
-		dir = dir[0]
-	if dir in available_dir:
-		global active_dir
-		active_dir = available_dir.index(dir)
-		# DO NOT RE-BROADCAST !!
 
 def switch_mode():
 	global remote_mode
@@ -108,6 +66,52 @@ def play_firstdir(index):
 	play_activedir(index)
 
 
+def current_dir():
+	return os.path.join(base_path, available_dir[active_dir])
+
+def next_dir():
+	new_dir = active_dir+1
+	if new_dir  >= len(available_dir): new_dir=0
+	set_activedir(new_dir)
+
+def prev_dir():
+	new_dir = active_dir-1
+	if new_dir < 0: new_dir=len(available_dir)-1
+	set_activedir(new_dir)
+
+def sel_lastdir():
+	set_activedir(len(available_dir)-1)
+
+def sel_firstdir():
+	set_activedir(0)
+
+def set_activedir(index):
+	if index >= 0 and index < len(available_dir):
+		global active_dir, active_dir_length
+		active_dir = index
+		active_dir_length = len(player.buildList(current_dir()))
+		broadcast('/scene', available_dir[active_dir])
+
+def change_scene(dir):
+	if isinstance(dir, list):
+		dir = dir[0]
+	if dir in available_dir:
+		global active_dir
+		active_dir = available_dir.index(dir)
+		# DO NOT RE-BROADCAST !!
+
+# Sub folders
+if is_RPi: base_path = '/mnt/usb'
+else: base_path = '/home/mgr/Videos'
+available_dir = [d for d in next(os.walk(base_path))[1] if not d.startswith('.')]
+available_dir.sort()
+active_dir_length = 0
+if len(available_dir) == 0: available_dir.insert(0,'')
+if len(available_dir) >= 2: set_activedir(1)
+else: set_activedir(0)
+
+
+
 player.on(['/scene'], 			change_scene)
 
 # Bind Keypad
@@ -147,11 +151,29 @@ player.on(['push'], 		switch_mode)
 # OSC synctest request from ESP remotes
 def syncTest(arg):
 	if remote_mode:
-		display = available_dir[active_dir] + " #"
+		#SCENE
+		display = available_dir[active_dir].replace("scene ", "")[:3].ljust(3) + " "
+
+		# MEDIA
+		media = player.status()['media']
+		for i in range(4):
+			if i == player.status()['index'] and media.startswith(current_dir()): display += str(i+1)
+			elif i < active_dir_length: display += '-'
+			else : display += '.'
+
+		display += "#"
 		if not player.status()['media']: display += '-stop-'
-		else: display += os.path.basename(player.status()['media'])[:-4]
+		else: display += os.path.basename(media)[:-4]
+
 	else:
-		display = "VOLUME#"+str(player.settings()['volume'])
+		# VOLUME
+		vol = player.settings()['volume']
+		display = "VOL. "
+		if vol < 100: display += " "
+		if vol < 10:  display += " "
+		display += str(vol)
+		# PEERS
+		display += "#Dispo. "+str(player.getInterface('zyre').activeCount())
 
 	player.getInterface('osc').send(display)
 
