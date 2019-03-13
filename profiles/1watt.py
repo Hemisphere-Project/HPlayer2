@@ -60,7 +60,7 @@ def vol_dec():
 # Broadcast Order on OSC to other Pi's
 def broadcast(path, *args):
 	if path.startswith('/play'):
-		player.getInterface('zyre').node.broadcast(path, list(args), 500)
+		player.getInterface('zyre').node.broadcast(path, list(args), 434)
 	else:
 		player.getInterface('zyre').node.broadcast(path, list(args))
 	# player.getInterface('osc').hostOut = network.get_broadcast('wlan0')
