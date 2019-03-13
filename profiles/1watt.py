@@ -152,28 +152,26 @@ player.on(['push'], 		switch_mode)
 def syncTest(arg):
 	if remote_mode:
 		#SCENE
-		display = available_dir[active_dir].replace("scene ", "")[:3].ljust(3) + " "
+		display = available_dir[active_dir].replace("scene ", "S.")[:5].ljust(5) + " "
 
 		# MEDIA
 		media = player.status()['media']
 		for i in range(4):
-			if i == player.status()['index'] and media.startswith(current_dir()): display += str(i+1)
-			elif i < active_dir_length: display += '-'
+			# if i == player.status()['index'] and media.startswith(current_dir()): display += str(i+1)
+			if i < active_dir_length: display += '-'
 			else : display += '.'
 
 		display += "#"
 		if not player.status()['media']: display += '-stop-'
-		else: display += os.path.basename(media)[:-4]
+		else: display += media[:-4].replace(base_path, '').replace("/scene ", "S.").replace("/", " / ")
 
 	else:
 		# VOLUME
 		vol = player.settings()['volume']
-		display = "VOL. "
-		if vol < 100: display += " "
-		if vol < 10:  display += " "
-		display += str(vol)
+		display = "VOLUME "
+		display += str(vol).rjust(3)
 		# PEERS
-		display += "#Dispo. "+str(player.getInterface('zyre').activeCount())
+		display += "#Dispositifs".ljust(19)+str(player.getInterface('zyre').activeCount()).rjust(2)
 
 	player.getInterface('osc').send(display)
 
