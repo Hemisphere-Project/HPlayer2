@@ -21,6 +21,19 @@ if is_RPi:
 	player.addInterface('keypad')
 
 
+# FIX early boot ETH0 error
+from threading import Timer
+import subprocess
+from time import sleep
+def restartEth0():
+    print('switch OFF eth0')
+    subprocess.run(['ip', 'link', 'set', 'eth0', 'down'])
+    sleep(15)
+    print('switch ON eth0')
+    subprocess.run(['ip', 'link', 'set', 'eth0', 'up'])  
+Timer(5, restartEth0).start()
+
+
 # Remote modes
 remote_mode = True
 
