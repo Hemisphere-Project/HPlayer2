@@ -4,7 +4,7 @@ from czmq import *
 import time, random
 from time import sleep
 import json
-from threading import Timer
+from threading import Timer, Lock
 
 
 from ctypes import string_at
@@ -142,30 +142,52 @@ class TimeBook():
     def  __init__(self):
         self.peers = {}
         self.phonebook = {}
+        self.activePeers = 0
+        self._lock = Lock()
 
     def stop(self):
-        for peer in self.peers.values():
-            peer.stop()
+        with self._lock:
+            for peer in self.peers.values():
+                peer.stop()
 
     def newpeer(self, uuid, addr, port):
-        self.phonebook[uuid] = {}
-        self.phonebook[uuid]['uuid'] = uuid
-        self.phonebook[uuid]['ip'] = extract_ip(addr)
-        self.phonebook[uuid]['port'] = port.decode()
-        print("New Peer detected", self.phonebook[uuid])
+        self.gone(uuid)
+        with self._lock:
+            self.phonebook[uuid] = {}
+            self.phonebook[uuid]['uuid'] = uuid
+            self.phonebook[uuid]['ip'] = extract_ip(addr)
+            self.phonebook[uuid]['port'] = port.decode()
+            self.phonebook[uuid]['active'] = True
+            self.activePeers += 1
+            print("New Peer detected", self.phonebook[uuid])
 
     def sync(self, uuid):
-        if uuid in self.phonebook:
-            ip = self.phonebook[uuid]['ip']
-            # if not ip in self.peers:
-            self.peers[ip] = TimeClient(self.phonebook[uuid])
+        with self._lock:
+            if uuid in self.phonebook:
+                ip = self.phonebook[uuid]['ip']
+                # if not ip in self.peers:
+                self.peers[ip] = TimeClient(self.phonebook[uuid])
+
+    def gone(self, uuid):
+        with self._lock:
+            if uuid in self.phonebook:
+                self.phonebook[uuid]['active'] = False
+                self.activePeers -= 1
+
+    def activeCount(self):
+        c = 0
+        with self._lock:
+            c = self.activePeers
+        return c
 
     def cs(self, uuid):
-        if uuid in self.phonebook:
-            ip = self.phonebook[uuid]['ip']
-            if ip in self.peers:
-                return self.peers[ip].clockshift
-        return 0
+        shift = 0
+        with self._lock:
+            if uuid in self.phonebook:
+                ip = self.phonebook[uuid]['ip']
+                if ip in self.peers:
+                    shift = self.peers[ip].clockshift
+        return shift
 
 
 
@@ -250,6 +272,7 @@ class ZyreNode ():
         data['args'] = []
         if args:
             if not isinstance(args, list):
+                print('NOT al LIST', args)
                 args = [args]
             data['args'] = args
 
@@ -275,7 +298,9 @@ class ZyreNode ():
         # Set timer
         if 'at' in data:
             data['at'] -= self.timebook.cs( data['from'] )
-            delay =  (data['at']-self.deltadelay) / PRECISION - time.time()
+            #delay =  (data['at']-self.deltadelay) / PRECISION - time.time()
+            delay =  (data['at']) / PRECISION - time.time()
+
 
             if delay <= 0:
                 self.preProcessor2(data)
@@ -289,7 +314,7 @@ class ZyreNode ():
 
     def preProcessor2(self, data):
         if 'at' in data:
-            self.deltadelay += int(time.time()*PRECISION)-data['at']
+            self.deltadelay += (int(time.time()*PRECISION)-data['at'])  # Might get crazy..
 
         self.processor(data)
 
@@ -335,6 +360,7 @@ class ZyreNode ():
 
                 # EXIT
                 elif e.type() == b"EXIT":
+                    self.timebook.gone(e.peer_uuid())
                     print( "ZYRE Node: peer is gone..")
 
                 # JOIN
@@ -420,12 +446,17 @@ class ZyreInterface (BaseInterface):
         self.log( "closing sockets...") # CLOSING is messy !
         sleep(1)
 
+    def activeCount(self):
+        c = self.node.timebook.activeCount()+1
+        return c
+
     def processor(self, data):
 
         self.log('Received: ', data)
 
         if 'at' in data:
-            self.log('DELTA', int(time.time()*PRECISION)-data['at'], 'ns' )
+            # self.log('DELTA', int(time.time()*PRECISION)-data['at'], 'ns' )
+            pass
 
         if not self.player:
             return
@@ -456,6 +487,7 @@ class ZyreInterface (BaseInterface):
                 self.player.load(args[0])
                 if len(args) >= 2: self.player.play(args[1])
                 else: self.player.play()
+                # self.log('DELTA PLAY', int(time.time()*PRECISION)-data['at'], 'ns' )
 
         elif path == '/load':
             if args and len(args) >= 1:

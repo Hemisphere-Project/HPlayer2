@@ -11,7 +11,8 @@ player.loop(1)
 # player.doLog['events'] = True
 
 # Interfaces
-player.addInterface('osc', 4000, 4000).hostOut = network.get_broadcast('wlan0')
+player.addInterface('zyre')
+player.addInterface('osc', 4000, 4000).hostOut = '10.0.0.255'
 player.addInterface('http', 8037)
 player.addInterface('keyboard')
 
@@ -20,17 +21,62 @@ if is_RPi:
 	player.addInterface('keypad')
 
 
+# FIX early boot ETH0 error
+from threading import Timer
+import subprocess
+from time import sleep
+def restartEth0():
+    print('switch OFF eth0')
+    subprocess.run(['ip', 'link', 'set', 'eth0', 'down'])
+    sleep(15)
+    print('switch ON eth0')
+    subprocess.run(['ip', 'link', 'set', 'eth0', 'up'])  
+Timer(5, restartEth0).start()
+
+
 # Remote modes
 remote_mode = True
 
-# Sub folders
-if is_RPi: base_path = '/mnt/usb'
-else: base_path = '/home/mgr/Videos'
-available_dir = [d for d in next(os.walk(base_path))[1] if not d.startswith('.')]
-available_dir.sort()
-if len(available_dir) == 0: available_dir.insert(0,'')
-if len(available_dir) >= 2: active_dir = 1
-else: active_dir = 0
+
+def switch_mode():
+	global remote_mode
+	remote_mode = not remote_mode
+
+def remote_inc():
+	if remote_mode: next_dir()
+	else: vol_inc()
+
+def remote_dec():
+	if remote_mode: prev_dir()
+	else: vol_dec()
+
+def vol_inc():
+	broadcast('/volume', player.settings()['volume']+1)
+
+def vol_dec():
+	broadcast('/volume', player.settings()['volume']-1)
+
+
+# Broadcast Order on OSC to other Pi's
+def broadcast(path, *args):
+	if path.startswith('/play'):
+		player.getInterface('zyre').node.broadcast(path, list(args), 434)
+	else:
+		player.getInterface('zyre').node.broadcast(path, list(args))
+	# player.getInterface('osc').hostOut = network.get_broadcast('wlan0')
+	# player.getInterface('osc').sendBurst(path, *args)
+
+def play_activedir(index):
+	broadcast('/playlist', current_dir(), index)
+	broadcast('/scene', available_dir[active_dir])
+
+def play_lastdir(index):
+	sel_lastdir()
+	play_activedir(index)
+
+def play_firstdir(index):
+	sel_firstdir()
+	play_activedir(index)
 
 
 def current_dir():
@@ -54,8 +100,9 @@ def sel_firstdir():
 
 def set_activedir(index):
 	if index >= 0 and index < len(available_dir):
-		global active_dir
+		global active_dir, active_dir_length
 		active_dir = index
+		active_dir_length = len(player.buildList(current_dir()))
 		broadcast('/scene', available_dir[active_dir])
 
 def change_scene(dir):
@@ -66,43 +113,16 @@ def change_scene(dir):
 		active_dir = available_dir.index(dir)
 		# DO NOT RE-BROADCAST !!
 
-def switch_mode():
-	global remote_mode
-	remote_mode = not remote_mode
+# Sub folders
+if is_RPi: base_path = '/mnt/usb'
+else: base_path = '/home/mgr/Videos'
+available_dir = [d for d in next(os.walk(base_path))[1] if not d.startswith('.')]
+available_dir.sort()
+active_dir_length = 0
+if len(available_dir) == 0: available_dir.insert(0,'')
+if len(available_dir) >= 2: set_activedir(1)
+else: set_activedir(0)
 
-def remote_inc():
-	if remote_mode: next_dir()
-	else: vol_inc()
-
-def remote_dec():
-	if remote_mode: prev_dir()
-	else: vol_dec()
-
-def vol_inc():
-	broadcast('/volume', player.settings()['volume']+1)
-
-def vol_dec():
-	broadcast('/volume', player.settings()['volume']-1)
-
-
-# Broadcast Order on OSC to other Pi's
-def broadcast(path, *args):
-	player.getInterface('osc').hostOut = network.get_broadcast('wlan0')
-	# player.getInterface('osc').send(path, *args)
-	player.getInterface('osc').sendBurst(path, *args)
-	# print("broadcast to", player.getInterface('osc').hostOut)
-
-def play_activedir(index):
-	broadcast('/playlist', current_dir(), index)
-	broadcast('/scene', available_dir[active_dir])
-
-def play_lastdir(index):
-	sel_lastdir()
-	play_activedir(index)
-
-def play_firstdir(index):
-	sel_firstdir()
-	play_activedir(index)
 
 
 player.on(['/scene'], 			change_scene)
@@ -144,11 +164,27 @@ player.on(['push'], 		switch_mode)
 # OSC synctest request from ESP remotes
 def syncTest(arg):
 	if remote_mode:
-		display = available_dir[active_dir] + " #"
+		#SCENE
+		display = available_dir[active_dir].replace("scene ", "S.")[:5].ljust(5) + " "
+
+		# MEDIA
+		media = player.status()['media']
+		for i in range(4):
+			# if i == player.status()['index'] and media.startswith(current_dir()): display += str(i+1)
+			if i < active_dir_length: display += '-'
+			else : display += '.'
+
+		display += "#"
 		if not player.status()['media']: display += '-stop-'
-		else: display += os.path.basename(player.status()['media'])[:-4]
+		else: display += media[:-4].replace(base_path, '').replace("/scene ", "S.").replace("/", " / ")
+
 	else:
-		display = "VOLUME#"+str(player.settings()['volume'])
+		# VOLUME
+		vol = player.settings()['volume']
+		display = "VOLUME "
+		display += str(vol).rjust(3)
+		# PEERS
+		display += "#Dispositifs".ljust(19)+str(player.getInterface('zyre').activeCount()).rjust(2)
 
 	player.getInterface('osc').send(display)
 
