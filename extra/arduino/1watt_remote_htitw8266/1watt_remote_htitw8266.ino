@@ -6,7 +6,7 @@
 #define CR_VERSION  0.03  // 1watt teleco
 #define CR_VERSION  0.04  // settings EEPROM
 
-#define SLEEPTIME 3       // minutes before going to sleep
+#define SLEEPTIME 0       // minutes before going to sleep
 
 #include <Arduino.h>
 #include <OSCMessage.h> //https://github.com/stahlnow/OSCLib-for-ESP8266
@@ -49,12 +49,12 @@ void setup(void) {
   settings_load( keys );
 
   // Settings SET EEPROM !
-  settings_set("id", 3);
-  settings_set("model", 2);   // 0: remote ciconia -- 1: remote v1 (square) -- 2: remote v2 (inline)
+  //settings_set("id", 3);
+  //settings_set("model", 2);   // 0: remote ciconia -- 1: remote v1 (square) -- 2: remote v2 (inline)
 
   // Oled
-  oled_init();
-  oled_status("hello");
+  oled2_init();
+  oled2_status("hello");
 
   // Wifi
   myIP += String(settings_get("id")+100);
@@ -122,9 +122,9 @@ void loop(void) {
       int len = udp_in.read(udpPacket, 1470);
       if (len >= 0) {
         udpPacket[len] = 0;
-        LOGF("UDP: packet received: %s\n", udpPacket);
+        //LOGF("UDP: packet received: %s\n", udpPacket);
         if (udpPacket[0] != '/') {
-          oled_status( getValue(udpPacket, '#', 0), getValue(udpPacket, '#', 1) );
+          oled2_status( getValue(udpPacket, '#', 0), getValue(udpPacket, '#', 1) );
           lastInfo = millis();
           lastNews = millis();
         }
@@ -133,7 +133,7 @@ void loop(void) {
 
     if (millis() - lastInfo > 200) {
       // STATUS check
-      LOG("sending synctest");
+      //LOG("sending synctest");
       udp_out.beginPacket(hostIP.c_str(), hostPORT_osc);
       OSCMessage msg("/synctest");
       msg.send(udp_out);
@@ -142,18 +142,20 @@ void loop(void) {
     }
 
     if (millis() - lastNews > 1500) {
-      oled_status("-no rpi");
+      oled2_status("-no rpi");
     }
   }
   else {
-    oled_status("+no wifi");
+    oled2_status("+no wifi");
   }
   delay(50);
 
-  if (millis() - lastNews > (SLEEPTIME * 60 * 1000)) {
-    shutdown();
-  }
+  if (SLEEPTIME > 0)
+    if (millis() - lastNews > (SLEEPTIME * 60 * 1000))
+      shutdown();
+    
   //LOG("loop");
+  oled2_loop();
 }
 
 
@@ -161,14 +163,14 @@ void loop(void) {
    on Connect
 */
 void doOnConnect() {
-  oled_status("-wifi ok");
+  oled2_status("-wifi ok");
 }
 
 /*
    on Disconnect
 */
 void doOnDisconnect() {
-  if (!shuttingDown) oled_status("-no wifi");
+  if (!shuttingDown) oled2_status("-no wifi");
 }
 
 void media1() {
@@ -202,7 +204,8 @@ void push() {
 void shutdown() {
   shuttingDown = true;
   wifi_disarm();
-  oled_status("          ", "          ");
+  //oled2_status("          ", "          ");
+  oled2_clear();
   WiFi.mode(WIFI_OFF);
   ESP.wdtDisable();
   ESP.deepSleep(0);

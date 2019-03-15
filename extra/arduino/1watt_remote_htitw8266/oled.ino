@@ -33,7 +33,7 @@ void oled_status(String stat, String stat2) {
   
   u8x8.clear();
   lastdisp = stat+stat2;
-  u8x8.setFont(u8x8_font_amstrad_cpc_extended_f);
+  u8x8.setFont(u8x8_font_artossans8_r);
   
   //if (stat.length() > 11) display.setFont(ArialMT_Plain_16);
   //else display.setFont(ArialMT_Plain_24);
