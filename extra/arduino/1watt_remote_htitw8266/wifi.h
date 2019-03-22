@@ -83,14 +83,14 @@ void wifi_static(String ip) {
  */
 void wifi_connect(const char* ssid, const char* password) {
   WiFi.mode(WIFI_OFF);
-  delay(1);
+  delay(100);
   WiFi.mode(WIFI_STA);
   WiFi.onEvent(_wifi_event);
   WiFi.begin(ssid, password);
 }
 void wifi_connect(const char* ssid) {
   WiFi.mode(WIFI_OFF);
-  delay(1);
+  delay(100);
   WiFi.mode(WIFI_STA);
   WiFi.onEvent(_wifi_event);
   WiFi.begin(ssid);

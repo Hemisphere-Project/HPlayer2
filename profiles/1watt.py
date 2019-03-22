@@ -21,6 +21,19 @@ if is_RPi:
 	player.addInterface('keypad')
 
 
+# FIX early boot ETH0 error
+from threading import Timer
+import subprocess
+from time import sleep
+def restartEth0():
+    print('switch OFF eth0')
+    subprocess.run(['ip', 'link', 'set', 'eth0', 'down'])
+    sleep(15)
+    print('switch ON eth0')
+    subprocess.run(['ip', 'link', 'set', 'eth0', 'up'])  
+Timer(5, restartEth0).start()
+
+
 # Remote modes
 remote_mode = True
 
@@ -47,7 +60,7 @@ def vol_dec():
 # Broadcast Order on OSC to other Pi's
 def broadcast(path, *args):
 	if path.startswith('/play'):
-		player.getInterface('zyre').node.broadcast(path, list(args), 500)
+		player.getInterface('zyre').node.broadcast(path, list(args), 434)
 	else:
 		player.getInterface('zyre').node.broadcast(path, list(args))
 	# player.getInterface('osc').hostOut = network.get_broadcast('wlan0')

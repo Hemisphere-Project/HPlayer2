@@ -1,4 +1,4 @@
-#define DEBOUNCE_TIME 150
+#define DEBOUNCE_TIME 300
 #define EVENTS_MAX 64
 
 long event_last[EVENTS_MAX];
@@ -7,8 +7,12 @@ void (*event_fn[EVENTS_MAX])();
 
 bool event_debounce(int ev) {
   if( ev >= EVENTS_MAX ) return false;
-  if ((millis()-event_last[ev]) < DEBOUNCE_TIME) return false;
+  if ((millis()-event_last[ev]) < DEBOUNCE_TIME) {
+    LOG("debounced");
+    return false;
+  }
   event_last[ev] = millis();
+  LOG("triggered");
   return true;
 }
 
