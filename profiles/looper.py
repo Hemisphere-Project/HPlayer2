@@ -5,6 +5,7 @@ from core.engine import hplayer
 player = hplayer.addplayer('mpv', 'looper')
 
 # INTERFACES
+player.addInterface('http2', 80)
 player.addInterface('keyboard').asIRremote()
 
 def playloop():
