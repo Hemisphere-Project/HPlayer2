@@ -32,11 +32,15 @@ int hostPORT_osc = 4000;
 
 // Pinout: {media1, media2, media3, media4, push, dec, inc}
 // SCL = 14 / SDA = 2 / RX = 3 / TX = 1
+#define SCL 14
+#define SDA 2
+#define RX 3
+#define TX 1
 //
 int *pins;
 int pinout[3][7] = {  {},                           // ciconia
-                      {2, D3, D7, 14, D6, 3, 1},    // remote v1 (square)                        
-                      {D3, D7, D6, 14, 2, 3, 1}     // remote v2 (inline)
+                      {SDA, D3, D7, SCL, D6, RX, TX},    // remote v1 (square)                        
+                      {D3, D7, D6, SCL, SDA, RX, TX}     // remote v2 (inline)
                     };
 
 
@@ -49,8 +53,8 @@ void setup(void) {
   settings_load( keys );
 
   // Settings SET EEPROM !
-  //settings_set("id", 3);
-  //settings_set("model", 2);   // 0: remote ciconia -- 1: remote v1 (square) -- 2: remote v2 (inline)
+  settings_set("id", 4);
+  settings_set("model", 2);   // 0: ciconia (2btn) -- 1: 1watt v1 (square) -- 2: 1watt v2 (inline)
 
   // Oled
   oled2_init();
@@ -101,7 +105,7 @@ void setup(void) {
   // ENCODER
 #ifdef DEBUG
 #else
-  encoder_init(3, 1);
+  encoder_init(RX, TX);
   encoder_inc( incr );
   encoder_dec( decr );
 #endif

@@ -50,6 +50,10 @@ class ThreadedHTTPServer(object):
         def index():
             # return render_template('index.html', async_mode=socketio.async_mode)
             return send_from_directory(www_path, 'index.html')
+            
+        @app.route('/simple')
+        def simple():
+            return send_from_directory(www_path, 'simple.html')
 
         @app.route('/upload', methods=['POST'])
         def files_upload():

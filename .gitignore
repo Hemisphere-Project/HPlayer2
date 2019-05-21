@@ -1,3 +1,5 @@
+.vscode
+
 # Local MPV build
 bin/mpv
 bin/mpv-bck

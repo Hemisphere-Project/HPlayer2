@@ -89,3 +89,7 @@ input[type=range]::-webkit-slider-runnable-track {
   height: 4px;
   cursor: pointer;
 }
+
+.media .mb-2 {
+  margin-bottom: 0.3rem!important;
+}
