@@ -1,4 +1,4 @@
-#include <ESP8266HTTPClient.h>
+#include <HTTPClient.h>
 
 HTTPClient http;
 
@@ -17,6 +17,7 @@ String http_get(String url) {
     LOG("httpGet CANCELLED: no wifi...");
     return "";
   }
+  LOG(url);
   http.begin( http_path + url);
   int httpCode = http.GET();
   String payload = "";
