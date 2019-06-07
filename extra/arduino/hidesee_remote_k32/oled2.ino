@@ -14,6 +14,7 @@ Adafruit_SSD1306 display(SCREEN_WIDTH, SCREEN_HEIGHT, &Wire, oled2_RESET);
 
 String oled_stat1 = "";
 String oled_stat2 = "";
+String oled_stat3 = "";
 
 void oled2_init() {
   Wire.begin(I2C_SDA, I2C_SCL);
@@ -41,12 +42,18 @@ void oled2_hello() {
  * Show status
  */
 void oled2_status(String stat) {
-  oled2_status(stat, "       ");
+  oled2_status(stat, "       ", "       ");
 }
+
 void oled2_status(String stat, String stat2) {
+  oled2_status(stat, stat2, "       ");
+}
+
+void oled2_status(String stat, String stat2, String stat3) {
 
   oled_stat1 = stat;
   oled_stat2 = stat2;
+  oled_stat3 = stat3;
   
   //if (stat.length() > 11) display.setFont(ArialMT_Plain_16);
   //else display.setFont(ArialMT_Plain_24);
@@ -60,8 +67,8 @@ void oled2_status(String stat, String stat2) {
 }
 
 void oled2_loop() {
-  if (oled_stat1+oled_stat2 == lastdisp) return;
-  lastdisp = oled_stat1+oled_stat2;
+  if (oled_stat1+oled_stat2+oled_stat3 == lastdisp) return;
+  lastdisp = oled_stat1+oled_stat2+oled_stat3;
 
   LOG("display "+lastdisp);
   
@@ -74,6 +81,8 @@ void oled2_loop() {
   display.setTextSize(1);
   display.println();
   display.println(oled_stat2);
+  display.println();
+  display.println(oled_stat3);
   
   display.display();
 }

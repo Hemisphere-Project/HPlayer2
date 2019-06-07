@@ -44,8 +44,8 @@ int hostPORT_osc = 4000;
 #define LED_DATA_2 22
 //
 
-// Pinout: {dec, inc, push, btn1, btn2, btn3, btn4, btn5, btn6, btn7, btn8, btn9}
-int pins[12] = {SPI_SCK, SPI_MISO, SPI_MOSI, SPI_CS, DMX_DE, DMX_DI, DMX_RO, I2S_LRCK, I2S_DATA, I2S_BCK, LED_DATA_1, LED_DATA_2};
+// Pinout: {dec, inc, push, btn1, btn2, btn3, btn4, btn5, btn6, btn7, btn8}
+int pins[11] = {I2S_DATA, I2S_BCK, I2S_LRCK, DMX_RO, DMX_DI, DMX_DE, SPI_CS, SPI_MOSI, SPI_MISO, SPI_SCK, LED_DATA_1};
 
 void ICACHE_RAM_ATTR btnPush() {
   event_trigger(pins[2], [](){ 
@@ -101,12 +101,6 @@ void ICACHE_RAM_ATTR btn8() {
   });
 }
 
-void ICACHE_RAM_ATTR btn9() {
-  event_trigger(pins[11], [](){ 
-    http_get("/event/btn9");  
-  });
-}
-
 void incr() {
   http_get("/event/inc");
 }
@@ -141,7 +135,9 @@ void setup(void) {
   http_init();
 
   // SET PULLUP
-  for(int k=0; k<12; k++) pinMode(pins[k], INPUT_PULLUP);
+  for(int k=0; k<11; k++) {
+    pinMode(pins[k], INPUT_PULLUP);
+  }
 
   // media1 
   attachInterrupt(digitalPinToInterrupt(pins[2]), btnPush, FALLING);
@@ -153,7 +149,6 @@ void setup(void) {
   attachInterrupt(digitalPinToInterrupt(pins[8]), btn6, FALLING);
   attachInterrupt(digitalPinToInterrupt(pins[9]), btn7, FALLING);
   attachInterrupt(digitalPinToInterrupt(pins[10]), btn8, FALLING);
-  attachInterrupt(digitalPinToInterrupt(pins[11]), btn9, FALLING);
 
 
   // ENCODER
@@ -179,7 +174,7 @@ void loop(void) {
         udpPacket[len] = 0;
         //LOGF("UDP: packet received: %s\n", udpPacket);
         if (udpPacket[0] != '/') {
-          oled2_status( getValue(udpPacket, '#', 0), getValue(udpPacket, '#', 1) );
+          oled2_status( getValue(udpPacket, '#', 0), getValue(udpPacket, '#', 1), getValue(udpPacket, '#', 2) );
           lastInfo = millis();
           lastNews = millis();
         }
