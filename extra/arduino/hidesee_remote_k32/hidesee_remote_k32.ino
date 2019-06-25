@@ -6,6 +6,7 @@
 #define CR_VERSION  0.03  // 1watt teleco
 #define CR_VERSION  0.04  // settings EEPROM
 #define CR_VERSION  0.05  // k32
+#define CR_VERSION  0.06  // 9V gauge
 
 #define SLEEPTIME 0       // minutes before going to sleep
 
@@ -15,6 +16,10 @@
 #include "wifi.h"
 
 bool shuttingDown = false;
+
+#include "K32_stm32.h"
+K32_stm32* stm32;
+
 
 //UDP
 WiFiUDP udp_in;
@@ -121,9 +126,21 @@ void setup(void) {
   settings_set("id", 5);
   settings_set("model", 3);   // 3: h&s
 
+  // STM32
+  stm32 = new K32_stm32();
+  stm32->listen(true, true);
+  delay(100);
+  Serial.print("tension: ");
+  Serial.println(stm32->voltage());
+  delay(100);
+  stm32->custom(5000*4, 5500*4, 6000*4, 7000*4, 8000*4, 8500*4, 9000*4);
+  Serial.print("tension: ");
+  Serial.println((stm32->voltage()/4));
+
   // Oled
   oled2_init();
   oled2_status("hello");
+  LOG("Hello");
 
   // Wifi
   wifi_connect("hsremote");
@@ -164,6 +181,12 @@ void setup(void) {
 void loop(void) {
   encoder_loop();
   event_loop();
+
+  if (stm32->dblclicked()) stm32->reset();
+  if (stm32->clicked()) {
+    Serial.print("tension: ");
+    Serial.println(stm32->voltage());
+  }
 
   if (wifi_isok()) {
     wifi_otaCheck();

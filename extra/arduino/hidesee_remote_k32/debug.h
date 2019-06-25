@@ -1,4 +1,4 @@
-//#define DEBUG
+#define DEBUG
 
 #ifdef DEBUG
  #define LOGSETUP()                    Serial.begin(115200)
