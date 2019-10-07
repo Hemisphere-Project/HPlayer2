@@ -20,8 +20,9 @@ if [[ $(command -v apt) ]]; then
     apt install libcaca-dev libsdl2-dev libasound2-dev -y
 
     # hplayer2 dependencies
-    apt install python3-pip python3-liblo -y
-    /usr/bin/yes | pip3 install netifaces termcolor evdev socketio flask-socketio eventlet
+    apt install python3-liblo python3-netifaces python3-termcolor python3-evdev python3-flask-socketio python3-eventlet -y
+    apt install python3-pip
+    /usr/bin/yes | pip3 install python-socketio
 
     # GPIO RPi
     if [[ $(uname -m) = armv* ]]; then
@@ -71,8 +72,6 @@ else
     exit 1
 fi
 
-
-
 #######
 # COMPILE MPV
 #######
@@ -102,22 +101,28 @@ fi
 ./use-mpv-release
 ./use-ffmpeg-release
 ./update
-./rebuild -j4
+if [[ $(uname -m) = armv* ]]; then
+    ./rebuild -j4
+else
+    ./rebuild -j8
+fi
 cd ..
 
 # Copy bin
 mkdir -p ../bin
 cp mpv-build/mpv/build/mpv  ../bin/mpv
 
+
 # Clean
-read -r -p "Clean mpv-build directory? [Y/n] " -n 1 response
-echo
-case "$response" in
-    [nN])
-        exit 0
-        ;;
-    *)
-        rm -fR mpv-build
-        ;;
-esac
+rm -fR mpv-build
+# read -r -p "Clean mpv-build directory? [Y/n] " -n 1 response
+# echo
+# case "$response" in
+#     *)
+#         exit 0
+#         ;;
+#     [yY])
+#         rm -fR mpv-build
+#         ;;
+# esac
 exit 0

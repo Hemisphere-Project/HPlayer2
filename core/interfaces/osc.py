@@ -42,8 +42,8 @@ class OscInterface (BaseInterface):
         # OSC: Bind server
         try:
             oscServer = liblo.Server(self._portIn)
-            self.log("sending to", self.hostOut, "on port", self._portIn)
-            self.log("receiving on port", self._portIn)
+            self.log("OSC input  = udp://*:"+str(self._portIn))
+            self.log("OSC output = udp://"+str(self.hostOut)+":"+str(self._portOut))
 
         except liblo.ServerError as e:
             self.log( "OSC Error:", e)

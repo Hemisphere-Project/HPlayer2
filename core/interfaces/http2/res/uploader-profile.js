@@ -35,7 +35,7 @@ function ui_multi_add_file(id, file)
   template.data('file-id', id);
 
   $('#files').find('li.empty').fadeOut(); // remove the 'no files yet'
-  $('#files').prepend(template);
+  $('#files').append(template);
 }
 
 // Changes the status messages on our list
@@ -99,7 +99,7 @@ $(function(){
   $('#drag-and-drop-zone').dmUploader({ //
     url: '/upload',
     auto: true,
-    queue: false,
+    queue: true,
     onDragEnter: function(){
       // Happens when dragging something over the DnD area
       this.addClass('active');
@@ -137,6 +137,7 @@ $(function(){
       ui_add_log('Upload of file #' + id + ' COMPLETED', 'success');
       ui_multi_update_file_status(id, 'success', 'OK');
       ui_multi_update_file_progress(id, 100, 'success', false);
+      setTimeout(()=>{ $('#uploaderFile' + id).remove() }, 1000);
     },
     onUploadError: function(id, xhr, status, message){
       ui_multi_update_file_status(id, 'danger', message);

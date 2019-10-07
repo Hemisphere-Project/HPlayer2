@@ -37,11 +37,11 @@
   </nav>
 
   <div class="row panel">
-    <div class="col-sm-0 col-md-0 col-lg-0 col-xl-1"></div>
-    <div class="col-sm-12 col-md-12 col-lg-12 col-xl-10">
+    <div class="col-sm-0 col-md-1 col-lg-2 col-xl-3"></div>
+    <div class="col-sm-12 col-md-10 col-lg-8 col-xl-6">
 
       <div class="row">
-        <div class="col-12 col-sm-6">
+        <div class="col-12 col-sm-5">
           <div class="form-group">
             <button type="button" class="btn btn-outlined-success" id="play_btn"><i class="fas fa-play"></i></button>
             <button type="button" class="btn btn-outlined-warning" id="pause_btn"><i class="fas fa-pause"></i></button>
@@ -50,18 +50,28 @@
             <button type="button" class="btn btn-outlined-danger" id="stop_btn"><i class="fas fa-stop"></i></button>
           </div>
         </div>
+
+        <div class="col-12 col-sm-7">
+          <div class="">
+            <span class="badge badge-secondary mr-2 vol-main">volume</span><span id="volumeMain"></span>
+            <input type="range" class="" id="volume_range" min="0" max="100">
+          </div>
+        </div>
       </div>
+      <hr />
 
       <div class="row">
-        <div class="col-12 col-sm-6">
+        <div class="col-12 col-sm-5">
             <div id="drag-and-drop-zone" class="dm-uploader p-2 text-center" style="height: 54px;">
-                <h3 class="mb-5 mt-5 text-muted d-none d-xl-block">Drag &amp; drop Files here</h3>
+                <!-- <h3 class="mb-5 mt-5 text-muted d-none d-xl-block">Drag &amp; drop Files here</h3> -->
                 <div class="btn btn-primary btn-block mb-5">
-                <span>Add media</span>
-                <input type="file" title='Click to add Files' />
+                  <span>Add media</span>
+                  <input type="file" title='Click to add Files' />
                 </div><!-- /uploader -->
             </div>
-            <div class="card" style="height:140px;margin-bottom: 10px;" id="upload-list">
+        </div>
+        <div class="col-12 col-sm-7">
+            <div class="card" style="height:60px;margin-bottom: 10px;" id="upload-list">
                 <ul class="list-unstyled p-2 d-flex flex-column col" id="files" style="margin-bottom: 0">
                 <li class="text-muted text-center empty"></li>
                 </ul>
@@ -70,7 +80,7 @@
       </div>
     
       <div class="row mt-2">
-        <div class="col-12 col-md-6 col-xl-4 mb-4">
+        <div class="col-12 mb-4">
           <div class="card-header text-white bg-dark">
             Playlist
             <button type="button" class="btn btn-warning btn-sm float-right" id="clear_btn">clear</button>
@@ -80,35 +90,6 @@
       </div>
 
       <hr />
-
-      <!-- Modal -->
-      <div class="modal fade" id="uploadModal" tabindex="-1" role="dialog">
-        <div class="modal-dialog modal-dialog-centered" role="document">
-          <div class="modal-content text-white bg-dark">
-            <div class="modal-header">Upload
-              <button type="button" class="close" data-dismiss="modal">&times;</button>
-            </div>
-            <div class="modal-body">
-
-              <div id="drag-and-drop-zone" class="dm-uploader p-2 text-center">
-                <h3 class="mb-5 mt-5 text-muted d-none d-xl-block">Drag &amp; drop Files here</h3>
-                <div class="btn btn-primary btn-block mb-5">
-                  <span>Select files</span>
-                  <input type="file" title='Click to add Files' />
-                </div><!-- /uploader -->
-              </div>
-
-              <div class="card" style="height:300px;" id="upload-list">
-                <ul class="list-unstyled p-2 d-flex flex-column col" id="files">
-                  <li class="text-muted text-center empty"></li>
-                </ul>
-              </div>
-
-            </div>
-          </div>
-        </div>
-      </div>
-
 
       <!-- File item template -->
       <script type="text/html" id="files-template">

@@ -257,7 +257,7 @@ class ThreadedHTTPServer(object):
             for bp in self.player.basepath:
                 br = path_to_dict(bp)
                 if br is not None:
-                    print(br)
+                    # print(br)
                     liste.append(br)
 
             if len(liste) > 0 and 'nodes' in liste[0]:
