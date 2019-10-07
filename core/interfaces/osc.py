@@ -11,12 +11,12 @@ def oscdump(path, args, types):
 
 class OscInterface (BaseInterface):
 
-    def  __init__(self, player, in_port, out_port):
+    def  __init__(self, player, in_port, out_port=0):
         super(OscInterface, self).__init__(player, "OSC")
 
         self._portIn = in_port
-        self._portOut = out_port
-        self.hostOut = '127.0.0.1'
+        self._portOut = out_port if out_port > 0 else in_port
+        self.hostOut = network.get_broadcast()
 
         self.burstCounter = random.randint(1,10000)
         self.ethMac = network.get_ethmac()
@@ -42,8 +42,8 @@ class OscInterface (BaseInterface):
         # OSC: Bind server
         try:
             oscServer = liblo.Server(self._portIn)
-            self.log("OSC input  = udp://*:"+str(self._portIn))
-            self.log("OSC output = udp://"+str(self.hostOut)+":"+str(self._portOut))
+            self.log("input  = udp://*:"+str(self._portIn))
+            self.log("output = udp://"+str(self.hostOut)+":"+str(self._portOut))
 
         except liblo.ServerError as e:
             self.log( "OSC Error:", e)

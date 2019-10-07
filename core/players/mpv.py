@@ -16,6 +16,7 @@ class MpvPlayer(BasePlayer):
 
         self.name = name
         self.nameP = colored("MPV -" + name + "-",'magenta')
+        self.nameP = colored("MPV" ,'magenta')
 
         self._mpv_procThread = None
 

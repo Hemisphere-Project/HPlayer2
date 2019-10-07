@@ -2,22 +2,21 @@ BUG
 - check if RPi overlay is broken ?
 - Looper Profile doesn't gracefully exit..
 
-
 NEXT
+- File Sync -> rsync + zyre + version ?
+- Move Scene / Media play in player logic
+- Service annoncment Bonjour/ZeroConf
 - Clean up log in player and overlays like in interfaces
 - Clean up overlay like interfaces
-- image player
-- adafruit_lcd install in build.sh script
-- HTTP2 dependencies in build.sh script
 
 FUTURE
 - Replacing custom trigger / event player system with pyee or equivalent.
 Check if '*' is supported.
-- command line arguments instead of profiles for direct start
-- time sync plugin (anticipated accurate start)
+- command line arguments alongside profiles for direct start
 
 LONG SHOT
 - doc for each interfaces
 - add a global manageable extension filter
 - replacing log system with a global and configurable one..
 - ofxomxplayer backend // libvlc backend
+- media preroll for better sync accuracy

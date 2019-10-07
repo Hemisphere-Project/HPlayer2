@@ -15,7 +15,7 @@ thread_lock = threading.Lock()
 class Http2Interface (BaseInterface):
 
     def  __init__(self, player, port):
-        super(Http2Interface, self).__init__(player, "HTTP")
+        super(Http2Interface, self).__init__(player, "HTTP2")
         self._port = port
         self.player = player
 
@@ -23,7 +23,7 @@ class Http2Interface (BaseInterface):
     def listen(self):
 
         # Start server
-        self.log( "listening on port", self._port)
+        self.log( "web interface on port", self._port)
         with ThreadedHTTPServer(self._port, self.player) as server:
             self.stopped.wait()
 

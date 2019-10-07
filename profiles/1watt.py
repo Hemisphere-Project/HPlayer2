@@ -10,9 +10,9 @@ player = hplayer.addplayer('mpv', '1watt')
 player.loop(1)
 # player.doLog['events'] = True
 
-# Interfaces
+# INTERFACES
 player.addInterface('zyre')
-player.addInterface('osc', 4000, 4000).hostOut = '10.0.0.255'
+player.addInterface('osc', 4000).hostOut = '10.0.0.255'
 player.addInterface('http', 8037)
 player.addInterface('keyboard')
 
@@ -37,7 +37,6 @@ Timer(5, restartEth0).start()
 # Remote modes
 remote_mode = True
 
-
 def switch_mode():
 	global remote_mode
 	remote_mode = not remote_mode
@@ -50,14 +49,8 @@ def remote_dec():
 	if remote_mode: prev_dir()
 	else: vol_dec()
 
-def vol_inc():
-	broadcast('/volume', player.settings()['volume']+1)
 
-def vol_dec():
-	broadcast('/volume', player.settings()['volume']-1)
-
-
-# Broadcast Order on OSC to other Pi's
+# BROADCAST to other Pi's
 def broadcast(path, *args):
 	if path.startswith('/play'):
 		player.getInterface('zyre').node.broadcast(path, list(args), 434)
@@ -65,6 +58,25 @@ def broadcast(path, *args):
 		player.getInterface('zyre').node.broadcast(path, list(args))
 	# player.getInterface('osc').hostOut = network.get_broadcast('wlan0')
 	# player.getInterface('osc').sendBurst(path, *args)
+
+# VOLUME
+def vol_inc():
+	broadcast('/volume', player.settings()['volume']+1)
+
+def vol_dec():
+	broadcast('/volume', player.settings()['volume']-1)
+
+
+# DIRECTORY / FILE
+if is_RPi: base_path = '/mnt/usb'
+else: base_path = '/home/mgr/Videos'
+available_dir = [d for d in next(os.walk(base_path))[1] if not d.startswith('.')]
+available_dir.sort()
+active_dir_length = 0
+active_dir = 0
+if len(available_dir) == 0: available_dir.insert(0,'')
+if len(available_dir) >= 2: set_activedir(1)
+else: set_activedir(0)
 
 def play_activedir(index):
 	broadcast('/playlist', current_dir(), index)
@@ -77,7 +89,6 @@ def play_lastdir(index):
 def play_firstdir(index):
 	sel_firstdir()
 	play_activedir(index)
-
 
 def current_dir():
 	return os.path.join(base_path, available_dir[active_dir])
@@ -113,19 +124,7 @@ def change_scene(dir):
 		active_dir = available_dir.index(dir)
 		# DO NOT RE-BROADCAST !!
 
-# Sub folders
-if is_RPi: base_path = '/mnt/usb'
-else: base_path = '/home/mgr/Videos'
-available_dir = [d for d in next(os.walk(base_path))[1] if not d.startswith('.')]
-available_dir.sort()
-active_dir_length = 0
-if len(available_dir) == 0: available_dir.insert(0,'')
-if len(available_dir) >= 2: set_activedir(1)
-else: set_activedir(0)
-
-
-
-player.on(['/scene'], 			change_scene)
+player.on(['/scene'], change_scene)
 
 # Bind Keypad
 player.on(['keypad-left'], 		lambda: play_firstdir(0))

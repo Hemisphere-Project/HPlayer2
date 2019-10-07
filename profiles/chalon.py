@@ -6,7 +6,7 @@ import os, types, platform
 playerName = network.get_hostname()
 
 # PLAYER
-player = hplayer.addplayer('mpv', 'hidesee')
+player = hplayer.addplayer('mpv', 'chalon')
 player.loop(1)
 # player.doLog['events'] = True
 
@@ -21,12 +21,23 @@ if is_RPi:
 	player.addInterface('keypad')
 
 
-# Broadcast Order on OSC to other Pi's
+# BROADCAST to other Pi's
 def broadcast(path, *args):
 	if path.startswith('/play'):
 		player.getInterface('zyre').node.broadcast(path, list(args), 434)   ## WARNING LATENCY !! (1WATT 434ms)
 	else:
 		player.getInterface('zyre').node.broadcast(path, list(args))
+
+
+# DIRECTORY / FILE
+if is_RPi: base_path = '/mnt/usb'
+else: base_path = '/home/mgr/Videos'
+available_dir = [d for d in next(os.walk(base_path))[1] if not d.startswith('.')]
+available_dir.sort()
+active_dir = 0
+active_dir_length = 0
+if len(available_dir) == 0: available_dir.insert(0,'')
+set_activedir(0)
 
 
 def play_media(args):
@@ -74,19 +85,6 @@ def change_scene(dir):
 		global active_dir
 		active_dir = available_dir.index(dir)
 		# DO NOT RE-BROADCAST !!
-
-
-
-# Sub folders
-if is_RPi: base_path = '/mnt/usb'
-else: base_path = '/home/mgr/Videos'
-available_dir = [d for d in next(os.walk(base_path))[1] if not d.startswith('.')]
-available_dir.sort()
-active_dir_length = 0
-if len(available_dir) == 0: available_dir.insert(0,'')
-set_activedir(0)
-
-
 
 player.on(['/playmedia'], 		play_media)
 

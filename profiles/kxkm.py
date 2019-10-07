@@ -6,23 +6,23 @@ import os, platform
 playerName = network.get_hostname()
 
 # PLAYER
-player = hplayer.addplayer('mpv', playerName)
+player = hplayer.addplayer('mpv', 'kxkm')
 
 # INTERFACES
 player.addInterface('http2', 8080)
 player.addInterface('osc', 1222, 3737)
-player.addInterface('keypad')
-player.addInterface('keyboard').asIRremote()
+player.addInterface('keyboard')
+player.addInterface('zyre')
+if hplayer.isRPi():
+	player.addInterface('keypad')   
 
 #
 ## HPOD (Régie Max)
 #
-
-is_RPi = platform.machine().startswith('armv')
 regie_ip = None
 
 # Overlay
-if is_RPi:
+if hplayer.isRPi():
     player.addOverlay('rpifade')
 
 # OSC events
@@ -77,8 +77,9 @@ player.on(['/unpause'],     player.resume)
 player.on(['/fade'],        fadeColor)
 player.on(['/unfade'],      unfadeColor)
 
-
+#
 # Touch OSC multiPAD
+#
 def on_event(event, args):
     # print('YO', event, args)
     if event.startswith('/1/multipush1') and args[0] == 1.0:
@@ -91,6 +92,6 @@ def on_event(event, args):
 player.on(['*'], on_event)
 
 # RUN
-hplayer.setBasePath(["/mnt/usb"])        # Media base path
+hplayer.setBasePath(["/mnt/usb", "/data/media"])        # Media base path
 hplayer.persistentSettings("/data/hplayer2-kxkm.cfg")   # Path to persitent config
 hplayer.run()

@@ -4,7 +4,7 @@ import core.players as playerlib
 from termcolor import colored
 from time import sleep
 import signal
-import sys, os
+import sys, os, platform
 
 runningFlag = True
 players_pool = {}
@@ -16,6 +16,9 @@ def signal_handler(signal, frame):
         global runningFlag
         runningFlag = False
 signal.signal(signal.SIGINT, signal_handler)
+
+def isRPi():
+    return platform.machine().startswith('armv')
 
 
 def setBasePath(bpath):

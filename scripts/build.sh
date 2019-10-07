@@ -21,6 +21,7 @@ if [[ $(command -v apt) ]]; then
 
     # hplayer2 dependencies
     apt install python3-liblo python3-netifaces python3-termcolor python3-evdev python3-flask-socketio python3-eventlet -y
+    apt install python3-watchdog -y
     apt install python3-pip
     /usr/bin/yes | pip3 install python-socketio
 
@@ -51,6 +52,7 @@ elif [[ $(command -v pacman) ]]; then
     # hplayer2 dependencies
     pacman -S python3 cython liblo --noconfirm --needed
     pacman -S python-pyliblo python-netifaces python-termcolor python-evdev python-flask-socketio  --noconfirm --needed
+    pacman -S python-socketio python-watchdog --noconfirm --needed
 
     # GPIO RPi
     if [[ $(uname -m) = armv* ]]; then
@@ -66,11 +68,37 @@ elif [[ $(command -v pacman) ]]; then
 ## Plateform not detected ...
 else
     echo "Distribution not detected:"
-    echo "this script needs APT packet manager to run."
+    echo "this script needs APT or PACMAN to run."
     echo ""
     echo "Please install dependencies manually."
     exit 1
 fi
+
+#####
+# COMMON PARTS
+####
+
+# PIP
+pip3 install --upgrade setuptools
+
+# ZYRE
+git clone git://github.com/zeromq/libzmq.git && cd libzmq
+./autogen.sh && ./configure && make check -j4
+make install && ldconfig
+cd .. && rm -Rf libzmq
+
+git clone git://github.com/zeromq/czmq.git && cd czmq
+./autogen.sh && ./configure && make check -j4
+make install && ldconfig
+cd bindings/python/ && python3 setup.py build && python3 setup.py install
+cd ../../.. && rm -Rf czmq
+
+git clone git://github.com/zeromq/zyre.git && cd zyre
+./autogen.sh && ./configure && make check -j4
+make install && ldconfig
+cd bindings/python/ && python3 setup.py build && python3 setup.py install
+cd ../../.. && rm -Rf zyre
+
 
 #######
 # COMPILE MPV
@@ -78,6 +106,7 @@ fi
 
 echo "Building MPV for your system..."
 
+## FIX
 # pkgconfig for bcm_host
 if [[ $(uname -m) = armv* ]]; then
   export LIBRARY_PATH=/opt/vc/lib
@@ -91,7 +120,7 @@ git clone https://github.com/mpv-player/mpv-build.git
 cd mpv-build
 #echo --enable-libmpv-shared > mpv_options
 
-# RPi MMAL
+# RPi: enable MMAL
 if [[ $(uname -m) = armv* ]]; then
 	echo --enable-mmal > ffmpeg_options
 	echo --disable-vaapi > mpv_options

@@ -5,7 +5,6 @@ from core.engine import hplayer
 player = hplayer.addplayer('mpv', 'looper')
 
 # INTERFACES
-player.addInterface('http2', 80)
 player.addInterface('keyboard').asIRremote()
 
 def playloop():
@@ -15,6 +14,7 @@ def playloop():
 
 # INTERNAL events
 player.on(['app-run', 'nomedia'], playloop)
+player.loop(1)
 
 # RUN
 hplayer.setBasePath(["/mnt/usb"])
