@@ -5,6 +5,10 @@
 # echo "HPlayer2: starting $SCRIPT script"
 # python2 $DIR"/core/"$SCRIPT".py"
 
+#import subprocess, os
+#black = os.path.join(os.path.dirname(os.path.realpath(__file__)), 'black.png')
+#image = subprocess.Popen(["/usr/bin/fbi", "-d", "/dev/fb0", "--noverbose", "-a", black])
+
 import sys
 from core.engine import hplayer
 
