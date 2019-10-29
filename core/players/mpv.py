@@ -109,6 +109,8 @@ class MpvPlayer(BasePlayer):
                     msg = self._mpv_sock.recv(4096)
                     assert len(msg) != 0, "socket disconnected"
 
+                    # print(self.nameP, "IPC says:", msg.rstrip())
+                    
                     # Message received
                     for event in msg.rstrip().split( b"\n" ):
                         try:
@@ -117,11 +119,14 @@ class MpvPlayer(BasePlayer):
                             #print(self.nameP, "IPC invalid json:", event)
                             pass
 
+                        if 'event' in mpvsays:
+                            if mpvsays['event'] == 'idle':
+                                self.trigger('idle')
+
                         if 'name' in mpvsays:
                             if mpvsays['name'] == 'eof-reached' and mpvsays['data'] == True:
                                 self._status['isPaused'] = False
-                                self.trigger('end')
-                                pass
+                                self.trigger('end-file')
                             elif mpvsays['name'] == 'core-idle':
                                 self._status['isPlaying'] = not mpvsays['data']
                             elif mpvsays['name'] == 'time-pos':
@@ -131,7 +136,6 @@ class MpvPlayer(BasePlayer):
                                 pass
                             #    print(self.nameP, "IPC event:", mpvsays)
 
-                    # print(self.nameP, "IPC says:", msg.rstrip())
 
                 # Timeout: retry
                 except socket.timeout:
@@ -155,6 +159,8 @@ class MpvPlayer(BasePlayer):
         if self._mpv_sock_connected:
             try:
                 self._mpv_sock.send( (msg+'\n').encode() )
+                if self.doLog['cmds']:
+                    print(self.nameP, "cmds:", msg)
             except socket.error:
                 print (self.nameP, "socket send error:", msg)
                 self.isRunning(False)
