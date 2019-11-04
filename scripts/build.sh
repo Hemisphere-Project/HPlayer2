@@ -99,6 +99,9 @@ make install && ldconfig
 cd bindings/python/ && python3 setup.py build && python3 setup.py install
 cd ../../.. && rm -Rf zyre
 
+# ZEROCONF
+pip3 install zeroconf
+
 
 #######
 # COMPILE MPV
@@ -123,19 +126,28 @@ cd mpv-build
 # RPi: enable MMAL
 if [[ $(uname -m) = armv* ]]; then
 	echo --enable-mmal > ffmpeg_options
-	echo --disable-vaapi > mpv_options
-
-	## TODO : disable Vulkan detection in WAF
+	# echo --enable-libv4l2 > ffmpeg_options
+    # echo --disable-vaapi > mpv_options
+	# echo --enable-rpi > mpv_options
 fi
 
 # Build
 ./use-mpv-release
 ./use-ffmpeg-release
+
+# fixed rebuild
+set -e
+export LC_ALL=C
 ./update
+./clean
+cd mpv 
+git checkout refs/tags/"v0.29.1"    # 0.30.0 release is broken on RPi
+cd ..
+
 if [[ $(uname -m) = armv* ]]; then
-    ./rebuild -j4
+    ./build -j4
 else
-    ./rebuild -j8
+    ./build -j8
 fi
 cd ..
 

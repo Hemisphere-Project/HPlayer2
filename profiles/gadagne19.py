@@ -1,4 +1,5 @@
 from core.engine import hplayer, network
+import time
 
 # EXTRA TMP UPLOAD
 import tempfile
@@ -18,18 +19,27 @@ if hplayer.isRPi():
 # Remove default stop at "end-playlist" (or it prevent the next play !)
 player.unbind('end-playlist', player.stop)
 
+# PLAY action
+def doPlay(media):
+	player.mute(True)
+	time.sleep(0.3)
+	player.play(media)
+	time.sleep(0.05)
+	player.mute(False)
+
+
 # DEFAULT File
-player.on(['player-ready', 'end-playlist'], lambda: player.play("0_*.*"))
+player.on(['player-ready', 'end-playlist'], lambda: doPlay("0_*.*"))
 
 # HTTP + GPIO events
-player.on(['push1', 'gpio21-on'], lambda: player.play("1_*.*"))
-player.on(['push2', 'gpio20-on'], lambda: player.play("2_*.*"))
-player.on(['push3', 'gpio16-on'], lambda: player.play("3_*.*"))
+player.on(['push1', 'gpio21-on'], lambda: doPlay("1_*.*"))
+player.on(['push2', 'gpio20-on'], lambda: doPlay("2_*.*"))
+player.on(['push3', 'gpio16-on'], lambda: doPlay("3_*.*"))
 
 # GPIO RF Remote
-def togglePlay():
+def togglePlay(): 
 	if player.isPlaying(): player.stop()
-	else: player.play("0_*.*")
+	else: doPlay("0_*.*")
 player.on(['remote', 'gpio14-on', 'gpio15-on'], togglePlay)
 
 # PATH
@@ -44,7 +54,6 @@ def disableAuto(settings):
 player.on(['settings-applied'], disableAuto)
 
 # SETTINGS (pre-start)
-# player.audiomode('stereo')
 player.imagetime(15)
 
 # RUN

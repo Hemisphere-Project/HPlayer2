@@ -22,3 +22,32 @@ LONG SHOT
 - replacing log system with a global and configurable one..
 - ofxomxplayer backend // libvlc backend
 - media preroll for better sync accuracy
+
+
+
+
+GADAGNE 19
+***********
+
+ON NEW IMAGE:
+cp /home/mgr/Desktop/interweb-wlan1.nmconnection /media/mgr/system/etc/NetworkManager/system-connections/
+
+AFTER BOOT:
+ssh root@10.0.0.1
+fdisk /dev/mmcblk0
+d 3 n p 3 [enter] [enter] N w
+reboot
+ssh root@10.0.0.1
+resize2fs /dev/mmcblk0p3
+rw
+rm /data/hplayer2-gadagne19.cfg
+mkdir /data/var/tmp
+
+ON LAPTOP:
+scp -r /home/mgr/Bakery/HPlayer2/core root@10.0.0.1:/root/HPlayer2
+scp -r /home/mgr/Bakery/HPlayer2/profiles root@10.0.0.1:/root/HPlayer2
+
+ON REMOTE:
+reboot
+
+

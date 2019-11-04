@@ -8,7 +8,11 @@ import threading, os, time
 import logging
 from PIL import Image
 
+<<<<<<< HEAD
 from ..engine.network import get_allip
+=======
+from ..engine.network import get_allip, get_hostname
+>>>>>>> 6bff1646abdf4e084301c03e1547e8d38fd0a246
 import socket
 
 try:
@@ -36,11 +40,19 @@ class Http2Interface (BaseInterface):
             zeroconf = Zeroconf()
             info = ServiceInfo(
                 "_http._tcp.local.",
+<<<<<<< HEAD
                 "HPlayer2._http._tcp.local.",
                 addresses=[socket.inet_aton(ip) for ip in get_allip()],
                 port=self._port,
                 properties={},
                 server=socket.gethostname()+".local.",
+=======
+                "HPlayer2._"+get_hostname()+"._http._tcp.local.",
+                addresses=[socket.inet_aton(ip) for ip in get_allip()],
+                port=self._port,
+                properties={},
+                server=get_hostname()+".local.",
+>>>>>>> 6bff1646abdf4e084301c03e1547e8d38fd0a246
             )
             zeroconf.register_service(info)
 
