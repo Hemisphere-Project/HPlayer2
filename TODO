@@ -5,7 +5,9 @@ BUG
 NEXT
 - File Sync -> rsync + zyre + version ?
 - Move Scene / Media play in player logic
-- Service annoncment Bonjour/ZeroConf
+- Service Bonjour/ZeroConf/Zyre
+- KEYPAD: Multiple page -> manual mode !
+- WebCTRL: Control multiple Pi with matrix view
 - Clean up log in player and overlays like in interfaces
 - Clean up overlay like interfaces
 
