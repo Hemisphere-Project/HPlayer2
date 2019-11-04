@@ -28,6 +28,24 @@ def get_ip(iface=None):
                         pass
     return ip
 
+def get_allip():
+    ip = []
+    ifaces = ni.interfaces()
+    for iface in ifaces:
+        if iface.startswith("e"):
+            try:
+                ip.append(ni.ifaddresses(iface)[AF_INET][0]['addr'])
+            except:
+                pass
+    else:
+        for iface in ifaces:
+            if iface.startswith("w"):
+                try:
+                    ip.append(ni.ifaddresses(iface)[AF_INET][0]['addr'])
+                except:
+                    pass
+    return ip
+
 
 def get_broadcast(iface=None):
     ip = '127.0.0.1'

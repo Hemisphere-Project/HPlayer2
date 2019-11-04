@@ -4,6 +4,10 @@ import liblo
 import random
 from sys import getsizeof
 
+from ..engine.network import get_allip
+from zeroconf import ServiceInfo, Zeroconf
+import socket
+
 current_milli_time = lambda: int(round(time.time() * 1000))
 
 def oscdump(path, args, types):
@@ -48,6 +52,7 @@ class OscInterface (BaseInterface):
         except liblo.ServerError as e:
             self.log( "OSC Error:", e)
             self.stopped.set()
+
 
         # OSC trigger decorator
         def osc(path, argsTypes=None):
@@ -167,8 +172,36 @@ class OscInterface (BaseInterface):
             self.player.trigger(path, args)
             # self.log(path, args, "from", src.url)
 
+        # Advertize on ZeroConf
+        zeroconf = Zeroconf()
+        info = ServiceInfo(
+            "_osc._udp.local.",
+            "HPlayer2 input._osc._udp.local.",
+            addresses=[socket.inet_aton(ip) for ip in get_allip()],
+            port=self._portIn,
+            properties={},
+            server=socket.gethostname()+".local.",
+        )
+        zeroconf.register_service(info)
+        if self._portOut != self._portIn:
+            info2 = ServiceInfo(
+                "_osc._udp.local.",
+                "HPlayer2 output._osc._udp.local.",
+                addresses=[socket.inet_aton(ip) for ip in get_allip()],
+                port=self._portOut,
+                properties={},
+                server=socket.gethostname()+".local.",
+            )
+            zeroconf.register_service(info2)
+
         # loop and dispatch messages every 100ms
         while self.isRunning():
             oscServer.recv(100)
+
+        # Unregister ZeroConf
+        zeroconf.unregister_service(info)
+        if self._portOut != self._portIn:
+            zeroconf.unregister_service(info2)
+        zeroconf.close()
 
         return
