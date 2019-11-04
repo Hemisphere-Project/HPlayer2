@@ -21,7 +21,7 @@ if [[ $(command -v apt) ]]; then
 
     # hplayer2 dependencies
     apt install python3-liblo python3-netifaces python3-termcolor python3-evdev python3-flask-socketio python3-eventlet -y
-    apt install python3-watchdog -y
+    apt install python3-watchdog python3-pillow -y
     apt install python3-pip
     /usr/bin/yes | pip3 install python-socketio
 
@@ -52,7 +52,7 @@ elif [[ $(command -v pacman) ]]; then
     # hplayer2 dependencies
     pacman -S python3 cython liblo --noconfirm --needed
     pacman -S python-pyliblo python-netifaces python-termcolor python-evdev python-flask-socketio  --noconfirm --needed
-    pacman -S python-socketio python-watchdog --noconfirm --needed
+    pacman -S python-socketio python-watchdog python-pillow --noconfirm --needed
 
     # GPIO RPi
     if [[ $(uname -m) = armv* ]]; then
@@ -124,6 +124,8 @@ cd mpv-build
 if [[ $(uname -m) = armv* ]]; then
 	echo --enable-mmal > ffmpeg_options
 	echo --disable-vaapi > mpv_options
+
+	## TODO : disable Vulkan detection in WAF
 fi
 
 # Build

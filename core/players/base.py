@@ -22,7 +22,8 @@ class BasePlayer(object):
     settingspath = None
 
     doLog = {
-        'events':   False
+        'events':   False,
+        'cmds':     False
     }
 
     _validVideo = ['.mp4', '.m4v', '.mkv', 'avi', '.mov', '.flv', '.mpg', 'wmv', '.3gp', '.mp3', '.aac', '.wma', '.wav', '.flac', '.aiff', '.m4a', '.ogg', '.opus', '.webm']
@@ -50,15 +51,27 @@ class BasePlayer(object):
 
     def __init__(self):
         self.nameP = colored(self.name,'magenta')
-        self.on('end', self.onMediaEnd)
+        self.on('end-file', self.onMediaEnd)
+        self.on('end-playlist', self.stop)
 
     def onMediaEnd(self):
-        if self._settings['loop'] == 1:     # loop one
+
+        # loop one
+        if self._settings['loop'] == 1:     
             self.play()
-        elif self._settings['loop'] == 2:   # loop all
+
+        # playlist is not finnished
+        elif self._status['index']+1 < len(self.settings()['playlist']):
             self.next()
+
+        # loop all
+        elif self._settings['loop'] == 2:   
+            self.next()
+
+        # done
         else:
-            self.stop()
+            self.trigger('end-playlist')
+
 
     def setBasePath(self, bpath):
         if not isinstance(bpath, list):
@@ -210,7 +223,15 @@ class BasePlayer(object):
             if not type(event) is list:
                 event = [event]
             for e in event:
-                self._events[e] = callback
+                if e not in self._events:
+                    self._events[e] = []
+                if callback not in self._events[e]:
+                    self._events[e].append(callback)
+
+    # EVENT unbind
+    def unbind(self, event, callback):
+        if event in self._events:
+            self._events[event].remove(callback)
 
     # EVENT Trigger callback
     def trigger(self, event, args=None):
@@ -218,13 +239,15 @@ class BasePlayer(object):
             print(self.nameP, "event:", event, "/ args:", args)
 
         if '*' in self._events:
-            self._events['*'](event, args)
+            for clbk in self._events['*']:
+                clbk(event, args)
 
         if event in self._events:
-            if args is not None:
-                self._events[event](args)
-            else:
-                self._events[event]()
+            for clbk in self._events[event]:
+                if args is not None:
+                    clbk(args)
+                else:
+                    clbk()
 
 
 
@@ -374,22 +397,22 @@ class BasePlayer(object):
             playlist = self.settings()['playlist']
             index = 0
 
-        valid = False
 
-        # empty playlist: try a re-scan
-        if len(playlist) == 0:
-            self.load()
-            playlist = self.settings()['playlist']
-            if index >= len(playlist):
-                index = 0
+        # # empty playlist: try a re-scan
+        # if len(playlist) == 0:
+        #     self.load()
+        #     playlist = self.settings()['playlist']
+        #     if index >= len(playlist):
+        #         index = 0
 
-        # media not found: try a res-can
-        if 0 <= index < len(playlist) and not os.path.isfile(playlist[index]):
-            self.load()
-            playlist = self.settings()['playlist']
-            index = 0
+        # # media not found: try a res-can
+        # if 0 <= index < len(playlist) and not os.path.isfile(playlist[index]):
+        #     self.load()
+        #     playlist = self.settings()['playlist']
+        #     index = 0
 
         # Play file at index
+        valid = False
         with self._lock:
             if 0 <= index < len(playlist) and os.path.isfile(playlist[index]):
                 self._play(playlist[index])

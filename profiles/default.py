@@ -17,6 +17,6 @@ player.addInterface('http2', 8080)
 # player.on(['push1', 'gpio20'], lambda : player.play('media.mp4'))
 
 # RUN
-hplayer.setBasePath("/home/mgr/Videos")
-hplayer.persistentSettings("/home/mgr/hplayer2.cfg")
+hplayer.setBasePath("/data/sync")
+hplayer.persistentSettings("/data/hplayer2.cfg")
 hplayer.run()

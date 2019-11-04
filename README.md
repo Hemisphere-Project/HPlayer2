@@ -37,10 +37,10 @@ On your freshly configured Raspberry Pi:
     sudo ./build.sh
     cd ..
 
-You should examine this build script to understand what i does.
+You should examine this build script to understand what it does.
 
 You could run each part on your own instead of running the whole script blindly,  
-it will help in case it is broken (it can be, since distro are evolving faster than i can keep up with).
+it will help in case it is broken (it can be !).
 
 ## Run
 Since HPlayer2 is modular, you must specify a "patch" or **profile** that link i/o interfaces to the engine.  
@@ -49,8 +49,8 @@ There is a default profile provided, and several example based on projects where
 To start, go to HPlayer2 directory, and run `./hplayer2 profile`  
 where *profile* is the name of a file in the **profiles** subdirectory (without the .py)
 
-for exemple you can run `./hplayer2 hpod`   
-which will start HPlayer with the profile located in **profiles/hpod.py**
+for exemple you can run `./hplayer2 chrd`   
+which will start HPlayer with the profile located in **profiles/chrd.py**
 
 if you omit the profile and simply run `./hplayer2`  
 it will use the default profile located in **profiles/default.py**
@@ -71,9 +71,11 @@ The idea in a profile is:
  You can check those profiles:
  - hpod: OSC player with video fade support (on RPi)
  - gadagne: HTTP and GPIO basic player
+ - chrd: a simple Museum player, with HTTP2 webinterface
  - audioscope: RFID/NFC player (using PN532-like shield)
  - looper: read every files from *basedir* in a loop
  - ciconia: HTTP and LCD-Keypad interfaces
+ - 1watt / chalon / kxkm: more advanced profiles, leveraging time sync via Zyre
 
 ## Interfaces
 A more complete documentation regarding the capabilities and the use of the different interface modules will be provided in the future (PR and help are welcome!).  
@@ -84,11 +86,11 @@ Please check the profiles examples to see how to use those interfaces.
 Available interfaces:
  - GPIO: allows patching RPi gpio event to player action
  - OSC: patching OSC message to player actions to control it from TouchOSC / MaxMSP / etc...
- - HTTP: bootstrap a basic HTTP server to control and get status of the player over a network
- - Keyboard: keyboard usb and infrared remotes like [this one](https://goo.gl/sz7rie)
+ - HTTP: bootstrap a basic HTTP server to enable network basic API
+ - HTTP2: a nice web interface (responsive & websocket enabled) to setup an control HPlayer2
+ - Keyboard: usb keyboard, numpad or infrared remotes like [this one](https://goo.gl/sz7rie)
  - Keypad: interface LCD+Keypad RPi shield like [this one](https://www.adafruit.com/product/1110)
  - NFC: interface RFID/NFC tag reader based on PN532 like [this one](https://www.adafruit.com/product/364)
-
 
 
 ## CREDITS
