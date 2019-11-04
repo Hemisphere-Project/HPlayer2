@@ -14,7 +14,7 @@ player.doLog['cmds'] = True
 player.addInterface('http', 8080)
 player.addInterface('http2', 80)
 if hplayer.isRPi():
-    player.addInterface('gpio', [20,21,16,14,15], 310)
+    player.addInterface('gpio', [20,21,16,14,15,26], 310)
 if "-sync" in network.get_hostname():
 	player.addInterface('zyre', 'wlan0')
 
@@ -36,6 +36,15 @@ def doPlay(media):
 		time.sleep(0.05)
 		player.mute(False)
 
+# PLAY with super debounce  (ATTENTION: compatible avec 1 appel seulement)
+superLastTime = 0
+def superDebounce(media, timeout=1000):
+	global superLastTime
+	if (int(round(time.time() * 1000)) - superLastTime) > timeout:
+		doPlay(media)
+		superLastTime = int(round(time.time() * 1000))
+		print("PLAU")
+
 
 # DEFAULT File
 player.on(['player-ready', 'end-playlist'], lambda: doPlay("0_*.*"))
@@ -44,6 +53,9 @@ player.on(['player-ready', 'end-playlist'], lambda: doPlay("0_*.*"))
 player.on(['push1', 'gpio21-on'], lambda: doPlay("1_*.*"))
 player.on(['push2', 'gpio20-on'], lambda: doPlay("2_*.*"))
 player.on(['push3', 'gpio16-on'], lambda: doPlay("3_*.*"))
+
+# GPIO on+off
+player.on(['turn1', 'gpio26'], lambda state: superDebounce("1_*.*", 1000))
 
 # GPIO RF Remote
 def togglePlay(): 
