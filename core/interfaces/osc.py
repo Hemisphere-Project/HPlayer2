@@ -173,10 +173,10 @@ class OscInterface (BaseInterface):
             # self.log(path, args, "from", src.url)
 
         # Advertize on ZeroConf
-        zeroconf = Zeroconf(ip_version=IPVersion.V4Only)
+        zeroconf = Zeroconf()
         info = ServiceInfo(
-            "_http._tcp.local.",
-            "HPlayer2 OSC input._http._tcp.local.",
+            "_osc._udp.local.",
+            "HPlayer2 OSC input._osc._udp.local.",
             addresses=[socket.inet_aton(ip) for ip in get_allip()],
             port=self._portIn,
             properties={},
@@ -185,8 +185,8 @@ class OscInterface (BaseInterface):
         zeroconf.register_service(info)
         if self._portOut != self._portIn:
             info2 = ServiceInfo(
-                "_http._tcp.local.",
-                "HPlayer2 OSC output._http._tcp.local.",
+                "_osc._udp.local.",
+                "HPlayer2 OSC output._osc._udp.local.",
                 addresses=[socket.inet_aton(ip) for ip in get_allip()],
                 port=self._portOut,
                 properties={},
