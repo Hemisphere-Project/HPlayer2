@@ -29,7 +29,7 @@ class Http2Interface (BaseInterface):
         zeroconf = Zeroconf()
         info = ServiceInfo(
             "_http._tcp.local.",
-            "HPlayer2 WEB interface._http._tcp.local.",
+            "HPlayer2._http._tcp.local.",
             addresses=[socket.inet_aton(ip) for ip in get_allip()],
             port=self._port,
             properties={},

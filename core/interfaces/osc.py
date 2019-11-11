@@ -176,7 +176,7 @@ class OscInterface (BaseInterface):
         zeroconf = Zeroconf()
         info = ServiceInfo(
             "_osc._udp.local.",
-            "HPlayer2 OSC input._osc._udp.local.",
+            "HPlayer2 input._osc._udp.local.",
             addresses=[socket.inet_aton(ip) for ip in get_allip()],
             port=self._portIn,
             properties={},
@@ -186,7 +186,7 @@ class OscInterface (BaseInterface):
         if self._portOut != self._portIn:
             info2 = ServiceInfo(
                 "_osc._udp.local.",
-                "HPlayer2 OSC output._osc._udp.local.",
+                "HPlayer2 output._osc._udp.local.",
                 addresses=[socket.inet_aton(ip) for ip in get_allip()],
                 port=self._portOut,
                 properties={},

@@ -18,7 +18,7 @@ class HttpInterface (BaseInterface):
         zeroconf = Zeroconf()
         info = ServiceInfo(
             "_api-http._tcp.local.",
-            "HPlayer2 HTTP api._api-http._tcp.local.",
+            "HPlayer2._api-http._tcp.local.",
             addresses=[socket.inet_aton(ip) for ip in get_allip()],
             port=self._port,
             properties={},
