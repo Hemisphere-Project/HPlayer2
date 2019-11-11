@@ -99,6 +99,12 @@ make install && ldconfig
 cd bindings/python/ && python3 setup.py build && python3 setup.py install
 cd ../../.. && rm -Rf zyre
 
+# ZEROCONF
+git clone https://github.com/jstasiak/python-zeroconf.git && cd zeroconf
+python3 setup.py build
+python3 setup.py install
+cd .. && rm zeroconf
+
 
 #######
 # COMPILE MPV

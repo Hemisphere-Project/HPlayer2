@@ -8,6 +8,10 @@ import threading, os, time
 import logging
 from PIL import Image
 
+from ..engine.network import get_allip
+from zeroconf import IPVersion, ServiceInfo, Zeroconf       # https://github.com/jstasiak/python-zeroconf/
+import socket
+
 thread = None
 thread_lock = threading.Lock()
 
@@ -21,11 +25,26 @@ class Http2Interface (BaseInterface):
 
     # HTTP receiver THREAD
     def listen(self):
+        # Advertize on ZeroConf
+        zeroconf = Zeroconf(ip_version=IPVersion.V4Only)
+        info = ServiceInfo(
+            "_http._tcp.local.",
+            "HPlayer2 WEB interface._http._tcp.local.",
+            addresses=[socket.inet_aton(ip) for ip in get_allip()],
+            port=self._port,
+            properties={},
+            server=socket.gethostname()+".local.",
+        )
+        zeroconf.register_service(info)
 
         # Start server
         self.log( "web interface on port", self._port)
         with ThreadedHTTPServer(self._port, self.player) as server:
             self.stopped.wait()
+
+        # Unregister ZeroConf
+        zeroconf.unregister_service(info)
+        zeroconf.close()
 
 
 #
