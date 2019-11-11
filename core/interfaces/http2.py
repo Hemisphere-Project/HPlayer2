@@ -117,17 +117,29 @@ class ThreadedHTTPServer(object):
         #
         # SOCKETIO Routing
         #
+        
+        self.sendSettings = None
+        self.sendPlaylist = None
 
         def background_thread():
             while True:
                 socketio.emit('status', self.player.status())  # {'msg': 'yo', 'timestamp': time.gmtime()}
+                
+                if self.sendSettings:
+                    socketio.emit('settings', self.sendSettings)
+                    self.sendSettings = None
+                    
+                if self.sendPlaylist:
+                    socketio.emit('playlist', self.sendPlaylist)
+                    self.sendPlaylist = None
+                    
                 socketio.sleep(0.1)
 
-        def settings_send(arg):
-            socketio.emit('settings', arg)
+        def settings_send(arg=None):
+            self.sendSettings = arg
 
         def playlist_send(arg=None):
-            socketio.emit('playlist', arg)
+            self.sendPlaylist = arg
 
         self.player.on(['settings-update'], settings_send)
         self.player.on(['playlist-update'], playlist_send)

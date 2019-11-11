@@ -69,6 +69,8 @@ $(document).ready(function() {
     });
 
     socket.on('status', function(msg) {
+    
+        //console.log(msg)
 
         // TIME
         $('#time_ellapsed').text(msg['time'])
@@ -89,11 +91,12 @@ $(document).ready(function() {
 
           $("button").blur();
         }
-
+        
     });
 
     socket.on('settings', function(msg) {
-        // console.log(msg)
+        
+        //console.log(msg)
         var str_msg = JSON.stringify(msg)
         $('#log2').text(str_msg)
 
