@@ -9,7 +9,7 @@ import logging
 from PIL import Image
 
 from ..engine.network import get_allip
-from zeroconf import IPVersion, ServiceInfo, Zeroconf       # https://github.com/jstasiak/python-zeroconf/
+from zeroconf import ServiceInfo, Zeroconf 
 import socket
 
 thread = None
@@ -26,7 +26,7 @@ class Http2Interface (BaseInterface):
     # HTTP receiver THREAD
     def listen(self):
         # Advertize on ZeroConf
-        zeroconf = Zeroconf(ip_version=IPVersion.V4Only)
+        zeroconf = Zeroconf()
         info = ServiceInfo(
             "_http._tcp.local.",
             "HPlayer2 WEB interface._http._tcp.local.",

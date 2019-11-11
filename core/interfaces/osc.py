@@ -5,7 +5,7 @@ import random
 from sys import getsizeof
 
 from ..engine.network import get_allip
-from zeroconf import IPVersion, ServiceInfo, Zeroconf       # https://github.com/jstasiak/python-zeroconf/
+from zeroconf import ServiceInfo, Zeroconf
 import socket
 
 current_milli_time = lambda: int(round(time.time() * 1000))

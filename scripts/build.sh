@@ -100,10 +100,7 @@ cd bindings/python/ && python3 setup.py build && python3 setup.py install
 cd ../../.. && rm -Rf zyre
 
 # ZEROCONF
-git clone https://github.com/jstasiak/python-zeroconf.git && cd zeroconf
-python3 setup.py build
-python3 setup.py install
-cd .. && rm zeroconf
+pip3 install zeroconf
 
 
 #######
@@ -128,10 +125,10 @@ cd mpv-build
 
 # RPi: enable MMAL
 if [[ $(uname -m) = armv* ]]; then
-	#echo --enable-mmal > ffmpeg_options
-	echo --enable-libv4l2 > ffmpeg_options
-    echo --disable-vaapi > mpv_options
-	echo --enable-rpi > mpv_options
+	echo --enable-mmal > ffmpeg_options
+	# echo --enable-libv4l2 > ffmpeg_options
+    # echo --disable-vaapi > mpv_options
+	# echo --enable-rpi > mpv_options
 fi
 
 # Build

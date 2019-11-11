@@ -1,7 +1,7 @@
 from .base import BaseInterface
 from ..engine.network import get_allip
 from http.server import BaseHTTPRequestHandler, HTTPServer
-from zeroconf import IPVersion, ServiceInfo, Zeroconf       # https://github.com/jstasiak/python-zeroconf/
+from zeroconf import ServiceInfo, Zeroconf 
 import threading
 import socket
 
@@ -15,7 +15,7 @@ class HttpInterface (BaseInterface):
     # HTTP receiver THREAD
     def listen(self):
         # Advertize on ZeroConf
-        zeroconf = Zeroconf(ip_version=IPVersion.V4Only)
+        zeroconf = Zeroconf()
         info = ServiceInfo(
             "_api-http._tcp.local.",
             "HPlayer2 HTTP api._api-http._tcp.local.",
