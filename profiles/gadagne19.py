@@ -1,7 +1,7 @@
-from core.engine import hplayer
+from core.engine import hplayer, network
 
 # PLAYER
-player = hplayer.addplayer('mpv', 'gadagne')
+player = hplayer.addplayer('mpv', network.get_hostname())
 player.doLog['events'] = True
 player.doLog['cmds'] = True
 
