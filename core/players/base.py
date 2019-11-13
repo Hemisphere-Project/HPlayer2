@@ -42,6 +42,7 @@ class BasePlayer(object):
     _settings = {
         'volume':       100,
         'mute':         False,
+        'audiomode':    'stereo',
         'loop':         2,              # 0: no loop / 1: loop one / 2: loop all
         'pan':          [100,100],
         'flip':         False,
@@ -294,12 +295,15 @@ class BasePlayer(object):
         if self.settingspath and self.settingspath.is_file():
             with open(self.settingspath, 'rb') as fd:
                 self._settings = pickle.load(fd)
-                self._applyVolume()
-                self._applyPan()
-                self._applyFlip()
-                print(self.nameP, 'settings loaded:', self._settings)
-                if self._settings['autoplay']:
-                    self.play()
+            print(self.nameP, 'settings loaded:', self._settings)
+
+    def settings_apply(self):
+            self._applyVolume()
+            self._applyPan()
+            self._applyFlip()
+            if self._settings['autoplay']:
+                self.play()
+            self.trigger('settings-applied', self.settings())
 
     def settings_save(self):
         if self.settingspath:
@@ -311,7 +315,8 @@ class BasePlayer(object):
 
     # START
     def start(self):
-        self.on(['player-ready'], self.settings_load)
+        self.settings_load()
+        self.on(['player-ready'], self.settings_apply)
         for iface in self._interfaces.values():
             iface.start()
         # for olay in self._overlays.values():
@@ -522,6 +527,11 @@ class BasePlayer(object):
     # PAN
     def pan(self, pano):
         self.settings_set('pan', pano)
+        self._applyPan()
+
+    # AUDIOMODE 
+    def audiomode(self, am):
+        self.settings_set('audiomode', am)
         self._applyPan()
 
     # FLIP

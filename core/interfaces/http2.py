@@ -240,6 +240,10 @@ class ThreadedHTTPServer(object):
             if message and len(message) == 2:
                 self.player.pan([int(message[0]), int(message[1])])
 
+        @socketio.on('audiomode')
+        def audiomode_message(message=None):
+            self.player.audiomode(message)
+
         @socketio.on('flip')
         def flip_message():
             self.player.flip(True)

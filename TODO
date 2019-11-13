@@ -22,3 +22,8 @@ LONG SHOT
 - replacing log system with a global and configurable one..
 - ofxomxplayer backend // libvlc backend
 - media preroll for better sync accuracy
+
+
+
+
+scp HPlayer2/profiles/gadagne19.py root@10.0.0.1:/root/HPlayer2/profiles/gadagne19.py && scp HPlayer2/core/interfaces/gpio.py  root@10.0.0.1:/root/HPlayer2/core/interfaces/gpio.py

@@ -9,7 +9,7 @@ player.doLog['cmds'] = True
 player.addInterface('http', 8080)
 player.addInterface('http2', 80)
 if hplayer.isRPi():
-    player.addInterface('gpio', [20,21,16,14,15])
+    player.addInterface('gpio', [20,21,16,14,15], 310)
 
 # Remove default stop at "end-playlist" (or it prevent the next play !)
 player.unbind('end-playlist', player.stop)
@@ -33,9 +33,15 @@ hplayer.setBasePath("/data/media")
 hplayer.persistentSettings("/data/hplayer2-gadagne19.cfg")
 
 # DISABLE automations
-player.loop(False)
-player.autoplay(False)
-player.clear()
+def disableAuto(settings):
+	player.loop(False)
+	player.autoplay(False)
+	player.clear()
+player.on(['settings-applied'], disableAuto)
+
+# SETTINGS (pre-start)
+# player.audiomode('stereo')
+player.imagetime(15)
 
 # RUN
 hplayer.run()

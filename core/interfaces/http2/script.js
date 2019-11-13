@@ -113,6 +113,8 @@ $(document).ready(function() {
 
         $('#right_range').val(msg['pan'][1])
         $('#volumeRight').html(msg['pan'][1])
+        
+        $('#audiomode_mono').prop( "checked", (msg['audiomode'] == 'mono') )
 
         playlistUpdate(msg['playlist'])
 
@@ -171,6 +173,12 @@ $(document).ready(function() {
     });
     $('#right_range').on('input', function(event) {
       socket.emit('pan', [$('#left_range').val(), this.value]);
+    });
+    $('#audiomode_mono').on('change', function(event) {
+      if ($('#audiomode_mono').prop('checked')) 
+        socket.emit('audiomode', 'mono');
+      else
+        socket.emit('audiomode', 'stereo');
     });
     $('.vol-main').on('click', function(event) {
       $('.vol-more').toggle()

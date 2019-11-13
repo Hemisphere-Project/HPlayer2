@@ -20,12 +20,14 @@ class GpioInterface (BaseInterface):
         def clbck(pinz):
             #self.log("channel", pinz, "triggered")
             if not GPIO.input(pinz):
-                # if not self._state[pinz]:
+                if self._state[pinz]:
+                    self.player.trigger('gpio'+str(pinz)+'-off')
                 self.player.trigger('gpio'+str(pinz)+'-on')
                 self.player.trigger('gpio'+str(pinz), 1)
                 self._state[pinz] = True
             else:
-                #if self._state[pinz]:
+                if not self._state[pinz]:
+                    self.player.trigger('gpio'+str(pinz)+'-on')
                 self.player.trigger('gpio'+str(pinz)+'-off')
                 self.player.trigger('gpio'+str(pinz), 0)
                 self._state[pinz] = False
