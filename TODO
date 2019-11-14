@@ -26,4 +26,25 @@ LONG SHOT
 
 
 
-scp HPlayer2/profiles/gadagne19.py root@10.0.0.1:/root/HPlayer2/profiles/gadagne19.py && scp HPlayer2/core/interfaces/gpio.py  root@10.0.0.1:/root/HPlayer2/core/interfaces/gpio.py
+ON NEW IMAGE:
+cp /home/mgr/Desktop/interweb-wlan1.nmconnection /media/mgr/system/etc/NetworkManager/system-connections/
+
+AFTER BOOT:
+ssh root@10.0.0.1
+fdisk /dev/mmcblk0
+d 3 n p 3 [enter] [enter] N w
+reboot
+ssh root@10.0.0.1
+resize2fs /dev/mmcblk0p3
+rw
+rm /data/hplayer2-gadagne19.cfg
+mkdir /data/var/tmp
+
+ON LAPTOP:
+scp -r /home/mgr/Bakery/HPlayer2/core root@10.0.0.1:/root/HPlayer2
+scp -r /home/mgr/Bakery/HPlayer2/profiles root@10.0.0.1:/root/HPlayer2
+
+ON REMOTE:
+reboot
+
+

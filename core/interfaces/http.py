@@ -1,10 +1,15 @@
 from .base import BaseInterface
 from ..engine.network import get_allip
 from http.server import BaseHTTPRequestHandler, HTTPServer
-from zeroconf import ServiceInfo, Zeroconf 
 import threading
 import socket
 
+try:
+    from zeroconf import ServiceInfo, Zeroconf 
+    zero_enable = True
+except:
+    print("import error: zeroconf is missing")
+    zero_enable = False
 
 class HttpInterface (BaseInterface):
 
@@ -15,16 +20,17 @@ class HttpInterface (BaseInterface):
     # HTTP receiver THREAD
     def listen(self):
         # Advertize on ZeroConf
-        zeroconf = Zeroconf()
-        info = ServiceInfo(
-            "_api-http._tcp.local.",
-            "HPlayer2._api-http._tcp.local.",
-            addresses=[socket.inet_aton(ip) for ip in get_allip()],
-            port=self._port,
-            properties={},
-            server=socket.gethostname()+".local.",
-        )
-        zeroconf.register_service(info)
+        if zero_enable:
+            zeroconf = Zeroconf()
+            info = ServiceInfo(
+                "_api-http._tcp.local.",
+                "HPlayer2._api-http._tcp.local.",
+                addresses=[socket.inet_aton(ip) for ip in get_allip()],
+                port=self._port,
+                properties={},
+                server=socket.gethostname()+".local.",
+            )
+            zeroconf.register_service(info)
 
         # Start server
         self.log( "listening on port", self._port)
@@ -32,8 +38,9 @@ class HttpInterface (BaseInterface):
             self.stopped.wait()
 
         # Unregister ZeroConf
-        zeroconf.unregister_service(info)
-        zeroconf.close()
+        if zero_enable:
+            zeroconf.unregister_service(info)
+            zeroconf.close()
 
 
 #

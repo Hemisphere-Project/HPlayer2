@@ -1,5 +1,9 @@
 from core.engine import hplayer, network
 
+# EXTRA TMP UPLOAD
+import tempfile
+tempfile.tempdir = '/data/var/tmp'
+
 # PLAYER
 player = hplayer.addplayer('mpv', network.get_hostname())
 player.doLog['events'] = True
