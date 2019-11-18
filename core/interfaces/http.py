@@ -1,5 +1,5 @@
 from .base import BaseInterface
-from ..engine.network import get_allip
+from ..engine.network import get_allip, get_hostname
 from http.server import BaseHTTPRequestHandler, HTTPServer
 import threading
 import socket
@@ -24,11 +24,11 @@ class HttpInterface (BaseInterface):
             zeroconf = Zeroconf()
             info = ServiceInfo(
                 "_api-http._tcp.local.",
-                "HPlayer2._api-http._tcp.local.",
+                "HPlayer2._"+get_hostname()+"._api-http._tcp.local.",
                 addresses=[socket.inet_aton(ip) for ip in get_allip()],
                 port=self._port,
                 properties={},
-                server=socket.gethostname()+".local.",
+                server=get_hostname()+".local.",
             )
             zeroconf.register_service(info)
 

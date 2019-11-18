@@ -26,6 +26,9 @@ LONG SHOT
 
 
 
+GADAGNE 19
+***********
+
 ON NEW IMAGE:
 cp /home/mgr/Desktop/interweb-wlan1.nmconnection /media/mgr/system/etc/NetworkManager/system-connections/
 
