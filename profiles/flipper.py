@@ -35,7 +35,7 @@ player.on(['settings-applied'], disableAuto)
 
 # SETTINGS (pre-start)
 # player.audiomode('stereo')
-player.imagetime(15)
+# player.imagetime(15)
 
 # RUN
 hplayer.run()
