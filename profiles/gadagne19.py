@@ -22,7 +22,7 @@ player.unbind('end-playlist', player.stop)
 # PLAY action
 def doPlay(media):
 	player.mute(True)
-	time.sleep(0.3)
+	time.sleep(0.1)
 	player.play(media)
 	time.sleep(0.05)
 	player.mute(False)
