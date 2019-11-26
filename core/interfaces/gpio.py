@@ -3,15 +3,19 @@ import RPi.GPIO as GPIO
 
 class GpioInterface (BaseInterface):
 
-    def __init__(self, player, pins, debounce=50):
+    def __init__(self, player, pins, debounce=50, pullupdown='PUP'):
         super(GpioInterface, self).__init__(player, "GPIO")
 
         self._state = {}
         self._pins = pins
         self._debounce = debounce
         GPIO.setmode(GPIO.BCM)
-        GPIO.setup(pins, GPIO.IN, pull_up_down=GPIO.PUD_UP)
-
+        if pullupdown == 'PUP':
+            GPIO.setup(pins, GPIO.IN, pull_up_down=GPIO.PUD_UP)
+        elif pullupdown == 'PDOWN':
+            GPIO.setup(pins, GPIO.IN, pull_up_down=GPIO.PUD_DOWN)
+        else:
+            GPIO.setup(pins, GPIO.IN)
 
     # GPIO receiver THREAD
     def listen(self):
