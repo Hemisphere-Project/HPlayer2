@@ -45,7 +45,7 @@ $(document).ready(function() {
         $('#trees').empty()
 
         msg.forEach(function(element) {
-          var col = $('<div class="col-xl-6 col-lg-12 col-md-12 col-sm-12 " />').appendTo($('#trees'))
+          var col = $('<div class="col-xl-12 col-lg-12 col-md-12 col-sm-12 " />').appendTo($('#trees'))
           var head = $('<div class="card-header text-white bg-dark">').html('<span>'+element['path']+'</span>').appendTo(col)
             var upload = $('<span class="badge badge-info float-right">upload</span>').appendTo(head).on('click', function(){
               $('#uploadModal').modal()

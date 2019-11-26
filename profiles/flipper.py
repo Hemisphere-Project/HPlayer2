@@ -19,7 +19,7 @@ player.addInterface('serial', "^CP2102")
 player.on(['RELOOP'], lambda: player.play("loop*.*"))
 
 # PATH
-hplayer.setBasePath(["/data/media", "/mnt/usb"])
+hplayer.setBasePath(["/mnt/usb"])
 hplayer.persistentSettings("/data/hplayer2-flipper.cfg")
 
 # DISABLE automations
