@@ -16,7 +16,7 @@ player.addInterface('http2', 80)
 player.addInterface('serial', "^CP2102")
 
 # SERIAL USB
-player.on(['RELOOP'], lambda: player.play("loop.*"))
+player.on(['RELOOP'], lambda: player.play("loop*.*"))
 
 # PATH
 hplayer.setBasePath(["/data/media", "/mnt/usb"])
