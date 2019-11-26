@@ -4,14 +4,8 @@ import liblo
 import random, time
 from sys import getsizeof
 
-<<<<<<< HEAD
-from ..engine.network import get_allip
-from zeroconf import ServiceInfo, Zeroconf
-import socket
-=======
 from ..engine.network import get_allip, get_hostname
 from zeroconf import ServiceInfo, Zeroconf
->>>>>>> 6bff1646abdf4e084301c03e1547e8d38fd0a246
 
 current_milli_time = lambda: int(round(time.time() * 1000))
 
@@ -181,37 +175,21 @@ class OscInterface (BaseInterface):
         zeroconf = Zeroconf()
         info = ServiceInfo(
             "_osc._udp.local.",
-<<<<<<< HEAD
-            "HPlayer2 input._osc._udp.local.",
-            addresses=[socket.inet_aton(ip) for ip in get_allip()],
-            port=self._portIn,
-            properties={},
-            server=socket.gethostname()+".local.",
-=======
             "HPlayer2 input._"+get_hostname()+"._osc._udp.local.",
             addresses=[socket.inet_aton(ip) for ip in get_allip()],
             port=self._portIn,
             properties={},
             server=get_hostname()+".local.",
->>>>>>> 6bff1646abdf4e084301c03e1547e8d38fd0a246
         )
         zeroconf.register_service(info)
         if self._portOut != self._portIn:
             info2 = ServiceInfo(
                 "_osc._udp.local.",
-<<<<<<< HEAD
-                "HPlayer2 output._osc._udp.local.",
-                addresses=[socket.inet_aton(ip) for ip in get_allip()],
-                port=self._portOut,
-                properties={},
-                server=socket.gethostname()+".local.",
-=======
                 "HPlayer2 output._"+get_hostname()+"._osc._udp.local.",
                 addresses=[socket.inet_aton(ip) for ip in get_allip()],
                 port=self._portOut,
                 properties={},
                 server=get_hostname()+".local.",
->>>>>>> 6bff1646abdf4e084301c03e1547e8d38fd0a246
             )
             zeroconf.register_service(info2)
 
