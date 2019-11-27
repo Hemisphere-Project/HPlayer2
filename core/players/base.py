@@ -293,10 +293,13 @@ class BasePlayer(object):
 
     def settings_load(self):
         if self.settingspath and self.settingspath.is_file():
-            with open(self.settingspath, 'rb') as fd:
-                self._settings = pickle.load(fd)
-            print(self.nameP, 'settings loaded:', self._settings)
-
+            try:
+                with open(self.settingspath, 'rb') as fd:
+                    self._settings = pickle.load(fd)
+                print(self.nameP, 'settings loaded:', self._settings)
+            except:
+                print(self.nameP, 'ERROR loading settings file', self.settingspath)
+                
     def settings_apply(self):
             self._applyVolume()
             self._applyPan()
