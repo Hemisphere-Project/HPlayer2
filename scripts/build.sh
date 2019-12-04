@@ -97,6 +97,7 @@ cd ../../.. && rm -Rf czmq
 git clone git://github.com/zeromq/zyre.git && cd zyre
 ./autogen.sh && ./configure && make check -j4
 make install && ldconfig
+ln -s /usr/local/lib/libzyre.so.2 /usr/lib/
 cd bindings/python/ && python3 setup.py build && python3 setup.py install
 cd ../../.. && rm -Rf zyre
 

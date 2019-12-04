@@ -1,6 +1,9 @@
+import os, types, platform
 from core.engine import hplayer
 from core.engine import network
-import os, types, platform
+from watchdog.observers import Observer
+from watchdog.events import PatternMatchingEventHandler
+from threading import Timer
 
 # NAME
 #
@@ -8,7 +11,7 @@ playerName = network.get_hostname()
 
 # PLAYER
 #
-player = hplayer.addplayer('mpv', 'xpa')
+player = hplayer.addplayer('mpv', network.get_hostname())
 player.loop(1)
 # player.doLog['events'] = True
 
@@ -32,15 +35,29 @@ else: base_path = '/home/mgr/Videos'
 
 available_dir = []
 active_dir_length = 0
+refreshTimer = None
 
 def refresh_filelist():
+	global refreshTimer, available_dir
+	refreshTimer = None
 	available_dir = [d for d in next(os.walk(base_path))[1] if not d.startswith('.')]
 	available_dir.sort()
 	if len(available_dir) == 0: available_dir.insert(0,'')
+	print('File list updated')
 
-refresh_filelist()
-set_activedir(0)
+def file_change(event):
+	global refreshTimer
+	if not refreshTimer:
+		refreshTimer = Timer(3.0, refresh_filelist)
+		refreshTimer.start()
 
+my_event_handler = PatternMatchingEventHandler("*", "", False, True)
+my_event_handler.on_any_event = file_change
+my_observer = Observer()
+my_observer.schedule(my_event_handler, base_path, recursive=True)
+my_observer.start()
+
+player.setBasePath(base_path)
 
 # Broadcast Order on OSC/Zyre to other Pi's
 #
@@ -60,7 +77,7 @@ def broadcast(path, *args):
 # /playmedia callback
 # args = [ 0:dir-index, 1:media-startswith]
 #
-def play_index(args): 			
+def play_ActiveIndex(args): 	
 	target_dir = args[0]
 	if target_dir < len(available_dir):
 		target_path = os.path.join(base_path, available_dir[target_dir])
@@ -75,7 +92,7 @@ def play_index(args):
 # Zyre Broadcast
 #
 def play_indexInActivedir(index):
-	broadcast('/playindex', active_dir, index)
+	broadcast('/playActiveIndex', active_dir, index)
 
 # Set active dir
 #
@@ -107,10 +124,15 @@ def prev_dir():
 	set_activedir(new_dir)
 
 
+# Init dirs
+#
+refresh_filelist()
+set_activedir(0)
+
 # Bind custom Zyre events
 #
 player.on(['/rescan'], refresh_filelist)
-player.on(['/playindex'],  play_index)
+player.on(['/playActiveIndex'],  play_ActiveIndex)
 
 
 # Bind Keypad events
@@ -236,3 +258,8 @@ if is_RPi:
 # RUN
 #hplayer.setBasePath(["/mnt/usb"])        	# Media base path
 hplayer.run()                               # TODO: non blocking
+
+
+# EXIT
+my_observer.stop()
+my_observer.join()

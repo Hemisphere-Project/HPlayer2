@@ -38,6 +38,7 @@ $(document).ready(function() {
     socket.on('name', function(name) {
         console.log('Player name:', name)
         $('#playerName').html(name);
+        document.title = name+' | HPlayer2'
     });
 
     socket.on('files', function(msg) {
