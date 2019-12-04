@@ -90,6 +90,7 @@ cd .. && rm -Rf libzmq
 git clone git://github.com/zeromq/czmq.git && cd czmq
 ./autogen.sh && ./configure && make check -j4
 make install && ldconfig
+ln -s /usr/local/lib/libczmq.so.4 /usr/lib/
 cd bindings/python/ && python3 setup.py build && python3 setup.py install
 cd ../../.. && rm -Rf czmq
 
