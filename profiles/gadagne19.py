@@ -15,17 +15,26 @@ player.addInterface('http', 8080)
 player.addInterface('http2', 80)
 if hplayer.isRPi():
     player.addInterface('gpio', [20,21,16,14,15], 310)
+if "-sync" in network.get_hostname():
+	player.addInterface('zyre', 'eth0')
 
 # Remove default stop at "end-playlist" (or it prevent the next play !)
 player.unbind('end-playlist', player.stop)
 
 # PLAY action
 def doPlay(media):
-	player.mute(True)
-	time.sleep(0.1)
-	player.play(media)
-	time.sleep(0.05)
-	player.mute(False)
+	if "-sync" in network.get_hostname():
+		if "-master" in network.get_hostname():
+			player.getInterface('zyre').node.broadcast('/play', list(media), 200)
+			print('doPLay: master.. broadcast')
+		else:
+			print('doPLay: slave.. do nothing')
+	else:
+		player.mute(True)
+		time.sleep(0.1)
+		player.play(media)
+		time.sleep(0.05)
+		player.mute(False)
 
 
 # DEFAULT File
