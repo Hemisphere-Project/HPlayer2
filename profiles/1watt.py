@@ -153,7 +153,7 @@ def change_scene(dir):
 # Init dirs
 #
 refresh_filelist()
-set_activedir(0)
+#set_activedir(0)
 
 player.on(['/scene'], change_scene)
 
