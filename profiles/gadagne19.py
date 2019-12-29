@@ -16,7 +16,7 @@ player.addInterface('http2', 80)
 if hplayer.isRPi():
     player.addInterface('gpio', [20,21,16,14,15], 310)
 if "-sync" in network.get_hostname():
-	player.addInterface('zyre', 'eth0')
+	player.addInterface('zyre', 'wlan0')
 
 # Remove default stop at "end-playlist" (or it prevent the next play !)
 player.unbind('end-playlist', player.stop)
