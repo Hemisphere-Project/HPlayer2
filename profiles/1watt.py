@@ -68,7 +68,7 @@ def vol_dec():
 
 
 # DIRECTORY / FILE
-if is_RPi: base_path = '/mnt/usb'
+if is_RPi: base_path = '/data/usb'
 else: base_path = '/home/mgr/Videos'
 available_dir = [d for d in next(os.walk(base_path))[1] if not d.startswith('.')]
 available_dir.sort()
@@ -205,7 +205,7 @@ def lcd_update(self):
 	else: lines[1] = os.path.basename(self.player.status()['media'])[:-4]
 	lines[1] = lines[1].ljust(14, ' ')[:14]
 	lines[1] += str(player.getInterface('zyre').activeCount()).rjust(2, ' ')[:2]
-	
+
 	return lines
 
 if is_RPi:
