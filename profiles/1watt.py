@@ -74,9 +74,6 @@ available_dir = [d for d in next(os.walk(base_path))[1] if not d.startswith('.')
 available_dir.sort()
 active_dir_length = 0
 active_dir = 0
-if len(available_dir) == 0: available_dir.insert(0,'')
-if len(available_dir) >= 2: set_activedir(1)
-else: set_activedir(0)
 
 def play_activedir(index):
 	broadcast('/playlist', current_dir(), index)
@@ -123,6 +120,11 @@ def change_scene(dir):
 		global active_dir
 		active_dir = available_dir.index(dir)
 		# DO NOT RE-BROADCAST !!
+
+# INIT
+if len(available_dir) == 0: available_dir.insert(0,'')
+if len(available_dir) >= 2: set_activedir(1)
+else: set_activedir(0)
 
 player.on(['/scene'], change_scene)
 
@@ -201,8 +203,9 @@ def lcd_update(self):
 	# Line 2 : MEDIA
 	if not self.player.status()['media']: lines[1] = '-stop-'
 	else: lines[1] = os.path.basename(self.player.status()['media'])[:-4]
-	lines[1] = lines[1].ljust(16, ' ')[:16]
-
+	lines[1] = lines[1].ljust(14, ' ')[:14]
+	lines[1] += str(player.getInterface('zyre').activeCount()).rjust(2, ' ')[:2]
+	
 	return lines
 
 if is_RPi:
