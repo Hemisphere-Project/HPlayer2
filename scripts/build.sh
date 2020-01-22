@@ -1,17 +1,20 @@
 #!/bin/bash
+
 if [[ $EUID -ne 0 ]]; then
    echo "This script must be run as root"
    exit 1
 fi
 
+cd "$(dirname "$(readlink -f "$0")")"
+
 ##
 ## Install plateform spcific dependencies
 ##
-distro=''
+DISTRO=''
 
 ## xBIAN (DEBIAN / RASPBIAN / UBUNTU)
 if [[ $(command -v apt) ]]; then
-    distro='xbian'
+    DISTRO='xbian'
 
     # libass / ffmpeg / mpv dependencies
     apt install libfreetype6-dev libfribidi-dev libfontconfig1-dev yasm libx264-dev git libtool build-essential pkg-config autoconf -y
@@ -37,16 +40,12 @@ if [[ $(command -v apt) ]]; then
 
 ## ARCH Linux
 elif [[ $(command -v pacman) ]]; then
-    distro='arch'
+    DISTRO='arch'
 
     # libass / ffmpeg / mpv dependencies
-    pacman -S freetype2 fribidi fontconfig yasm git --noconfirm --needed
-    pacman -S autoconf pkg-config libtool --noconfirm --needed
+    pacman -S freetype2 fribidi fontconfig yasm git autoconf pkg-config libtool --noconfirm --needed
     pacman -S lua luajit libvdpau libva libxv libjpeg libxkbcommon libxrandr libv4l libxss libcaca sdl2 --noconfirm --needed
-    pacman -S base-devel --noconfirm --needed    ## error ?
-    pacman -S libx264 --noconfirm --needed       ## error ?
-    pacman -S mesa --noconfirm --needed          ## error ?
-    pacman -S fbida --noconfirm --needed         ## error ?
+    pacman -S base-devel libx264 mesa fbida libbluray --noconfirm --needed
     pacman -S alsa-lib alsa-firmware ttf-roboto --noconfirm --needed
 
     # hplayer2 dependencies
@@ -79,95 +78,96 @@ fi
 ####
 
 # PIP
-pip3 install --upgrade setuptools
+/usr/bin/yes | pip3 install --upgrade setuptools
+/usr/bin/yes | pip3 install --upgrade zeroconf
 
 # ZYRE
+cd /tmp
 git clone git://github.com/zeromq/libzmq.git && cd libzmq
 ./autogen.sh && ./configure && make check -j4
 make install && ldconfig
-cd .. && rm -Rf libzmq
 
+cd /tmp
 git clone git://github.com/zeromq/czmq.git && cd czmq
 ./autogen.sh && ./configure && make check -j4
 make install && ldconfig
 ln -s /usr/local/lib/libczmq.so.4 /usr/lib/
 cd bindings/python/ && python3 setup.py build && python3 setup.py install
-cd ../../.. && rm -Rf czmq
 
+cd /tmp
 git clone git://github.com/zeromq/zyre.git && cd zyre
 ./autogen.sh && ./configure && make check -j4
 make install && ldconfig
 ln -s /usr/local/lib/libzyre.so.2 /usr/lib/
 cd bindings/python/ && python3 setup.py build && python3 setup.py install
-cd ../../.. && rm -Rf zyre
-
-# ZEROCONF
-pip3 install zeroconf
 
 
 #######
-# COMPILE MPV
+# MPV
 #######
 
-echo "Building MPV for your system..."
+ARCHI=`uname -m`
 
-## FIX
-# pkgconfig for bcm_host
-if [[ $(uname -m) = armv* ]]; then
-  export LIBRARY_PATH=/opt/vc/lib
-  export PKG_CONFIG_PATH=/opt/vc/lib/pkgconfig/
-fi
+cd "$(dirname "$(readlink -f "$0")")"
 
-# Get MPV Build tools
-cd "$(dirname "$0")"
-rm -rf mpv-build
-git clone https://github.com/mpv-player/mpv-build.git
-cd mpv-build
-#echo --enable-libmpv-shared > mpv_options
-
-# RPi: enable MMAL
-if [[ $(uname -m) = armv* ]]; then
-	echo --enable-mmal > ffmpeg_options
-	# echo --enable-libv4l2 > ffmpeg_options
-    # echo --disable-vaapi > mpv_options
-	# echo --enable-rpi > mpv_options
-fi
-
-# Build
-./use-mpv-release
-./use-ffmpeg-release
-
-# fixed rebuild
-set -e
-export LC_ALL=C
-./update
-./clean
-cd mpv 
-git checkout refs/tags/"v0.29.1"    # 0.30.0 release is broken on RPi
-cd ..
-
-if [[ $(uname -m) = armv* ]]; then
-    ./build -j4
+if test -f "../bin/prebuilds/mpv-$DISTRO-$ARCHI"; then
+    echo "mpv build FOUND !"
+    echo "copying bin/prebuilds/mpv-$DISTRO-$ARCHI"
+    cp "../bin/prebuilds/mpv-$DISTRO-$ARCHI" ../bin/mpv
 else
-    ./build -j8
+    echo "mpv build NOT FOUND :("
+    echo "Building MPV for your system..."
+
+    ## FIX
+    # pkgconfig for bcm_host
+    if [[ $(uname -m) = armv* ]]; then
+    export LIBRARY_PATH=/opt/vc/lib
+    export PKG_CONFIG_PATH=/opt/vc/lib/pkgconfig/
+    fi
+
+    # Get MPV Build tools
+    cd "$(dirname "$0")"
+    rm -rf mpv-build
+    git clone https://github.com/mpv-player/mpv-build.git
+    cd mpv-build
+    #echo --enable-libmpv-shared > mpv_options
+
+    # RPi: enable MMAL
+    if [[ $(uname -m) = armv* ]]; then
+        echo --enable-mmal > ffmpeg_options
+        # echo --enable-libv4l2 > ffmpeg_options
+        # echo --disable-vaapi > mpv_options
+        # echo --enable-rpi > mpv_options
+    fi
+
+    # Build
+    ./use-mpv-release
+    ./use-ffmpeg-release
+
+    # fixed rebuild
+    set -e
+    export LC_ALL=C
+    ./update
+    ./clean
+    cd mpv 
+    git checkout refs/tags/"v0.29.1"    # 0.30.0 release is broken on RPi
+    cd ..
+
+    if [[ $(uname -m) = armv* ]]; then
+        ./build -j4
+    else
+        ./build -j8
+    fi
+    cd ..
+
+    # Copy bin
+    mkdir -p ../bin
+    cp mpv-build/mpv/build/mpv  ../bin/mpv
+
+
+    # Clean
+    rm -fR mpv-build
+
 fi
-cd ..
 
-# Copy bin
-mkdir -p ../bin
-cp mpv-build/mpv/build/mpv  ../bin/mpv
-
-
-# Clean
-rm -fR mpv-build
-# read -r -p "Clean mpv-build directory? [Y/n] " -n 1 response
-# echo
-# case "$response" in
-#     *)
-#         exit 0
-#         ;;
-#     [yY])
-#         rm -fR mpv-build
-#         ;;
-# esac
 exit 0
