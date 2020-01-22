@@ -30,7 +30,7 @@ if is_RPi:
 
 # Files list
 #
-if is_RPi: base_path = '/data/sync'
+if is_RPi: base_path = '/data/sync/media'
 else: base_path = '/home/mgr/Videos'
 
 available_dir = []
