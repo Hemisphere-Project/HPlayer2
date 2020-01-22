@@ -30,7 +30,7 @@ if [[ $(command -v apt) ]]; then
 
     # GPIO RPi
     if [[ $(uname -m) = armv* ]]; then
-    	apt-get install python-rpi.gpio -y
+    	apt-get install python-rpi.gpio i2c-tools -y
     	git clone https://github.com/adafruit/Adafruit_Python_CharLCD.git
     	cd Adafruit_Python_CharLCD
     	python3 setup.py install
@@ -55,7 +55,7 @@ elif [[ $(command -v pacman) ]]; then
 
     # GPIO RPi
     if [[ $(uname -m) = armv* ]]; then
-      pacman -S python-pip python-queuelib  --noconfirm --needed
+      pacman -S python-pip python-queuelib i2c-tools --noconfirm --needed
       /usr/bin/yes | pip3 install RPi.GPIO
       git clone https://github.com/adafruit/Adafruit_Python_CharLCD.git
 	  cd Adafruit_Python_CharLCD

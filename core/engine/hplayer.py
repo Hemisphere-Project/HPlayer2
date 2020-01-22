@@ -32,6 +32,8 @@ def persistentSettings(spath):
         p.persistentSettings(spath)
 
 def addplayer(ptype, name=None):
+    if not name:
+        name = network.get_hostname()
     if name and name in players_pool:
         print("player", name, "already exists")
     else:

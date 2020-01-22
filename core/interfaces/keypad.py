@@ -17,6 +17,8 @@ class KeypadInterface (BaseInterface):
     def __init__(self, player):
         super(KeypadInterface, self).__init__(player, "KEYPAD")
 
+        self.lcd = LCD.Adafruit_CharLCDPlate()
+
         try:
             self.lcd = LCD.Adafruit_CharLCDPlate()
             self.lcd.set_color(0, 0, 0)
