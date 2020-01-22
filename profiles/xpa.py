@@ -19,8 +19,8 @@ player.loop(1)
 #
 player.addInterface('zyre', 'wlan0')
 player.addInterface('osc', 4000, 4000).hostOut = '255.255.255.255'
-player.addInterface('http', 8088)
-player.addInterface('http2', 80)
+player.addInterface('http2', 8080)
+player.addInterface('http', 8037)
 player.addInterface('keyboard')
 
 is_RPi = platform.machine().startswith('armv')
