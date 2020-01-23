@@ -11,6 +11,10 @@ playerName = network.get_hostname()
 # PLAYER
 player = hplayer.addplayer('mpv')
 player.loop(0)
+
+midi = hplayer.addplayer('midi')
+midi.loop(0)
+
 # player.doLog['events'] = True
 
 # Interfaces

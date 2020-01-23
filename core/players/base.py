@@ -26,7 +26,7 @@ class BasePlayer(object):
         'cmds':     False
     }
 
-    _validVideo = ['.mp4', '.m4v', '.mkv', 'avi', '.mov', '.flv', '.mpg', 'wmv', '.3gp', '.mp3', '.aac', '.wma', '.wav', '.flac', '.aiff', '.m4a', '.ogg', '.opus', '.webm']
+    _validVideo = ['.mp4', '.m4v', '.mkv', 'avi', '.mov', '.flv', '.mpg', 'wmv', '.3gp', '.mp3', '.aac', '.wma', '.wav', '.flac', '.aif', '.aiff', '.m4a', '.ogg', '.opus', '.webm']
     _validImage = ['.jpg', '.jpeg', '.gif', '.png', '.tif']
 
     _events = {} 
