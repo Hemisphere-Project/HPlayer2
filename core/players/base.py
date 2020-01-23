@@ -1,7 +1,7 @@
 from __future__ import print_function
 
 import os
-import threading
+import threading, functools
 import glob
 import pickle
 import re
@@ -219,15 +219,25 @@ class BasePlayer(object):
     #
 
     # EVENT Set callback
-    def on(self, event, callback):
-        if callback:
-            if not type(event) is list:
-                event = [event]
-            for e in event:
+    def on(self, event, func=None):
+        """
+        Registers a function to an event. When *func* is *None*, decorator
+        usage is assumed. Returns the function.
+        """
+        def _on(func):
+            if not hasattr(func, "__call__"):
+                return func
+            elist = [event] if not type(event) is list else event
+            for e in elist:
                 if e not in self._events:
                     self._events[e] = []
-                if callback not in self._events[e]:
-                    self._events[e].append(callback)
+                if func not in self._events[e]:
+                    self._events[e].append(func)
+            return func
+
+        if func is not None: return _on(func)
+        else: return _on
+            
 
     # EVENT unbind
     def unbind(self, event, callback):

@@ -468,6 +468,8 @@ class ZyreInterface (BaseInterface):
         path = data['event']
         args = data['args']
 
+        self.player.trigger('zyre', data )
+
         if path == '/play':
             self.player.loop(0)
             if args and len(args) >= 1:
