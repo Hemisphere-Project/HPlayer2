@@ -1,5 +1,6 @@
 from core.engine import hplayer
 from core.engine import network
+from core.engine.filemanager import FileManager
 import os, sys, types, platform
 
 profilename = os.path.basename(__file__).split('.')[0]
@@ -10,7 +11,7 @@ playerName = network.get_hostname()
 # PLAYER
 player = hplayer.addplayer('mpv')
 player.loop(0)
-player.doLog['events'] = True
+# player.doLog['events'] = True
 
 # Interfaces
 player.addInterface('zyre', 'wlan0')
@@ -24,22 +25,22 @@ if hplayer.isRPi():
 
 
 # DIRECTORY / FILE
-if hplayer.isRPi(): base_path = '/data/sync/media'
+if hplayer.isRPi(): base_path = '/data/sync/xpa'
 else: base_path = '/home/mgr/Videos'
 
+# FILES
+files = FileManager( [base_path] )
+
+# MASTER / SLAVE sequencer
+iamLeader = False
 
 # Broadcast Order on OSC/Zyre to other Pi's
 #
 def broadcast(path, *args):
-	if path.startswith('/seq'):
+	if path.startswith('/dir'):
 		player.getInterface('zyre').node.broadcast(path, list(args), 100)   ## WARNING LATENCY !!
 	else:
 		player.getInterface('zyre').node.broadcast(path, list(args))
-
-# MASTER / SLAVE sequencer
-iamLeader = False
-currentSequence = 0
-lastSequence = 3
 
 # Detect if i am zyre Leader
 @player.on('zyre')
@@ -48,51 +49,49 @@ def leadSequencer(data):
 	iamLeader = (data['from'] == 'self')
 
 # Receive a sequence command -> do Play !
-@player.on('/seq')
+@player.on('/dir')
 def doPlay(s):
 	if type(s) is list: s = s[0]
-	global currentSequence
-	currentSequence = s
-	player.play(str(s)+"*")
+	player.play( files.selectDir(s)+'/'+playerName+'*' )
 
-# Receive a exit command -> last seq
-@player.on('/exit')
+# Receive an exit command -> last seq
+@player.on('/end')
 def doExit(s):
-	doPlay(lastSequence)
+	player.play( files.selectDir(-1)+'/'+playerName+'*' )
 
+# Media end: next dir / or loop (based on directory name)
 @player.on('stop')
 def endSequence():
 	if not iamLeader: 
 		return
-	global currentSequence
-	if currentSequence == 0 or currentSequence == lastSequence:
-		broadcast('/seq', 0)
+	if 'loop' in files.currentDir():
+		broadcast('/dir', files.currentIndex())
 	else:
-		broadcast('/seq', currentSequence+1)
+		broadcast('/dir', files.nextIndex())
 
 
 # Bind Keypad / GPIO events
 #
-player.on(['keypad-left'], 					lambda: broadcast('/seq', 1))
-player.on(['keypad-up'], 					lambda: broadcast('/seq', 2))
-player.on(['keypad-down'], 					lambda: broadcast('/seq', 3))
-player.on(['keypad-right'], 				lambda: broadcast('/seq', 4)) 
-player.on(['keypad-select', 'gpio21-on'], 	lambda: broadcast('/exit'))
+player.on(['keypad-left'], 					lambda: broadcast('/dir', 1))
+player.on(['keypad-up'], 					lambda: broadcast('/dir', 2))
+player.on(['keypad-down'], 					lambda: broadcast('/dir', 3))
+player.on(['keypad-right'], 				lambda: broadcast('/dir', 4)) 
+player.on(['keypad-select', 'gpio21-on'], 	lambda: broadcast('/end'))
 
 
 # Keyboard
 #
-player.on(['KEY_KP0-down'], 	lambda: broadcast('/seq', 0))
-player.on(['KEY_KP1-down'], 	lambda: broadcast('/seq', 1))
-player.on(['KEY_KP2-down'], 	lambda: broadcast('/seq', 2))
-player.on(['KEY_KP3-down'], 	lambda: broadcast('/seq', 3))
-player.on(['KEY_KP4-down'], 	lambda: broadcast('/seq', 4))
-player.on(['KEY_KP5-down'], 	lambda: broadcast('/seq', 5))
-player.on(['KEY_KP6-down'], 	lambda: broadcast('/seq', 6))
-player.on(['KEY_KP7-down'], 	lambda: broadcast('/seq', 7))
-player.on(['KEY_KP8-down'], 	lambda: broadcast('/seq', 8))
-player.on(['KEY_KP9-down'], 	lambda: broadcast('/seq', 9))
-player.on(['KEY_KPENTER-down'], lambda: broadcast('/exit'))
+player.on(['KEY_KP0-down'], 	lambda: broadcast('/dir', 0))
+player.on(['KEY_KP1-down'], 	lambda: broadcast('/dir', 1))
+player.on(['KEY_KP2-down'], 	lambda: broadcast('/dir', 2))
+player.on(['KEY_KP3-down'], 	lambda: broadcast('/dir', 3))
+player.on(['KEY_KP4-down'], 	lambda: broadcast('/dir', 4))
+player.on(['KEY_KP5-down'], 	lambda: broadcast('/dir', 5))
+player.on(['KEY_KP6-down'], 	lambda: broadcast('/dir', 6))
+player.on(['KEY_KP7-down'], 	lambda: broadcast('/dir', 7))
+player.on(['KEY_KP8-down'], 	lambda: broadcast('/dir', 8))
+player.on(['KEY_KP9-down'], 	lambda: broadcast('/dir', 9))
+player.on(['KEY_KPENTER-down'], lambda: broadcast('/end'))
 player.on(['KEY_KPPLUS-down', 	'KEY_KPPLUS-hold'], 	broadcast('/volume', player.settings()['volume']+1))
 player.on(['KEY_KPMINUS-down', 	'KEY_KPMINUS-hold'], 	broadcast('/volume', player.settings()['volume']-1))	
 
@@ -103,7 +102,7 @@ def lcd_update(self):
 	lines = ["", ""]
 
 	# Line 1 : SCENE + VOLUME
-	lines[0] = profilename.ljust(13, ' ')[:13]
+	lines[0] = files.currentDir().ljust(13, ' ')[:13]
 	lines[0] += str(self.player.settings()['volume']).rjust(3, ' ')[:3]
 
 	# Line 2 : MEDIA

@@ -80,6 +80,7 @@ fi
 # PIP
 /usr/bin/yes | pip3 install --upgrade setuptools
 /usr/bin/yes | pip3 install --upgrade zeroconf
+/usr/bin/yes | pip3 install --upgrade pymitter
 
 # ZYRE
 cd /tmp
