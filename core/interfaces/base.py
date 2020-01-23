@@ -3,13 +3,15 @@ from termcolor import colored
 import threading
 from time import sleep
 from abc import ABC, abstractmethod
+from pymitter import EventEmitter
 
-class BaseInterface(ABC):
+class BaseInterface(ABC, EventEmitter):
 
     def  __init__(self, hplayer, name="INTERFACE", color="blue"):
+        
+        super().__init__(wildcard=True, delimiter=".")
 
         self.name = name
-        # self.nameP = colored(self.name + " -" + player.name + "-", color)
         self.nameP = colored(self.name, color)
 
         self.hplayer = hplayer
@@ -47,3 +49,10 @@ class BaseInterface(ABC):
     # Log
     def log(self,  *argv):
         print(self.nameP, *argv)
+
+    # Emit extended
+    def emit(self, cmd, *args):
+        self.hplayer.emit( self.name.lower() + '.' + cmd, *args )
+        super().emit(cmd, *args)
+
+        

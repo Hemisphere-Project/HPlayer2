@@ -3,6 +3,7 @@ from . import network
 import core.players as playerlib
 import core.interfaces as ifacelib
 
+from collections import OrderedDict
 from termcolor import colored
 from time import sleep
 import signal
@@ -26,8 +27,10 @@ class Hplayer(EventEmitter):
         super().__init__(wildcard=True, delimiter=".")
         self.nameP = colored('HPlayer2', 'green')
 
-        self._players = {}
+        self._players = OrderedDict()
         self._interfaces = {}
+
+        self._lastPlayer = 0
 
 
     def log(self, *argv):
@@ -63,6 +66,7 @@ class Hplayer(EventEmitter):
     def addInterface(self, ifacename, *argv):
         InterfaceClass = ifacelib.getInterface(ifacename)
         self._interfaces[ifacename] = InterfaceClass(self, *argv)
+        self.autoBind(self._interfaces[ifacename])
         return self._interfaces[ifacename]
 
 
@@ -134,3 +138,101 @@ class Hplayer(EventEmitter):
 
         self.log("stopped. Goodbye !\n");
         sys.exit(0)
+
+
+    def autoBind(self, iface):
+        
+        @iface.on('play')
+        def play(*args):
+            if len(args) > 0:
+                # MOVE playlist managment from player to hplayer !!
+                # SCAN extension and decide
+                pass
+            else:
+                # if self._lastPlayer < len(self.players()):
+                #     self.players()[self._lastPlayer].play()
+                pass
+        
+        @iface.on('playindex')
+        def playindex(*args):
+            if len(args) > 0:
+                # MOVE playlist managment from player to hplayer !!
+                # SCAN extension and decide
+                pass
+
+        @iface.on('playlist')
+        def playlist(*args):
+            if len(args) > 0:
+                # MOVE playlist managment from player to hplayer !!
+                # SCAN extension and decide
+                pass
+
+        @iface.on('next')
+        def nex(*args):
+            # MOVE playlist managment from player to hplayer !!
+            # SCAN extension and decide
+            pass
+
+        @iface.on('prev')
+        def prev(*args):
+            # MOVE playlist managment from player to hplayer !!
+            # SCAN extension and decide
+            pass
+
+        @iface.on('stop')
+        def stop(*args):
+            for p in self.players(): 
+                p.stop()
+
+        @iface.on('pause')
+        def pause(*args):
+            for p in self.players(): 
+                p.pause()
+
+        @iface.on('resume')
+        def resume(*args):
+            for p in self.players(): 
+                p.resume()
+
+        @iface.on('loop')
+        def loop(*args):
+            if len(args) > 0:
+                for p in self.players(): 
+                    p.loop(int(args[0]))
+
+        @iface.on('unloop')
+        def unloop(*args):
+            for p in self.players(): 
+                p.loop(0)
+
+        @iface.on('volume')
+        def volume(*args):
+            if len(args) > 0:
+                for p in self.players(): 
+                    p.volume(int(args[0]))
+
+        @iface.on('mute')
+        def mute(*args):
+            for p in self.players(): 
+                p.mute(True)
+
+        @iface.on('unmute')
+        def unmute(*args):
+            for p in self.players(): 
+                p.mute(False)
+
+        @iface.on('pan')
+        def pan(*args):
+            if len(args) > 1:
+                for p in self.players(): 
+                    p.pan(int(args[0]),int(args[1]))
+        
+        @iface.on('flip')
+        def flip(*args):
+            for p in self.players(): 
+                p.flip(True)
+
+        @iface.on('unflip')
+        def unflip(*args):
+            for p in self.players(): 
+                p.flip(False)

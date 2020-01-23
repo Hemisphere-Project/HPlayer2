@@ -43,63 +43,63 @@ iamLeader = False
 # Broadcast Order on OSC/Zyre to other Pi's
 #
 def broadcast(path, *args):
-	if path.startswith('/dir'):
+	if path.startswith('play'):
 		hplayer.getInterface('zyre').node.broadcast(path, list(args), 100)   ## WARNING LATENCY !!
 	else:
 		hplayer.getInterface('zyre').node.broadcast(path, list(args))
 
 # Detect if i am zyre Leader
-@hplayer.on('zyre')
+@hplayer.on('zyre.*')
 def leadSequencer(data):
 	global iamLeader
 	iamLeader = (data['from'] == 'self')
 
 # Receive a sequence command -> do Play !
-@hplayer.on('/dir')
+@hplayer.on('zyre.playdir')
 def doPlay(s):
 	if type(s) is list: s = s[0]
 	player.play( files.selectDir(s)+'/'+playerName+'*' )
 
 # Receive an exit command -> last seq
-@hplayer.on('/end')
+@hplayer.on('zyre.end')
 def doExit(s):
 	player.play( files.selectDir(-1)+'/'+playerName+'*' )
 
 # Media end: next dir / or loop (based on directory name)
-@hplayer.on('mpv.stop')
+@player.on('stop')
 def endSequence():
 	if not iamLeader: 
 		return
 	if 'loop' in files.currentDir():
-		broadcast('/dir', files.currentIndex())
+		broadcast('playdir', files.currentIndex())
 	else:
-		broadcast('/dir', files.nextIndex())
+		broadcast('playdir', files.nextIndex())
 
 
 # Bind Keypad / GPIO events
 #
-hplayer.on(['keypad-left'], 					lambda: broadcast('/dir', 1))
-hplayer.on(['keypad-up'], 					lambda: broadcast('/dir', 2))
-hplayer.on(['keypad-down'], 					lambda: broadcast('/dir', 3))
-hplayer.on(['keypad-right'], 				lambda: broadcast('/dir', 4)) 
-hplayer.on(['keypad-select', 'gpio21-on'], 	lambda: broadcast('/end'))
+hplayer.on(['keypad-left'], 				lambda: broadcast('playdir', 1))
+hplayer.on(['keypad-up'], 					lambda: broadcast('playdir', 2))
+hplayer.on(['keypad-down'], 				lambda: broadcast('playdir', 3))
+hplayer.on(['keypad-right'], 				lambda: broadcast('playdir', 4)) 
+hplayer.on(['keypad-select', 'gpio21-on'], 	lambda: broadcast('end'))
 
 
 # Keyboard
 #
-hplayer.on(['KEY_KP0-down'], 	lambda: broadcast('/dir', 0))
-hplayer.on(['KEY_KP1-down'], 	lambda: broadcast('/dir', 1))
-hplayer.on(['KEY_KP2-down'], 	lambda: broadcast('/dir', 2))
-hplayer.on(['KEY_KP3-down'], 	lambda: broadcast('/dir', 3))
-hplayer.on(['KEY_KP4-down'], 	lambda: broadcast('/dir', 4))
-hplayer.on(['KEY_KP5-down'], 	lambda: broadcast('/dir', 5))
-hplayer.on(['KEY_KP6-down'], 	lambda: broadcast('/dir', 6))
-hplayer.on(['KEY_KP7-down'], 	lambda: broadcast('/dir', 7))
-hplayer.on(['KEY_KP8-down'], 	lambda: broadcast('/dir', 8))
-hplayer.on(['KEY_KP9-down'], 	lambda: broadcast('/dir', 9))
-hplayer.on(['KEY_KPENTER-down'], lambda: broadcast('/end'))
-hplayer.on(['KEY_KPPLUS-down', 	'KEY_KPPLUS-hold'], 	broadcast('/volume', player.settings()['volume']+1))
-hplayer.on(['KEY_KPMINUS-down', 	'KEY_KPMINUS-hold'], 	broadcast('/volume', player.settings()['volume']-1))	
+hplayer.on(['KEY_KP0-down'], 	lambda: broadcast('playdir', 0))
+hplayer.on(['KEY_KP1-down'], 	lambda: broadcast('playdir', 1))
+hplayer.on(['KEY_KP2-down'], 	lambda: broadcast('playdir', 2))
+hplayer.on(['KEY_KP3-down'], 	lambda: broadcast('playdir', 3))
+hplayer.on(['KEY_KP4-down'], 	lambda: broadcast('playdir', 4))
+hplayer.on(['KEY_KP5-down'], 	lambda: broadcast('playdir', 5))
+hplayer.on(['KEY_KP6-down'], 	lambda: broadcast('playdir', 6))
+hplayer.on(['KEY_KP7-down'], 	lambda: broadcast('playdir', 7))
+hplayer.on(['KEY_KP8-down'], 	lambda: broadcast('playdir', 8))
+hplayer.on(['KEY_KP9-down'], 	lambda: broadcast('playdir', 9))
+hplayer.on(['KEY_KPENTER-down'], lambda: broadcast('end'))
+hplayer.on(['KEY_KPPLUS-down', 	'KEY_KPPLUS-hold'], 	broadcast('volume', player.settings()['volume']+1))
+hplayer.on(['KEY_KPMINUS-down', 	'KEY_KPMINUS-hold'], 	broadcast('volume', player.settings()['volume']-1))	
 
 
 

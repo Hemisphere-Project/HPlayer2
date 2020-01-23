@@ -3,6 +3,7 @@ from ..engine.network import get_allip, get_hostname
 from http.server import BaseHTTPRequestHandler, HTTPServer
 import threading
 import socket
+import pprint
 
 try:
     from zeroconf import ServiceInfo, Zeroconf 
@@ -14,7 +15,7 @@ except:
 class HttpInterface (BaseInterface):
 
     def  __init__(self, hplayer, port):
-        super(HttpInterface, self).__init__(hplayer, "HTTP")
+        super().__init__(hplayer, "HTTP")
         self._port = port
 
     # HTTP receiver THREAD
@@ -34,13 +35,14 @@ class HttpInterface (BaseInterface):
 
         # Start server
         self.log( "listening on port", self._port)
-        with ThreadedHTTPServer(self._port, BasicHTTPServerHandler(self.hplayer)) as server:
+        with ThreadedHTTPServer(self._port, BasicHTTPServerHandler(self)) as server:
             self.stopped.wait()
 
         # Unregister ZeroConf
         if zero_enable:
             zeroconf.unregister_service(info)
             zeroconf.close()
+
 
 
 #
@@ -69,11 +71,11 @@ class ThreadedHTTPServer(object):
 #
 # Request Handler
 #
-def BasicHTTPServerHandler(hplayer):
+def BasicHTTPServerHandler(httpinterface):
     class CustomHandler(BaseHTTPRequestHandler, object):
         def __init__(self, *args, **kwargs):
-            self.hplayer = hplayer
-            super(CustomHandler, self).__init__(*args, **kwargs)
+            super().__init__(*args, **kwargs)
+            self.httpinterface = httpinterface
 
         def _set_headers(self):
             self.send_response(200)
@@ -91,97 +93,40 @@ def BasicHTTPServerHandler(hplayer):
 
             command = args.pop(0)
 
-            self.hplayer.emit('http.'+command, *args)
+            # Pre-Format arguments
+            #
 
-            # if command == 'play':
-            #     if len(args) > 0:
-            #         self.player.play(str(args[0]))
-            #     else:
-            #         self.player.play()
+            if command == 'loop':
+                doLoop = 2
+                if len(args) > 0:
+                    if args[0] == 'all' or args[0] == 2:
+                        doLoop = 2
+                    elif args[0] == 'one' or args[0] == 1:
+                        doLoop = 1
+                    else:
+                        doLoop = 0
+                args[0] = doLoop
 
-            # elif command == 'playindex':
-            #     if len(args) > 0:
-            #         self.player.play(int(args[0]))
+            # Emit event
+            #
 
-            # elif command == 'playlist':
-            #     if len(args) > 0:
-            #         self.player.load(args[0])
-            #         if len(args) > 1: self.player.play(args[1])
-            #         else: self.player.play()
+            self.httpinterface.emit(command, *args)
 
-            # elif command == 'stop':
-            #     self.player.stop()
+            # Inner commands
+            #
+            if command == 'status':
+                statusTree = self.httpinterface.hplayer.status()
+                status = pprint.pformat(statusTree, indent=4)
+                self.wfile.write( status.encode() )
+                return
 
-            # elif command == 'pause':
-            #     self.player.pause()
+            elif command == 'ping':
+                self.wfile.write( ('pong').encode() )
+                return
 
-            # elif command == 'resume':
-            #     self.player.resume()
-
-            # elif command == 'next':
-            #     self.player.next()
-
-            # elif command == 'prev':
-            #     self.player.prev()
-
-            # elif command == 'loop':
-            #     doLoop = 2
-            #     if len(args) > 0:
-            #         if args[0] == 'all':
-            #             doLoop = 2
-            #         elif args[0] == 'one':
-            #             doLoop = 1
-            #         else:
-            #             doLoop = 0
-            #     self.player.loop(doLoop)
-
-            # elif command == 'unloop':
-            #     self.player.loop(0)
-
-            # elif command == 'volume':
-            #     if len(args) > 0:
-            #         self.player.volume(int(args[0]))
-
-            # elif command == 'mute':
-            #     self.player.mute(True)
-
-            # elif command == 'unmute':
-            #     self.player.mute(False)
-
-            # elif command == 'pan':
-            #     if len(args) > 1:
-            #         self.player.pan(int(args[0]), int(args[1]))
-
-            # elif command == 'flip':
-            #     self.player.flip(True)
-
-            # elif command == 'unflip':
-            #     self.player.flip(False)
-
-            # elif command == 'status':
-            #     statusTree = self.player._status
-            #     while len(args) > 0:
-            #     	key = args.pop(0)
-            #     	status = None
-            #     	if key in statusTree:
-            #     		statusTree = statusTree[key]
-            #     status = pprint.pformat(statusTree, indent=4)
-            #     self.wfile.write( status.encode() )
-            #     return
-
-            # elif command == 'ping':
-            #     self.wfile.write( ('pong').encode() )
-            #     return
-
-            # elif command == 'event':
-            #     if len(args) > 1:
-            #         self.player.trigger(args[0], arg[1:])
-            #     elif len(args) > 0:
-            #         self.player.trigger(args[0])
-
-            # #self.wfile.write( ("<html><body><h1>Command: "+command+" - Args: "+','.join(args)+"</h1></body></html>").encode() )
-            # self.wfile.write( ("").encode() )
-            # # print("GET", self.path)
+            #self.wfile.write( ("<html><body><h1>Command: "+command+" - Args: "+','.join(args)+"</h1></body></html>").encode() )
+            self.wfile.write( ("").encode() )
+            # print("GET", self.path)
 
 
         def do_HEAD(self):
