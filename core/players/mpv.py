@@ -9,10 +9,11 @@ class MpvPlayer(BasePlayer):
     def __init__(self, name=None):
         super(MpvPlayer, self).__init__()
 
-        name = name.replace(" ", "_")
-        if not name:
+        if name:
+            name = name.replace(" ", "_")
+        else:
             import time
-            name = time.time()
+            name = 'mpv-'+str(time.time())
 
         self.name = name
         self.nameP = colored("MPV -" + name + "-",'magenta')

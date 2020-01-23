@@ -7,8 +7,8 @@ import pickle
 import re
 from termcolor import colored
 from pathlib import Path
+from pymitter import EventEmitter
 
-from core import interfaces
 from core import overlays
 
 class BasePlayer(object):
@@ -30,7 +30,6 @@ class BasePlayer(object):
     _validImage = ['.jpg', '.jpeg', '.gif', '.png', '.tif']
 
     _events = {} 
-    _interfaces = {}
     _overlays = {}
     _status = {
         'isPlaying':    False,
@@ -84,20 +83,10 @@ class BasePlayer(object):
     def persistentSettings(self, spath):
         self.settingspath = Path(spath)
 
-    def addInterface(self, iface, *argv):
-        InterfaceClass = interfaces.getInterface(iface)
-        self._interfaces[iface] = InterfaceClass(self, *argv)
-        return self._interfaces[iface]
-
     def addOverlay(self, olay, args=[]):
         OverlayClass = overlays.getOverlay(olay)
         self._overlays[olay] = OverlayClass()
         return self._overlays[olay]
-
-    def getInterface(self, name):
-        if name in self._interfaces.keys():
-            return self._interfaces[name]
-        return None
 
     def getOverlay(self, name):
         if name in self._overlays.keys():
@@ -272,10 +261,6 @@ class BasePlayer(object):
         if state is not None:
             self._running.set() if state else self._running.clear()
         # GET
-        for iface in self._interfaces.values():
-            if not iface.isRunning():
-                return False
-        # GET
         for olay in self._overlays.values():
             if not olay.isRunning():
                 return False
@@ -330,8 +315,6 @@ class BasePlayer(object):
     def start(self):
         self.settings_load()
         self.on(['player-ready'], self.settings_apply)
-        for iface in self._interfaces.values():
-            iface.start()
         # for olay in self._overlays.values():
         #     olay.start()
         # self.load()             # Load default playlist based on basepath provided
@@ -340,8 +323,6 @@ class BasePlayer(object):
 
     # QUIT
     def quit(self):
-        for iface in self._interfaces.values():
-            iface.quit()
         for olay in self._overlays.values():
             olay.quit()
         self._quit()

@@ -1,14 +1,16 @@
 from __future__ import print_function
 from . import network
 import core.players as playerlib
+import core.interfaces as ifacelib
+
 from termcolor import colored
 from time import sleep
 import signal
 import sys, os, platform
+from pymitter import EventEmitter
+
 
 runningFlag = True
-players_pool = {}
-
 
 # CTR-C Handler
 def signal_handler(signal, frame):
@@ -17,81 +19,118 @@ def signal_handler(signal, frame):
         runningFlag = False
 signal.signal(signal.SIGINT, signal_handler)
 
-def isRPi():
-    return platform.machine().startswith('armv')
+
+class Hplayer(EventEmitter):
+
+    def __init__(self, roots=None):
+        super().__init__(wildcard=True, delimiter=".")
+        self.nameP = colored('HPlayer2', 'green')
+
+        self._players = {}
+        self._interfaces = {}
 
 
-def setBasePath(bpath):
-    print(colored('HPlayer2', 'green'), "basepath:", bpath);
-    for p in players():
-        p.setBasePath(bpath)
-
-def persistentSettings(spath):
-    print(colored('HPlayer2', 'green'), "settings:", spath);
-    for p in players():
-        p.persistentSettings(spath)
-
-def addplayer(ptype, name=None):
-    if not name:
-        name = network.get_hostname()
-    if name and name in players_pool:
-        print("player", name, "already exists")
-    else:
-        PlayerClass = playerlib.getPlayer(ptype)
-        p = PlayerClass(name)
-        players_pool[p.name] = p
-    return players_pool[p.name]
+    def log(self, *argv):
+        print(self.nameP, *argv)
 
 
-def player(name):
-    if name not in players:
-        print("player", name, "not found")
-    return players_pool[name]
+    def isRPi(self):
+        return platform.machine().startswith('armv')    
 
 
-def players():
-    return players_pool.values()
+    def addPlayer(self, ptype, name=None):
+        # if not name:
+        #     name = network.get_hostname()
+        if name and name in self._players:
+            print("player", name, "already exists")
+        else:
+            PlayerClass = playerlib.getPlayer(ptype)
+            p = PlayerClass(name)
+            self._players[p.name] = p
+        return self._players[p.name]
 
 
-def running():
-    run = True
-    for p in players():
-        run = run and p.isRunning()
-    return run
+    def player(self, name):
+        if name not in self._players:
+            print("player", name, "not found")
+        return self._players[name]
 
 
-def run():
+    def players(self):
+        return self._players.values()
 
-    sleep(0.1)
 
-    name = "HPlayer2"
-    nameP = colored(name, 'green')
+    def addInterface(self, ifacename, *argv):
+        InterfaceClass = ifacelib.getInterface(ifacename)
+        self._interfaces[ifacename] = InterfaceClass(self, *argv)
+        return self._interfaces[ifacename]
 
-    try:
-        if network.get_ip("eth0") != "127.0.0.1":
-            print(nameP, "IP for eth0 is", network.get_ip("eth0"));
-        if network.get_ip("wlan0") != "127.0.0.1":
-            print(nameP, "IP for wlan0  is", network.get_ip("wlan0"));
-    except:
-        pass
 
-    print(nameP, "started.. Welcome ! \n");
+    def interface(self, name):
+        if name in self._interfaces.keys():
+            return self._interfaces[name]
+        return None
 
-    sys.stdout.flush()
+    def interfaces(self):
+        return self._interfaces.values()
 
-    # START players
-    for p in players():
-        p.start()
-        p.trigger('app-run')
+    def setBasePath(self, bpath):
+        self.log("set basepath:", bpath);
+        for p in self.players():
+            p.setBasePath(bpath)
 
-    while runningFlag and running():
+
+    def persistentSettings(self, spath):
+        self.log("settings:", spath);
+        for p in self.players():
+            p.persistentSettings(spath)
+
+
+    def running(self):
+        run = True
+        for p in self.players():
+            run = run and p.isRunning()
+        for iface in self.interfaces():
+            run = run and iface.isRunning():
+        return run
+        
+
+    def run(self):
+
+        sleep(0.1)
+
+        try:
+            if network.get_ip("eth0") != "127.0.0.1":
+                self.log("IP for eth0 is", network.get_ip("eth0"));
+            if network.get_ip("wlan0") != "127.0.0.1":
+                self.log("IP for wlan0  is", network.get_ip("wlan0"));
+        except:
+            pass
+
+        self.log("started.. Welcome ! \n");
+
         sys.stdout.flush()
-        sleep(0.5)
 
-    # STOP
-    print('\n' + nameP, "is closing..")
-    for p in players():
-        p.quit()
+        # START players
+        for p in self.players():
+            p.start()
 
-    print(nameP, "stopped. Goodbye !\n");
-    sys.exit(0)
+        # START interfaces
+        for iface in self.interfaces():
+            iface.start()
+
+        self.emit('app-run')
+
+        while runningFlag and self.running():
+            sys.stdout.flush()
+            sleep(0.5)
+
+        # STOP
+        print('\n' + nameP, "is closing..")
+        for p in self.players():
+            p.quit()
+        for iface in self.interfaces():
+            iface.quit()
+
+        self.log("stopped. Goodbye !\n");
+        sys.exit(0)

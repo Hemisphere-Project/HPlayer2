@@ -1,31 +1,33 @@
-from core.engine import hplayer
+from core.engine.hplayer import Hplayer
 from core.engine import network
 from core.engine.filemanager import FileManager
 import os, sys, types, platform
 
 profilename = os.path.basename(__file__).split('.')[0]
 
+# INIT HPLAYE
+hplayer = Hplayer()
+
 # NAME
 playerName = network.get_hostname()
 
-# PLAYER
-player = hplayer.addplayer('mpv')
+# PLAYERS
+player = hplayer.addPlayer('mpv','mpv')
 player.loop(0)
-
-midi = hplayer.addplayer('midi')
+midi = hplayer.addPlayer('midi','midi')
 midi.loop(0)
 
 # player.doLog['events'] = True
 
 # Interfaces
-player.addInterface('zyre', 'wlan0')
-player.addInterface('http2', 8080)
-# player.addInterface('http', 8037)
-player.addInterface('keyboard')
+hplayer.addInterface('zyre', 'wlan0')
+hplayer.addInterface('http2', 8080)
+# hplayer.addInterface('http', 8037)
+hplayer.addInterface('keyboard')
 
 if hplayer.isRPi():
-	player.addInterface('keypad')
-	player.addInterface('gpio', [21], 310)
+	hplayer.addInterface('keypad')
+	hplayer.addInterface('gpio', [21], 310)
 
 
 # DIRECTORY / FILE
@@ -42,29 +44,29 @@ iamLeader = False
 #
 def broadcast(path, *args):
 	if path.startswith('/dir'):
-		player.getInterface('zyre').node.broadcast(path, list(args), 100)   ## WARNING LATENCY !!
+		hplayer.getInterface('zyre').node.broadcast(path, list(args), 100)   ## WARNING LATENCY !!
 	else:
-		player.getInterface('zyre').node.broadcast(path, list(args))
+		hplayer.getInterface('zyre').node.broadcast(path, list(args))
 
 # Detect if i am zyre Leader
-@player.on('zyre')
+@hplayer.on('zyre')
 def leadSequencer(data):
 	global iamLeader
 	iamLeader = (data['from'] == 'self')
 
 # Receive a sequence command -> do Play !
-@player.on('/dir')
+@hplayer.on('/dir')
 def doPlay(s):
 	if type(s) is list: s = s[0]
 	player.play( files.selectDir(s)+'/'+playerName+'*' )
 
 # Receive an exit command -> last seq
-@player.on('/end')
+@hplayer.on('/end')
 def doExit(s):
 	player.play( files.selectDir(-1)+'/'+playerName+'*' )
 
 # Media end: next dir / or loop (based on directory name)
-@player.on('stop')
+@hplayer.on('mpv.stop')
 def endSequence():
 	if not iamLeader: 
 		return
@@ -76,28 +78,28 @@ def endSequence():
 
 # Bind Keypad / GPIO events
 #
-player.on(['keypad-left'], 					lambda: broadcast('/dir', 1))
-player.on(['keypad-up'], 					lambda: broadcast('/dir', 2))
-player.on(['keypad-down'], 					lambda: broadcast('/dir', 3))
-player.on(['keypad-right'], 				lambda: broadcast('/dir', 4)) 
-player.on(['keypad-select', 'gpio21-on'], 	lambda: broadcast('/end'))
+hplayer.on(['keypad-left'], 					lambda: broadcast('/dir', 1))
+hplayer.on(['keypad-up'], 					lambda: broadcast('/dir', 2))
+hplayer.on(['keypad-down'], 					lambda: broadcast('/dir', 3))
+hplayer.on(['keypad-right'], 				lambda: broadcast('/dir', 4)) 
+hplayer.on(['keypad-select', 'gpio21-on'], 	lambda: broadcast('/end'))
 
 
 # Keyboard
 #
-player.on(['KEY_KP0-down'], 	lambda: broadcast('/dir', 0))
-player.on(['KEY_KP1-down'], 	lambda: broadcast('/dir', 1))
-player.on(['KEY_KP2-down'], 	lambda: broadcast('/dir', 2))
-player.on(['KEY_KP3-down'], 	lambda: broadcast('/dir', 3))
-player.on(['KEY_KP4-down'], 	lambda: broadcast('/dir', 4))
-player.on(['KEY_KP5-down'], 	lambda: broadcast('/dir', 5))
-player.on(['KEY_KP6-down'], 	lambda: broadcast('/dir', 6))
-player.on(['KEY_KP7-down'], 	lambda: broadcast('/dir', 7))
-player.on(['KEY_KP8-down'], 	lambda: broadcast('/dir', 8))
-player.on(['KEY_KP9-down'], 	lambda: broadcast('/dir', 9))
-player.on(['KEY_KPENTER-down'], lambda: broadcast('/end'))
-player.on(['KEY_KPPLUS-down', 	'KEY_KPPLUS-hold'], 	broadcast('/volume', player.settings()['volume']+1))
-player.on(['KEY_KPMINUS-down', 	'KEY_KPMINUS-hold'], 	broadcast('/volume', player.settings()['volume']-1))	
+hplayer.on(['KEY_KP0-down'], 	lambda: broadcast('/dir', 0))
+hplayer.on(['KEY_KP1-down'], 	lambda: broadcast('/dir', 1))
+hplayer.on(['KEY_KP2-down'], 	lambda: broadcast('/dir', 2))
+hplayer.on(['KEY_KP3-down'], 	lambda: broadcast('/dir', 3))
+hplayer.on(['KEY_KP4-down'], 	lambda: broadcast('/dir', 4))
+hplayer.on(['KEY_KP5-down'], 	lambda: broadcast('/dir', 5))
+hplayer.on(['KEY_KP6-down'], 	lambda: broadcast('/dir', 6))
+hplayer.on(['KEY_KP7-down'], 	lambda: broadcast('/dir', 7))
+hplayer.on(['KEY_KP8-down'], 	lambda: broadcast('/dir', 8))
+hplayer.on(['KEY_KP9-down'], 	lambda: broadcast('/dir', 9))
+hplayer.on(['KEY_KPENTER-down'], lambda: broadcast('/end'))
+hplayer.on(['KEY_KPPLUS-down', 	'KEY_KPPLUS-hold'], 	broadcast('/volume', player.settings()['volume']+1))
+hplayer.on(['KEY_KPMINUS-down', 	'KEY_KPMINUS-hold'], 	broadcast('/volume', player.settings()['volume']-1))	
 
 
 
@@ -118,7 +120,7 @@ def lcd_update(self):
 	return lines
 
 if hplayer.isRPi():
-	player.getInterface('keypad').update = types.MethodType(lcd_update, player.getInterface('keypad'))
+	hplayer.getInterface('keypad').update = types.MethodType(lcd_update, hplayer.getInterface('keypad'))
 
 
 

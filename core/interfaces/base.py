@@ -6,13 +6,13 @@ from abc import ABC, abstractmethod
 
 class BaseInterface(ABC):
 
-    def  __init__(self, player, name="INTERFACE", color="blue"):
+    def  __init__(self, hplayer, name="INTERFACE", color="blue"):
 
         self.name = name
         # self.nameP = colored(self.name + " -" + player.name + "-", color)
         self.nameP = colored(self.name, color)
 
-        self.player = player
+        self.hplayer = hplayer
 
         # stopping flag
         self.stopped = threading.Event()

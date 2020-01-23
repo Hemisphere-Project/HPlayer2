@@ -81,6 +81,7 @@ fi
 /usr/bin/yes | pip3 install --upgrade setuptools
 /usr/bin/yes | pip3 install --upgrade zeroconf
 /usr/bin/yes | pip3 install --upgrade pymitter
+/usr/bin/yes | pip3 install --upgrade mido
 
 # ZYRE
 cd /tmp

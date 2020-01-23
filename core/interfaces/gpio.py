@@ -3,8 +3,8 @@ import RPi.GPIO as GPIO
 
 class GpioInterface (BaseInterface):
 
-    def __init__(self, player, pins, debounce=50, pullupdown='PUP'):
-        super(GpioInterface, self).__init__(player, "GPIO")
+    def __init__(self, hplayer, pins, debounce=50, pullupdown='PUP'):
+        super(GpioInterface, self).__init__(hplayer, "GPIO")
 
         self._state = {}
         self._pins = pins
@@ -25,15 +25,15 @@ class GpioInterface (BaseInterface):
             #self.log("channel", pinz, "triggered")
             if not GPIO.input(pinz):
                 if self._state[pinz]:
-                    self.player.trigger('gpio'+str(pinz)+'-off')
-                self.player.trigger('gpio'+str(pinz)+'-on')
-                self.player.trigger('gpio'+str(pinz), 1)
+                    self.hplayer.emit('gpio.'+str(pinz)+'-off')
+                self.hplayer.emit('gpio.'+str(pinz)+'-on')
+                self.hplayer.emit('gpio.'+str(pinz), 1)
                 self._state[pinz] = True
             else:
                 if not self._state[pinz]:
-                    self.player.trigger('gpio'+str(pinz)+'-on')
-                self.player.trigger('gpio'+str(pinz)+'-off')
-                self.player.trigger('gpio'+str(pinz), 0)
+                    self.hplayer.emit('gpio.'+str(pinz)+'-on')
+                self.hplayer.emit('gpio.'+str(pinz)+'-off')
+                self.hplayer.emit('gpio.'+str(pinz), 0)
                 self._state[pinz] = False
 
         for pin in self._pins:
