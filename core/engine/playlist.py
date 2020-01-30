@@ -181,5 +181,6 @@ class Playlist(Module):
                                     liste.append(e)
                             break
 
-        liste = sorted(liste)
+        liste.sort()
+        print(liste)
         return liste

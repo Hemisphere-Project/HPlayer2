@@ -25,9 +25,17 @@ class MidiPlayer(BasePlayer):
 
     # MIDO playback THREAD
     def _mido_playback(self):
+        
+        midiIfaces = mido.get_output_names()
 
-        # self.log('interfaces detected:', mido.get_output_names())
-        self._output = mido.open_output('Virtual Raw MIDI 1-0:VirMIDI 1-0 20:0')
+        self.log('interfaces detected:', midiIfaces)
+        # self._output = mido.open_output('Virtual Raw MIDI 1-0:VirMIDI 1-0 20:0')
+
+        for iface in midiIfaces:
+            if 'Virtual Raw MIDI' in iface:
+                self._output = mido.open_output(iface)
+                self.log('connecting to', iface)
+                break
 
         self.emit('player-ready')
 
@@ -37,19 +45,21 @@ class MidiPlayer(BasePlayer):
             try:
                 msg = next(self._midiFile)
                 sleep(msg.time)
+                # self.log(msg)
                 if not msg.is_meta and self._runflag.is_set():
                     self._output.send(msg)
             except StopIteration:
-                self._midiFile = None
-                self._status['isPaused'] = False
+                self.stop()
                 self.emit('end')
-                self._runflag.clear()
-            except:
-                if self.isRunning():
-                    self.log('ERROR:', sys.exc_info()[0])
-                    self.isRunning(False)
-                else:
-                    break
+                
+            except TypeError:
+                self.log('malformed message')
+            # except:
+            #     if self.isRunning():
+            #         self.log('ERROR:', sys.exc_info()[0])
+            #         self.isRunning(False)
+            #     else:
+            #         break
     
 
         self.log("mido thread stopped")
@@ -97,7 +107,9 @@ class MidiPlayer(BasePlayer):
         self._runflag.set()
 
     def _stop(self):
+        self.log("stop")
         self._runflag.clear()
+        self._midiFile = None
         self._status['isPaused'] = False
 
     # def _pause(self):
