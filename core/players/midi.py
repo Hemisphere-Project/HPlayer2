@@ -1,6 +1,6 @@
 from __future__ import print_function
 from termcolor import colored
-import socket, threading, subprocess, os, json, select
+import socket, threading, subprocess, os, json, select, sys
 from time import sleep
 from .base import BasePlayer
 import mido
@@ -92,7 +92,7 @@ class MidiPlayer(BasePlayer):
     def _play(self, path):
         self.log("play", path)
         self._runflag.clear()
-        self._midiFile = mido.MidiFile(path)
+        self._midiFile = iter(mido.MidiFile(path))
         self._status['isPaused'] = False
         self._runflag.set()
 
