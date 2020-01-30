@@ -2,6 +2,7 @@ from watchdog.observers import Observer
 from watchdog.events import PatternMatchingEventHandler
 from threading import Timer
 import os
+import re
 import pathlib
 from ..module import Module
 
@@ -81,7 +82,10 @@ class FileManager(Module):
         if isinstance(i, int):
             if i < 0: i = len(self.unified_dir)+i
             if i < 0: i = 0
-            self.active_dir = i % len(self.unified_dir)
+            if len(self.unified_dir) > 0:
+                self.active_dir = i % len(self.unified_dir)
+            else:
+                self.active_dir = 0
         elif i in self.unified_dir: 
             self.active_dir = self.unified_dir.index(i)
         

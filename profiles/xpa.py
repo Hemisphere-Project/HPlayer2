@@ -35,7 +35,7 @@ iamLeader = False
 # Broadcast Order on OSC/Zyre to other Pi's
 #
 def broadcast(path, *args):
-	print(path, list(args))
+	# print(path, list(args))
 	if path.startswith('play'):
 		hplayer.interface('zyre').node.broadcast(path, list(args), 200)   ## WARNING LATENCY !!
 	else:
@@ -50,7 +50,7 @@ def leadSequencer(*data):
 # Receive a sequence command -> do Play !
 @hplayer.on('zyre.playdir')
 def doPlay(*data):
-	print(data)
+	# print(data)
 	s = data[0]
 	hplayer.playlist.play( hplayer.files.selectDir(s)+'/'+HPlayer2.name()+'*' )
 
