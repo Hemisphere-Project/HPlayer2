@@ -95,21 +95,22 @@ class MidiPlayer(BasePlayer):
         if self._mido_thread:
             # self.log("stopping process thread")
             self._mido_thread.join()
-
-        self.log("stopped")
+        self.log("done.")
 
 
     def _play(self, path):
-        self.log("play", path)
+        # self.log("play", path)
         self._runflag.clear()
         self._midiFile = iter(mido.MidiFile(path))
+        self._status['isPlaying'] = True
         self._status['isPaused'] = False
         self._runflag.set()
 
     def _stop(self):
-        self.log("stop")
+        # self.log("stop")
         self._runflag.clear()
         self._midiFile = None
+        self._status['isPlaying'] = False
         self._status['isPaused'] = False
 
     # def _pause(self):

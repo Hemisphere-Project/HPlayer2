@@ -182,5 +182,4 @@ class Playlist(Module):
                             break
 
         liste.sort()
-        print(liste)
         return liste
