@@ -117,8 +117,7 @@ class BasePlayer(Module):
 
     # STOP Playback
     def stop(self):
-        if self.isPlaying():
-            self._stop()
+        self._stop()
         self._status['media'] = None
         self._status['time'] = 0
         self.emit('stopped')

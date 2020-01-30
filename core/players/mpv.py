@@ -107,7 +107,7 @@ class MpvPlayer(BasePlayer):
                     msg = self._mpv_sock.recv(4096)
                     assert len(msg) != 0, "socket disconnected"
 
-                    self.log("IPC says:", msg.rstrip())
+                    # self.log("IPC says:", msg.rstrip())
                     
                     # Message received
                     for event in msg.rstrip().split( b"\n" ):

@@ -202,8 +202,6 @@ class HPlayer2(EventEmitter):
             stop()
             for i,p in enumerate(self.players()): 
                 if p.validExt(args[0]):
-                    # if i != self._lastUsedPlayer:
-                    #     self.players()[self._lastUsedPlayer].stop()
                     p.play(args[0])
                     self._lastUsedPlayer = i
                     return
@@ -212,8 +210,7 @@ class HPlayer2(EventEmitter):
         def stop(*args):
             # TODO : double stop -> reset playlist index (-1)
             for p in self.players():
-                if p.isPlaying(): 
-                    p.stop()
+                p.stop()
 
         @module.on('pause')
         def pause(*args):
