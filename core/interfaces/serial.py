@@ -8,8 +8,8 @@ from serial.tools import list_ports
 
 class SerialInterface (BaseInterface):
 
-    def  __init__(self, player, filter=""):
-        super(SerialInterface, self).__init__(player, "Serial")
+    def  __init__(self, hplayer, filter=""):
+        super(SerialInterface, self).__init__(hplayer, "Serial")
         self.port = None
         self.serial = None
         self.filter = filter
@@ -44,7 +44,7 @@ class SerialInterface (BaseInterface):
                 try:
                     data = self.serial.readline()[:-2] #the last bit gets rid of the new-line chars
                     if data: 
-                        self.player.trigger(data.decode("utf-8"))
+                        self.emit(data.decode("utf-8"))
                 except:
                     self.log("broken link..")
                     self.serial = None

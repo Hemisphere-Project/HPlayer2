@@ -16,13 +16,13 @@ class NfcInterface (BaseInterface):
 
     state = {}
 
-    def __init__(self, player, timeout=1000, divider=5):
+    def __init__(self, hplayer, timeout=1000, divider=5):
 
         self.log('timeout:', timeout ,'ms')
         self.log('divider:', divider ,'ms')
 
         # Interface settings
-        super(NfcInterface, self).__init__(player, "NFC")
+        super(NfcInterface, self).__init__(hplayer, "NFC")
 
         # Timeout
         self.timeout = timeout
@@ -92,7 +92,7 @@ class NfcInterface (BaseInterface):
                         self.card['error'] = 'Failed to authenticate block 4!'
 
                     # TRIGGER event
-                    self.player.trigger('nfc-card', [self.card])
+                    self.emit('card', [self.card])
 
 
             # No Card detected
@@ -103,7 +103,7 @@ class NfcInterface (BaseInterface):
             # Reach end of timeout counter: trigger event nocard
             if timeout_counter == 1:
                 self.card = None                    # Unregister card
-                self.player.trigger('nfc-nocard')   # Trigger event
+                self.emit('nocard')   # Trigger event
 
             # if timeout_counter == -10:
             #     timeout_counter = 0

@@ -1,20 +1,12 @@
-from __future__ import print_function
-from termcolor import colored
+from ..module import Module
 import threading
 from time import sleep
 from abc import ABC, abstractmethod
-from pymitter import EventEmitter
 
-class BaseInterface(ABC, EventEmitter):
+class BaseInterface(ABC, Module):
 
     def  __init__(self, hplayer, name="INTERFACE", color="blue"):
-        
-        super().__init__(wildcard=True, delimiter=".")
-
-        self.name = name
-        self.nameP = colored(self.name, color)
-
-        self.hplayer = hplayer
+        super().__init__(hplayer, name, color)
 
         # stopping flag
         self.stopped = threading.Event()
@@ -22,6 +14,7 @@ class BaseInterface(ABC, EventEmitter):
 
         # Listen thread
         self.recvThread = threading.Thread(target=self.listen)
+
 
     # Receiver THREAD (ABSTRACT)
     @abstractmethod
@@ -43,16 +36,9 @@ class BaseInterface(ABC, EventEmitter):
 	# is Running
     def isRunning(self, state=None):
         if state is not None:
-            self.stopped.clear() if state else self.running.set()
+            self.stopped.clear() if state else self.stopped.set()
         return not self.stopped.is_set()
 
-    # Log
-    def log(self,  *argv):
-        print(self.nameP, *argv)
 
-    # Emit extended
-    def emit(self, cmd, *args):
-        self.hplayer.emit( self.name.lower() + '.' + cmd, *args )
-        super().emit(cmd, *args)
 
         

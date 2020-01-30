@@ -24,10 +24,9 @@ thread_lock = threading.Lock()
 
 class Http2Interface (BaseInterface):
 
-    def  __init__(self, player, port):
-        super(Http2Interface, self).__init__(player, "HTTP2")
+    def  __init__(self, hplayer, port):
+        super(Http2Interface, self).__init__(hplayer, "HTTP2")
         self._port = port
-        self.player = player
 
     # HTTP receiver THREAD
     def listen(self):
@@ -46,7 +45,7 @@ class Http2Interface (BaseInterface):
 
         # Start server
         self.log( "web interface on port", self._port)
-        with ThreadedHTTPServer(self._port, self.player) as server:
+        with ThreadedHTTPServer(self, self._port) as server:
             self.stopped.wait()
 
         # Unregister ZeroConf
@@ -59,9 +58,9 @@ class Http2Interface (BaseInterface):
 # Threaded HTTP Server
 #
 class ThreadedHTTPServer(object):
-    def __init__(self, port, player):
+    def __init__(self, http2interface, port):
 
-        self.player = player
+        self.http2interface = http2interface
 
         interface_path = os.path.dirname(os.path.realpath(__file__))
         www_path = os.path.join(interface_path, 'http2')
@@ -93,25 +92,28 @@ class ThreadedHTTPServer(object):
             if file.filename == '':
                 return 'No filename provided', 404
 
-            if file and self.player.validExt(file.filename):
+            if file and self.http2interface.hplayer.validExt(file.filename):
                 filename = secure_filename(file.filename)
-                filepath = os.path.join(self.player.basepath[0], filename)
+                filepath = os.path.join(self.http2interface.hplayer.basepath[0], filename)
                 if os.path.exists(filepath):
                     prefix, ext = os.path.splitext(filepath)
                     filepath = prefix + '-' + ext
                 file.save(filepath)
                 
-                if self.player.validImage(filepath):
-                    size = (1920, 1080)
-                    try:
-                        im = Image.open(filepath)
-                        im.thumbnail(size, Image.ANTIALIAS)
-                        im.save(filepath)
-                    except IOError:
-                        print("cannot resize", filepath)
+                try:
+                    im = Image.load(filepath)
+                    im.verify() #I perform also verify, don't know if he sees other types o defects
+                    im.close() #reload is necessary in my case
+                    im = Image.open(filepath)
+                    im.thumbnail((1920, 1080), Image.ANTIALIAS)
+                    im.save(filepath)
+                except IOError:
+                    print("cannot resize", filepath)
+                except:
+                    pass
 
                 fileslist_message()
-                self.player.add(filepath)
+                self.http2interface.hplayer.add(filepath)
                 return 'ok'
 
             return 'No valid file provided', 404
@@ -131,7 +133,7 @@ class ThreadedHTTPServer(object):
 
         def background_thread():
             while True:
-                socketio.emit('status', self.player.status())  # {'msg': 'yo', 'timestamp': time.gmtime()}
+                socketio.emit('status', self.http2interface.hplayer.status())  # {'msg': 'yo', 'timestamp': time.gmtime()}
                 
                 if self.sendSettings:
                     socketio.emit('settings', self.sendSettings)
@@ -149,120 +151,30 @@ class ThreadedHTTPServer(object):
         def playlist_send(arg=None):
             self.sendPlaylist = arg
 
-        self.player.on(['settings-update'], settings_send)
-        self.player.on(['playlist-update'], playlist_send)
+        self.http2interface.hplayer.on('settings-update', settings_send)
+        self.http2interface.hplayer.on('playlist-update', playlist_send)
 
         @socketio.on('connect')
         def client_connect():
-            socketio.emit('settings', self.player.settings())
-            socketio.emit('name', self.player.name)
+            socketio.emit('settings', self.http2interface.hplayer.settings())
+            socketio.emit('name', self.http2interface.hplayer.name())
             global thread
             with thread_lock:
                 if thread is None:
                     thread = socketio.start_background_task(target=background_thread)
 
-        @socketio.on('play')
-        def play_message(message=None):
-            if message and 'path' in message:
-                self.player.play(message['path'])
-            elif message and 'index' in message:
-                self.player.play(int(message['index']))
-            else:
-                self.player.play()
 
-        @socketio.on('stop')
-        def stop_message():
-            self.player.stop()
+        # @socketio.on('autoplay')
+        # def mute_message():
+        #     self.player.autoplay(True)
 
-        @socketio.on('clear')
-        def clear_message():
-            self.player.clear()
-
-        @socketio.on('add')
-        def add_message(path):
-            self.player.add(path)
-
-        @socketio.on('remove')
-        def rm_message(index):
-            self.player.remove(index)
-
-        @socketio.on('pause')
-        def pause_message():
-            self.player.pause()
-
-        @socketio.on('resume')
-        def resume_message():
-            self.player.resume()
-
-        @socketio.on('next')
-        def next_message():
-            self.player.next()
-
-        @socketio.on('prev')
-        def prev_message():
-            self.player.prev()
-
-        @socketio.on('loop')
-        def loop_message(mode=None):
-            doLoop = 1
-            if mode:
-                if mode == 'all':
-                    doLoop = 2
-                elif mode == 'one':
-                    doLoop = 1
-                else:
-                    doLoop = 0
-            self.player.loop(doLoop)
-
-        @socketio.on('unloop')
-        def unloop_message():
-            self.player.loop(0)
-
-        @socketio.on('volume')
-        def volume_message(message=None):
-            if message:
-                self.player.volume(int(message))
-
-        @socketio.on('mute')
-        def mute_message():
-            self.player.mute(True)
-
-        @socketio.on('unmute')
-        def unmute_message():
-            self.player.mute(False)
-
-        @socketio.on('autoplay')
-        def mute_message():
-            self.player.autoplay(True)
-
-        @socketio.on('notautoplay')
-        def unmute_message():
-            self.player.autoplay(False)
+        # @socketio.on('audiomode')
+        # def audiomode_message(message=None):
+        #     self.player.audiomode(message)
 
         @socketio.on('reboot')
         def reboot_message():
             os.system('reboot')
-
-        @socketio.on('pan')
-        def pan_message(message=None):
-            if message and len(message) == 2:
-                self.player.pan([int(message[0]), int(message[1])])
-
-        @socketio.on('audiomode')
-        def audiomode_message(message=None):
-            self.player.audiomode(message)
-
-        @socketio.on('flip')
-        def flip_message():
-            self.player.flip(True)
-
-        @socketio.on('unflip')
-        def unflip_message():
-            self.player.flip(False)
-
-        @socketio.on('status')
-        def status_message():
-            pass
 
         @socketio.on('ping')
         def ping_message():
@@ -272,9 +184,11 @@ class ThreadedHTTPServer(object):
         def event_message(message=None):
             if message['event']:
                 if message['data']:
-                    self.player.trigger(message['event'], message['data'])
+                    if not isinstance(message['data'], list): 
+                        message['data'] = list(message['data'])
+                    self.http2interface.emit(message['event'], *message['data'])
                 else:
-                    self.player.trigger(message['event'])
+                    self.http2interface.emit(message['event'])
 
         @socketio.on('fileslist')
         def fileslist_message():
@@ -297,7 +211,7 @@ class ThreadedHTTPServer(object):
                 return d
 
             liste = []
-            for bp in self.player.basepath:
+            for bp in self.hplayer.basepath:
                 br = path_to_dict(bp)
                 if br is not None:
                     # print(br)
@@ -314,7 +228,7 @@ class ThreadedHTTPServer(object):
             if message:
                 for e in message:
                     e = e.replace('/..', '')
-                    for basepath in self.player.basepath:
+                    for basepath in self.http2interface.hplayer.files.root_paths:
                         if e.startswith(basepath):
                             os.remove(e)
                 fileslist_message()

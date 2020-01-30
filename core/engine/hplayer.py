@@ -2,6 +2,9 @@ from __future__ import print_function
 from . import network
 import core.players as playerlib
 import core.interfaces as ifacelib
+from core.engine.filemanager import FileManager
+from core.engine.playlist import Playlist
+from core.engine.settings import Settings
 
 from collections import OrderedDict
 from termcolor import colored
@@ -21,36 +24,46 @@ def signal_handler(signal, frame):
 signal.signal(signal.SIGINT, signal_handler)
 
 
-class Hplayer(EventEmitter):
+class HPlayer2(EventEmitter):
 
-    def __init__(self, roots=None):
+    def __init__(self, basepath=None, settingspath=None):
         super().__init__(wildcard=True, delimiter=".")
         self.nameP = colored('HPlayer2', 'green')
 
-        self._players = OrderedDict()
-        self._interfaces = {}
+        self._lastUsedPlayer = 0
 
-        self._lastPlayer = 0
+        self._players       = OrderedDict()
+        self._interfaces    = OrderedDict()
+
+        self.settings       = Settings(self, settingspath)
+        self.files          = FileManager(self, basepath)
+        self.playlist       = Playlist(self)
+
+        self.autoBind(self.settings)
+        self.autoBind(self.files)
+        self.autoBind(self.playlist)
 
 
     def log(self, *argv):
         print(self.nameP, *argv)
 
+    @staticmethod
+    def isRPi():
+        return platform.machine().startswith('armv')
 
-    def isRPi(self):
-        return platform.machine().startswith('armv')    
-
+    @staticmethod
+    def name():
+        return network.get_hostname()
 
     def addPlayer(self, ptype, name=None):
-        # if not name:
-        #     name = network.get_hostname()
+        if not name: name = ptype+len(self._players)
         if name and name in self._players:
             print("player", name, "already exists")
         else:
             PlayerClass = playerlib.getPlayer(ptype)
-            p = PlayerClass(name)
-            self._players[p.name] = p
-        return self._players[p.name]
+            p = PlayerClass(self, name)
+            self._players[name] = p
+        return self._players[name]
 
 
     def player(self, name):
@@ -63,11 +76,11 @@ class Hplayer(EventEmitter):
         return self._players.values()
 
 
-    def addInterface(self, ifacename, *argv):
-        InterfaceClass = ifacelib.getInterface(ifacename)
-        self._interfaces[ifacename] = InterfaceClass(self, *argv)
-        self.autoBind(self._interfaces[ifacename])
-        return self._interfaces[ifacename]
+    def addInterface(self, iface, *argv):
+        InterfaceClass = ifacelib.getInterface(iface)
+        self._interfaces[iface] = InterfaceClass(self, *argv)
+        self.autoBind(self._interfaces[iface])
+        return self._interfaces[iface]
 
 
     def interface(self, name):
@@ -78,24 +91,13 @@ class Hplayer(EventEmitter):
     def interfaces(self):
         return self._interfaces.values()
 
-    def setBasePath(self, bpath):
-        self.log("set basepath:", bpath);
-        for p in self.players():
-            p.setBasePath(bpath)
-
-
-    def persistentSettings(self, spath):
-        self.log("settings:", spath);
-        for p in self.players():
-            p.persistentSettings(spath)
-
 
     def running(self):
         run = True
         for p in self.players():
             run = run and p.isRunning()
         for iface in self.interfaces():
-            run = run and iface.isRunning():
+            run = run and iface.isRunning()
         return run
         
 
@@ -130,7 +132,8 @@ class Hplayer(EventEmitter):
             sleep(0.5)
 
         # STOP
-        print('\n' + nameP, "is closing..")
+        self.log()
+        self.log("is closing..")
         for p in self.players():
             p.quit()
         for iface in self.interfaces():
@@ -140,99 +143,150 @@ class Hplayer(EventEmitter):
         sys.exit(0)
 
 
-    def autoBind(self, iface):
+    def autoBind(self, module):
         
-        @iface.on('play')
+        # PLAYLIST
+        #
+
+        @module.on('play')
         def play(*args):
-            if len(args) > 0:
-                # MOVE playlist managment from player to hplayer !!
-                # SCAN extension and decide
-                pass
-            else:
-                # if self._lastPlayer < len(self.players()):
-                #     self.players()[self._lastPlayer].play()
-                pass
+            self.playlist.play(args)
+
+        @module.on('playonce')
+        def playonce(*args):
+            loop(0)
+            self.playlist.play(args)
+
+        @module.on('playloop')
+        def playloop(*args):
+            loop(2)
+            self.playlist.play(args)
+
+        @module.on('load')
+        def load(*args):
+            self.playlist.load(args)
         
-        @iface.on('playindex')
+        @module.on('playindex')
         def playindex(*args):
             if len(args) > 0:
-                # MOVE playlist managment from player to hplayer !!
-                # SCAN extension and decide
-                pass
+                self.playlist.playindex(int(args[0]))
 
-        @iface.on('playlist')
-        def playlist(*args):
+        @module.on('add')
+        def add(*args):
             if len(args) > 0:
-                # MOVE playlist managment from player to hplayer !!
-                # SCAN extension and decide
-                pass
+                self.playlist.add(args)
 
-        @iface.on('next')
-        def nex(*args):
-            # MOVE playlist managment from player to hplayer !!
-            # SCAN extension and decide
-            pass
+        @module.on('remove')   #index !
+        def remove(*args):
+            if len(args) > 0:
+                self.playlist.remove(args[0])
 
-        @iface.on('prev')
+        @module.on('clear')
+        def clear(*args):
+            self.playlist.clear()
+
+        @module.on('next')
+        def next(*args):
+            self.playlist.next()
+
+        @module.on('prev')
         def prev(*args):
-            # MOVE playlist managment from player to hplayer !!
-            # SCAN extension and decide
-            pass
+            self.playlist.prev()
 
-        @iface.on('stop')
-        def stop(*args):
+
+        # PLAYERS
+        #
+
+        @module.on('doplay')
+        def doplay(*args):
+            stop()
             for p in self.players(): 
-                p.stop()
+                if p.validExt(args[0]):
+                    p.play(args[0])
+                    return
 
-        @iface.on('pause')
+        @module.on('stop')
+        def stop(*args):
+            # TODO : double stop -> reset playlist index (-1)
+            for p in self.players():
+                if p.isPlaying(): 
+                    p.stop()
+
+        @module.on('pause')
         def pause(*args):
             for p in self.players(): 
-                p.pause()
+                if p.isPlaying():
+                    p.pause()
 
-        @iface.on('resume')
+        @module.on('resume')
         def resume(*args):
             for p in self.players(): 
-                p.resume()
+                if p.isPlaying():
+                    p.resume()
 
-        @iface.on('loop')
-        def loop(*args):
+        @module.on('seek')
+        def seek(*args):
             if len(args) > 0:
                 for p in self.players(): 
-                    p.loop(int(args[0]))
+                    if p.isPlaying():
+                        p.seekTo(int(args[0]))
 
-        @iface.on('unloop')
+        # SETTINGS
+        #
+
+        @module.on('loop')
+        def loop(*args):
+            doLoop = 2
+            if len(args) > 0:
+                doLoop = int(args[0])
+            self.settings.set('loop', doLoop)
+
+        @module.on('unloop')
         def unloop(*args):
-            for p in self.players(): 
-                p.loop(0)
+            self.settings.set('loop', 0)
 
-        @iface.on('volume')
+        @module.on('volume')
         def volume(*args):
             if len(args) > 0:
-                for p in self.players(): 
-                    p.volume(int(args[0]))
+                vol = int(args[0])
+                if (vol < 0): vol = 0
+                if (vol > 100): vol = 100
+                self.settings.set('volume', vol)
 
-        @iface.on('mute')
+        @module.on('mute')
         def mute(*args):
-            for p in self.players(): 
-                p.mute(True)
+            doMute = True
+            if len(args) > 0:
+                doMute = int(args[0]) > 0
+            self.settings.set('mute', doMute)
 
-        @iface.on('unmute')
+        @module.on('unmute')
         def unmute(*args):
-            for p in self.players(): 
-                p.mute(False)
+            self.settings.set('mute', False)
 
-        @iface.on('pan')
+        @module.on('pan')
         def pan(*args):
             if len(args) > 1:
-                for p in self.players(): 
-                    p.pan(int(args[0]),int(args[1]))
+                self.settings.set('pan', [int(args[0]),int(args[1])])
         
-        @iface.on('flip')
+        @module.on('flip')
         def flip(*args):
-            for p in self.players(): 
-                p.flip(True)
+            doFlip = True
+            if len(args) > 0:
+                doFlip = int(args[0]) > 0
+            self.settings.set('flip', doFlip)
 
-        @iface.on('unflip')
+        @module.on('unflip')
         def unflip(*args):
-            for p in self.players(): 
-                p.flip(False)
+            self.settings.set('flip', False)
+
+        @module.on('autoplay')
+        def autoplay(*args):
+            doAP = True
+            if len(args) > 0:
+                doAP = int(args[0]) > 0
+            self.settings.set('autoplay', doAP)
+
+        @module.on('notautoplay')
+        def notautoplay(*args):
+            self.settings.set('autoplay', False)

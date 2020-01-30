@@ -7,10 +7,10 @@ import sys, subprocess
 
 class KeyboardInterface (BaseInterface):
 
-    def __init__(self, player):
+    def __init__(self, hplayer):
 
         # Interface settings
-        super(KeyboardInterface, self).__init__(player, "Keyboard")
+        super(KeyboardInterface, self).__init__(hplayer, "Keyboard")
 
         # keyboard connection watchdog
         event_handler = FileSystemEventHandler()
@@ -77,14 +77,14 @@ class KeyboardInterface (BaseInterface):
                     elif event.value == 0:
                         keymode = 'up'
 
-                    self.player.trigger('key-'+keymode, event.code)
-                    self.player.trigger(keycode+'-'+keymode)
+                    self.emit('key-'+keymode, event.code)
+                    self.emit(keycode+'-'+keymode)
 
                     # self.log("keyboard event:", categorize(event), event.code, event.value)
                     # self.log("keyboard event:", keycode+'-'+keymode)
 
                 elif not event:
-                	sleep(0.1)
+                	sleep(0.05)
 
             except:
                 sleep(0.5)
@@ -93,44 +93,45 @@ class KeyboardInterface (BaseInterface):
             self.remote.ungrab()
 
 
-    def asIRremote(self):
+    # def asIRremote(self):
 
-        # Volume UP
-        def volup():
-            self.player.mute(False)
-            self.player.volume_inc()
-        self.player.on(['KEY_VOLUMEUP-down', 'KEY_VOLUMEUP-hold'], volup )
+    #     # Volume UP
+    #     @self.on('KEY_VOLUMEUP-down')
+    #     @self.on('KEY_VOLUMEUP-hold')
+    #     def volup():
+    #         self.hplayer.mute(False)
+    #         self.hplayer.volume_inc()
 
-        # Volume DOWN
-        def voldown():
-            self.player.mute(False)
-            self.player.volume_inc()
-        self.player.on(['KEY_VOLUMEDOWN-down', 'KEY_VOLUMEDOWN-hold'], voldown )
+    #     # Volume DOWN
+    #     def voldown():
+    #         self.hplayer.mute(False)
+    #         self.hplayer.volume_inc()
+    #     self.hplayer.on(['KEY_VOLUMEDOWN-down', 'KEY_VOLUMEDOWN-hold'], voldown )
 
-        # Mute
-        self.player.on(['KEY_MUTE-down'], self.player.mute_toggle )
+    #     # Mute
+    #     self.hplayer.on(['KEY_MUTE-down'], self.hplayer.mute_toggle )
 
-        # Loop NO
-        self.player.on(['KEY_COMMA-down'], lambda: self.player.loop(0) )
+    #     # Loop NO
+    #     self.hplayer.on(['KEY_COMMA-down'], lambda: self.hplayer.loop(0) )
 
-        # Loop ONE
-        self.player.on(['KEY_A-down'], lambda: self.player.loop(1) )
+    #     # Loop ONE
+    #     self.hplayer.on(['KEY_A-down'], lambda: self.hplayer.loop(1) )
 
-        # Loop ALL
-        self.player.on(['KEY_D-down'], lambda: self.player.loop(2) )
+    #     # Loop ALL
+    #     self.hplayer.on(['KEY_D-down'], lambda: self.hplayer.loop(2) )
 
-        def playpause():
-            if self.player.isPlaying():
-                self.player.pause()
-            elif self.player.isPaused():
-                self.player.resume()
-            else:
-                self.player.play()
-        self.player.on(['KEY_PLAYPAUSE-down'], playpause)
+    #     def playpause():
+    #         if self.hplayer.isPlaying():
+    #             self.hplayer.pause()
+    #         elif self.hplayer.isPaused():
+    #             self.hplayer.resume()
+    #         else:
+    #             self.hplayer.play()
+    #     self.hplayer.on(['KEY_PLAYPAUSE-down'], playpause)
 
-        self.player.on(['KEY_STOPCD-down'], self.player.stop )
-        self.player.on(['KEY_NEXTSONG-down'], self.player.next )
-        self.player.on(['KEY_PREVIOUSSONG-down'], self.player.prev )
+    #     self.hplayer.on(['KEY_STOPCD-down'], self.hplayer.stop )
+    #     self.hplayer.on(['KEY_NEXTSONG-down'], self.hplayer.next )
+    #     self.hplayer.on(['KEY_PREVIOUSSONG-down'], self.hplayer.prev )
 
 
     # # KEY PRESS event

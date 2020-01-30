@@ -1,15 +1,12 @@
 from watchdog.observers import Observer
 from watchdog.events import PatternMatchingEventHandler
 from threading import Timer
-from pymitter import EventEmitter
-from termcolor import colored
 import os
+from ..module import Module
 
-
-class FileManager(EventEmitter):
-    def __init__(self, roots=None):
-        super().__init__(wildcard=True, delimiter=".")
-        self.nameP = colored('Files', 'yellow')
+class FileManager(Module):
+    def __init__(self, hplayer, roots=None):
+        super().__init__(hplayer, 'Files', 'yellow')
 
         self.root_paths = []
         self.unified_dir = []
@@ -24,9 +21,6 @@ class FileManager(EventEmitter):
                 self.refreshTimer.start()
 
         if roots: self.add(roots)
-
-    def log(self, *argv):
-        print(self.nameP, *argv)
 
     def add(self, path):
         """

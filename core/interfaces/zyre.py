@@ -439,8 +439,8 @@ class ZyreNode ():
 #
 class ZyreInterface (BaseInterface):
 
-    def  __init__(self, player, iface=None):
-        super().__init__(player, "ZYRE")
+    def  __init__(self, hplayer, iface=None):
+        super().__init__(hplayer, "ZYRE")
         self.node = ZyreNode(self.processor, iface)
 
     def listen(self):
@@ -456,89 +456,9 @@ class ZyreInterface (BaseInterface):
 
     def processor(self, data):
 
-        self.log('Received: ', data)
+        # self.log('Received: ', data)
+        # if 'at' in data:
+        #     self.log('DELTA', int(time.time()*PRECISION)-data['at'], 'ns' )
 
-        if 'at' in data:
-            # self.log('DELTA', int(time.time()*PRECISION)-data['at'], 'ns' )
-            pass
+        self.emit(data['event'], data)
 
-        if not self.player:
-            return
-
-        path = data['event']
-        args = data['args']
-
-        self.player.trigger('zyre', data )
-
-        if path == '/play':
-            self.player.loop(0)
-            if args and len(args) >= 1:
-                self.player.play(args[0])
-            else:
-                self.player.play()
-
-        elif path == '/playloop':
-            self.player.loop(1)
-            if args and len(args) >= 1:
-                self.player.play(args[0])
-            else:
-                self.player.play()
-
-        elif path == '/playindex':
-            if args and len(args) >= 1:
-                self.player.play(args[0])
-
-        elif path == '/playlist':
-            if args and len(args) >= 1:
-                self.player.load(args[0])
-                if len(args) >= 2: self.player.play(args[1])
-                else: self.player.play()
-                # self.log('DELTA PLAY', int(time.time()*PRECISION)-data['at'], 'ns' )
-
-        elif path == '/load':
-            if args and len(args) >= 1:
-                self.player.load(args[0])
-
-        elif path == '/stop':
-            self.player.stop()
-
-        elif path == '/pause':
-            self.player.pause()
-
-        elif path == '/resume':
-            self.player.resume()
-
-        elif path == '/next':
-            self.player.next()
-
-        elif path == '/prev':
-            self.player.prev()
-
-        elif path == '/loop':
-            self.player.loop(1)
-
-        elif path == '/unloop':
-            self.player.loop(0)
-
-        elif path == '/volume':
-            if args and len(args) >= 1:
-                self.player.volume(args[0])
-
-        elif path == '/mute':
-            self.player.mute(True)
-
-        elif path == '/unmute':
-            self.player.mute(False)
-
-        elif path == '/pan':
-            if args and len(args) >= 2:
-                self.player.pan(args[0], args[1])
-
-        elif path == '/flip':
-            self.player.flip(True)
-
-        elif path == '/unflip':
-            self.player.flip(False)
-
-        else:
-            self.player.trigger(path, args)

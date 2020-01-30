@@ -7,22 +7,17 @@ import mido
 
 class MidiPlayer(BasePlayer):
 
-    def __init__(self, name=None):
-        super(MidiPlayer, self).__init__()
+    _validExt = ['mid']
 
-        if name:
-            name = name.replace(" ", "_")
-        else:
-            import time
-            name = 'midi-'+str(time.time())
 
-        self.name = name
-        self.nameP = colored("MIDI" ,'magenta')
-
+    def __init__(self, hplayer, name):
+        super(MidiPlayer, self).__init__(hplayer, name)
         self._mido_thread = None
         self._midiFile = None
         self._runflag = threading.Event()
 
+    def log(self, *argv):
+        print(self.nameP, *argv)
 
     ############
     ## private METHODS
@@ -31,10 +26,10 @@ class MidiPlayer(BasePlayer):
     # MIDO playback THREAD
     def _mido_playback(self):
 
-        print(self.nameP, mido.get_output_names())
-        self._output = mido.open_output('Integra-7')
+        # self.log('interfaces detected:', mido.get_output_names())
+        self._output = mido.open_output('Virtual Raw MIDI 1-0:VirMIDI 1-0 20:0')
 
-        self.trigger('player-ready')
+        self.emit('player-ready')
 
         while self.isRunning():
 
@@ -47,17 +42,17 @@ class MidiPlayer(BasePlayer):
             except StopIteration:
                 self._midiFile = None
                 self._status['isPaused'] = False
-                self.trigger('end-file')
+                self.emit('end')
                 self._runflag.clear()
             except:
                 if self.isRunning():
-                    print(self.nameP, 'ERROR:', sys.exc_info()[0])
+                    self.log('ERROR:', sys.exc_info()[0])
                     self.isRunning(False)
                 else:
                     break
     
 
-        print(self.nameP, "mido thread stopped")
+        self.log("mido thread stopped")
         self.isRunning(False)
         return
 
@@ -88,14 +83,14 @@ class MidiPlayer(BasePlayer):
         self._runflag.set()
 
         if self._mido_thread:
-            # print(self.nameP, "stopping process thread")
+            # self.log("stopping process thread")
             self._mido_thread.join()
 
-        print(self.nameP, "stopped")
+        self.log("stopped")
 
 
     def _play(self, path):
-        print(self.nameP, "play", path)
+        self.log("play", path)
         self._runflag.clear()
         self._midiFile = mido.MidiFile(path)
         self._status['isPaused'] = False
@@ -115,12 +110,12 @@ class MidiPlayer(BasePlayer):
 
     # def _seekTo(self, milli):
     #     self._mpv_send('{ "command": ["seek", "'+str(milli/1000)+'", "absolute"] }')
-    #     # print(self.nameP, "seek to", milli/1000)
+    #     # self.log("seek to", milli/1000)
 
     # def _applyVolume(self):
     #     vol = self._settings['volume']
     #     if self._settings['mute']:
     #         vol = 0
     #     self._mpv_send('{ "command": ["set_property", "volume", '+str(vol)+'] }')
-    #     print(self.nameP, "VOLUME to", vol)
+    #     self.log("VOLUME to", vol)
 

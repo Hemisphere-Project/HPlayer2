@@ -1,35 +1,27 @@
 from __future__ import print_function
 from termcolor import colored
 import socket, threading, subprocess, os, json, select
-from time import sleep
+import time
 from .base import BasePlayer
 
 class MpvPlayer(BasePlayer):
 
-    def __init__(self, name=None):
-        super(MpvPlayer, self).__init__()
+    _validExt = ['mp4', 'm4v', 'mkv', 'avi', 'mov', 'flv', 'mpg', 'wmv', '3gp', 'mp3', 'aac', 'wma', 'wav', 'flac', 'aif', 'aiff', 'm4a', 'ogg', 'opus', 'webm', 'jpg', 'jpeg', 'gif', 'png', 'tif', 'tiff']
 
-        if name:
-            name = name.replace(" ", "_")
-        else:
-            import time
-            name = 'mpv-'+str(time.time())
+    _mpv_scale = 1          # % image scale
+    _mpv_imagetime = 5      # diaporama transition time (s)
 
-        self.name = name
-        self.nameP = colored("MPV -" + name + "-",'magenta')
-        self.nameP = colored("MPV" ,'magenta')
 
+    def __init__(self, hplayer, name):
+        super().__init__(hplayer, name)
         self._mpv_procThread = None
-
         self._mpv_sock = None
         self._mpv_sock_connected = False
         self._mpv_recvThread = None
-
         self._mpv_socketpath = '/tmp/hplayer-' + name
-        
-        self._mpv_scale = 1                 # % image scale
-        self._mpv_imagetime = 5             # diaporama transition time   
 
+    def log(self, *argv):
+        print(self.nameP, *argv)    
 
     ############
     ## public METHODS
@@ -59,21 +51,21 @@ class MpvPlayer(BasePlayer):
             if poll_result:
                 out = self._mpv_subproc.stdout.readline()
                 if out.strip():
-                    # print(self.nameP, "su   bproc says", out.strip())
+                    # self.log("su   bproc says", out.strip())
                     pass
             else:
-                sleep(0.1)          ## TODO turn into ASYNC !!
+                time.sleep(0.1)          ## TODO turn into ASYNC !!
 
 
         if self._mpv_subproc.poll():
             self._mpv_subproc.terminate()
             if not self._mpv_subproc.poll():
-                print(self.nameP, "process terminated")
+                self.log("process terminated")
             else:
                 self._mpv_subproc.kill()
-                print(self.nameP, "process killed")
+                self.log("process killed")
         else:
-            print(self.nameP, "process closed")
+            self.log("process closed")
 
         self.isRunning(False)
         return
@@ -88,9 +80,9 @@ class MpvPlayer(BasePlayer):
             try:
                 self._mpv_sock.connect(self._mpv_socketpath)
                 self._mpv_sock.settimeout(0.1)
-                print(self.nameP, "connected to player backend")
+                self.log("connected to player backend")
                 self._mpv_sock_connected = True
-                self.trigger('player-ready')
+                self.emit('player-ready')
                 break
             except socket.error as e:
                 if retry == 1:
@@ -98,7 +90,7 @@ class MpvPlayer(BasePlayer):
                     self.isRunning(False)
                 else:
                     # print (self.nameP, "retrying socket connection..")
-                    sleep(0.2)
+                    time.sleep(0.2)
 
         if self._mpv_sock_connected:
 
@@ -115,24 +107,24 @@ class MpvPlayer(BasePlayer):
                     msg = self._mpv_sock.recv(4096)
                     assert len(msg) != 0, "socket disconnected"
 
-                    # print(self.nameP, "IPC says:", msg.rstrip())
+                    # self.log("IPC says:", msg.rstrip())
                     
                     # Message received
                     for event in msg.rstrip().split( b"\n" ):
                         try:
                             mpvsays = json.loads(event)
                         except:
-                            #print(self.nameP, "IPC invalid json:", event)
+                            #self.log("IPC invalid json:", event)
                             pass
 
                         if 'event' in mpvsays:
                             if mpvsays['event'] == 'idle':
-                                self.trigger('idle')
+                                self.emit('idle')
 
                         if 'name' in mpvsays:
                             if mpvsays['name'] == 'eof-reached' and mpvsays['data'] == True:
                                 self._status['isPaused'] = False
-                                self.trigger('end-file')
+                                self.emit('end')
                             elif mpvsays['name'] == 'core-idle':
                                 self._status['isPlaying'] = not mpvsays['data']
                             elif mpvsays['name'] == 'time-pos':
@@ -140,7 +132,7 @@ class MpvPlayer(BasePlayer):
                                     self._status['time'] = round(float(mpvsays['data']),2)
                             else:
                                 pass
-                                # print(self.nameP, "IPC event:", mpvsays)
+                                # self.log("IPC event:", mpvsays)
 
 
                 # Timeout: retry
@@ -150,12 +142,12 @@ class MpvPlayer(BasePlayer):
                 # Socket error: exit
                 except (socket.error, AssertionError) as e:
                     if self.isRunning():
-                        print(self.nameP, e)
+                        self.log(e)
                         self.isRunning(False)
 
         self._mpv_sock.close()
         self._mpv_sock_connected = False
-        print(self.nameP, "socket closed")
+        self.log("socket closed")
         self.isRunning(False)
         return
 
@@ -166,12 +158,12 @@ class MpvPlayer(BasePlayer):
             try:
                 self._mpv_sock.send( (msg+'\n').encode() )
                 if self.doLog['cmds']:
-                    print(self.nameP, "cmds:", msg)
+                    self.log("cmds:", msg)
             except socket.error:
                 print (self.nameP, "socket send error:", msg)
                 self.isRunning(False)
         else:
-            print(self.nameP, "socket not connected, can't send \""+msg+"\"")
+            self.log("socket not connected, can't send \""+msg+"\"")
 
 
     ##########
@@ -215,18 +207,18 @@ class MpvPlayer(BasePlayer):
         self.isRunning(False)
 
         if self._mpv_procThread:
-            # print(self.nameP, "stopping process thread")
+            # self.log("stopping process thread")
             self._mpv_procThread.join()
 
         if self._mpv_recvThread:
-            # print(self.nameP, "stopping socket thread")
+            # self.log("stopping socket thread")
             self._mpv_recvThread.join()
 
-        print(self.nameP, "stopped")
+        self.log("stopped")
 
 
     def _play(self, path):
-        print(self.nameP, "play", path)
+        self.log("play", path)
         # self._mpv_send('{ "command": ["stop"] }')
         self._mpv_send('{ "command": ["loadfile", "'+path+'"] }')
         self._mpv_send('{ "command": ["set_property", "pause", false] }')
@@ -246,26 +238,25 @@ class MpvPlayer(BasePlayer):
 
     def _seekTo(self, milli):
         self._mpv_send('{ "command": ["seek", "'+str(milli/1000)+'", "absolute"] }')
-        # print(self.nameP, "seek to", milli/1000)
+        # self.log("seek to", milli/1000)
 
-    def _applyVolume(self):
-        vol = self._settings['volume']
-        if self._settings['mute']:
-            vol = 0
-        self._mpv_send('{ "command": ["set_property", "volume", '+str(vol)+'] }')
-        print(self.nameP, "VOLUME to", vol)
+    def _applyVolume(self, volume, settings):
+        if settings['mute']:
+            volume = 0
+        self._mpv_send('{ "command": ["set_property", "volume", '+str(volume)+'] }')
+        self.log("VOLUME to", volume)
 
-    def _applyPan(self):
-        if self._settings['audiomode'] == 'mono':
+    def _applyPan(self, pan, settings):
+        if settings['audiomode'] == 'mono':
             self._mpv_send('{"command": ["set_property", "af", "lavfi=[pan=stereo|c0=.5*c0+.5*c1|c1=.5*c0+.5*c1]"]}')            
         else:
-            left = self._settings['pan'][0]/100.0
-            right = self._settings['pan'][1]/100.0
+            left = pan[0]/100.0
+            right = pan[1]/100.0
             self._mpv_send('{"command": ["set_property", "af", "lavfi=[pan=stereo|c0='+str(left)+'*c0|c1='+str(right)+'*c1]"]}')
-            print(self.nameP, "PAN to", left, right, '{"command": ["set_property", "af", "lavfi=[pan=stereo|c0='+str(left)+'*c0|c1='+str(right)+'*c1]"]}')
+            self.log("PAN to", left, right, '{"command": ["set_property", "af", "lavfi=[pan=stereo|c0='+str(left)+'*c0|c1='+str(right)+'*c1]"]}')
     
-    def _applyFlip(self):
-        if not self._settings['flip']:
+    def _applyFlip(self, flip, settings):
+        if flip:
             # self._mpv_send('{ "command": ["vf", "add", "mirror"] }')
             pass
         else:
