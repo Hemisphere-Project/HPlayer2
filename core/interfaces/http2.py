@@ -211,7 +211,7 @@ class ThreadedHTTPServer(object):
                 return d
 
             liste = []
-            for bp in self.hplayer.basepath:
+            for bp in self.http2interface.hplayer.files.root_paths:
                 br = path_to_dict(bp)
                 if br is not None:
                     # print(br)

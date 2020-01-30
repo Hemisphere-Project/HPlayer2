@@ -28,6 +28,8 @@ class Settings(Module):
             except:
                 self.log('ERROR loading settings file', self._settingspath)
 
+    def __call__(self):
+        return self.export()
 
     def export(self):
         return self._settings.copy()
