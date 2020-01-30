@@ -1,6 +1,7 @@
 
 from pymitter import EventEmitter
 from termcolor import colored
+import sys
 
 class Module(EventEmitter):
     def __init__(self, hplayer, name, color):
@@ -12,6 +13,7 @@ class Module(EventEmitter):
 
     def log(self, *argv):
         print(self.nameP, *argv)
+        sys.stdout.flush()
 
     # Emit extended
     def emit(self, event, *args):

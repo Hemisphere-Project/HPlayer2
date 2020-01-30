@@ -44,8 +44,12 @@ class MidiPlayer(BasePlayer):
             self._runflag.wait()
             try:
                 msg = next(self._midiFile)
-                pausetime = msg.time
-                if not msg.is_meta:
+
+                if msg.is_meta:
+                    # self.log('META', msg)
+                    pass
+                else:
+                    pausetime = msg.time
                     while pausetime > 0:
                         if not self._status['isPlaying']: 
                             break
@@ -54,12 +58,12 @@ class MidiPlayer(BasePlayer):
                             pausetime -= doSleep
                         sleep(doSleep)
                     
-                    if not self.isRunning():
-                        break
+                    if not self.isRunning(): break
 
                     if self._runflag.is_set() and self._status['isPlaying']:
                         self.log(msg)
                         self._output.send(msg)
+
             except StopIteration:
                 self.stop()
                 self.emit('end')
@@ -112,7 +116,7 @@ class MidiPlayer(BasePlayer):
 
 
     def _play(self, path):
-        # self.log("play", path)
+        self.log("play", path)
         self._runflag.clear()
         self._midiFile = iter(mido.MidiFile(path))
         self._status['isPlaying'] = True
@@ -120,7 +124,7 @@ class MidiPlayer(BasePlayer):
         self._runflag.set()
 
     def _stop(self):
-        # self.log("stop")
+        self.log("stop")
         self._runflag.clear()
         self._midiFile = None
         self._status['isPlaying'] = False

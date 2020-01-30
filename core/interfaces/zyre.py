@@ -247,8 +247,8 @@ class TimeServer():
 #  NODE zyre peers discovery, sync and communication
 #
 class ZyreNode ():
-    def  __init__(self, processor=None, iface=None):
-        self.processor = processor
+    def  __init__(self, zyre, iface=None):
+        self.zyre = zyre
 
         self.timebook = TimeBook()
         self.timeserver = TimeServer()
@@ -267,7 +267,7 @@ class ZyreNode ():
         self.timebook.stop()
         if not self.done:
             self.actor.sock().send(b"ss", b"$TERM", "gone")
-            # print('ZYRE term sent')
+            # self.zyre.log('ZYRE term sent')
 
     def shout(self, group, event, args=None, delay_ms=0):
         data = {}
@@ -275,7 +275,7 @@ class ZyreNode ():
         data['args'] = []
         if args:
             if not isinstance(args, list):
-                print('NOT al LIST', args)
+                self.zyre.log('NOT al LIST', args)
                 args = [args]
             data['args'] = args
 
@@ -308,19 +308,20 @@ class ZyreNode ():
             if delay <= 0:
                 self.preProcessor2(data)
             else:
-                print('programmed event in', delay, 'seconds')
+                self.zyre.log('programmed event in', delay, 'seconds')
                 t = Timer( delay, self.preProcessor2, args=[data])
                 t.start()
+                self.zyre.emit('planned', data)
 
-        elif self.processor:
+        else:
             self.preProcessor2(data)
 
     def preProcessor2(self, data):
         if 'at' in data:
             self.deltadelay += (int(time.time()*PRECISION)-data['at'])      # Might get crazy..
 
-        self.processor(data)
-
+        self.zyre.emit('event', *[data])
+        self.zyre.emit(data['event'], *data['args'])
 
 
     # ZYRE Zactor
@@ -441,24 +442,16 @@ class ZyreInterface (BaseInterface):
 
     def  __init__(self, hplayer, iface=None):
         super().__init__(hplayer, "ZYRE")
-        self.node = ZyreNode(self.processor, iface)
+        self.node = ZyreNode(self, iface)
 
     def listen(self):
         self.log( "interface ready")
         self.stopped.wait()
         self.node.stop()
         self.log( "closing sockets...") # CLOSING is messy !
-        sleep(1)
+        sleep(0.2)
 
     def activeCount(self):
         c = self.node.timebook.activeCount()+1
         return c
-
-    def processor(self, data):
-
-        # self.log('Received: ', data)
-        # if 'at' in data:
-        #     self.log('DELTA', int(time.time()*PRECISION)-data['at'], 'ns' )
-
-        self.emit(data['event'], data)
 
