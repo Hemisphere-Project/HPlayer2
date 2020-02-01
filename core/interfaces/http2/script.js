@@ -124,41 +124,51 @@ $(document).ready(function() {
         settings = msg
     });
 
+    socket.on('playlist', function(msg) {
+      playlistUpdate(msg)
+  });
+
     /*
       PLAYBACK
     */
+    function trigger(ev, data) {
+      msg = {}
+      msg['event'] = ev
+      msg['data'] = data
+      socket.emit('event', msg)
+    }
 
     $('#play_btn').click(function(event) {
-      if(!last_status['isPaused']) socket.emit('play');
-      else socket.emit('resume');
+      if(!last_status['isPaused']) trigger('play');
+      else trigger('resume');
     });
     $('#pause_btn').click(function(event) {
-      if(!last_status['isPaused']) socket.emit('pause');
-      else socket.emit('resume');
+      if(!last_status['isPaused']) trigger('pause');
+      else trigger('resume');
     });
     $('#prev_btn').click(function(event) {
-        socket.emit('prev');
+        trigger('prev');
     });
     $('#next_btn').click(function(event) {
-        socket.emit('next');
+        trigger('next');
     });
     $('#stop_btn').click(function(event) {
-        socket.emit('stop');
+        trigger('stop');
     });
     $('#loopAll_btn').click(function(event) {
-      if(settings['loop'] != 2) socket.emit('loop', 'all');
-      else socket.emit('unloop');
+      if(settings['loop'] != 2) trigger('loop', 'all');
+      else trigger('unloop');
     });
     $('#loopOne_btn').click(function(event) {
-      if(settings['loop'] != 1) socket.emit('loop', 'one');
-      else socket.emit('unloop');
+      if(settings['loop'] != 1) trigger('loop', 'one');
+      else trigger('unloop');
     });
     $('#mute_btn').click(function(event) {
-      if(!settings['mute']) socket.emit('mute');
-      else socket.emit('unmute');
+      if(!settings['mute']) trigger('mute');
+      else trigger('unmute');
     });
     $('#auto_btn').click(function(event) {
-      if(!settings['autoplay']) socket.emit('autoplay');
+      if(!settings['autoplay']) trigger('autoplay');
       else socket.emit('notautoplay');
     });
     $('#reboot_btn').click(function(event) {
@@ -167,19 +177,19 @@ $(document).ready(function() {
     });
 
     $('#volume_range').on('input', function(event) {
-      socket.emit('volume', this.value);
+      trigger('volume', this.value);
     });
     $('#left_range').on('input', function(event) {
-      socket.emit('pan', [this.value, $('#right_range').val()]);
+      trigger('pan', [this.value, $('#right_range').val()]);
     });
     $('#right_range').on('input', function(event) {
-      socket.emit('pan', [$('#left_range').val(), this.value]);
+      trigger('pan', [$('#left_range').val(), this.value]);
     });
     $('#audiomode_mono').on('change', function(event) {
       if ($('#audiomode_mono').prop('checked')) 
-        socket.emit('audiomode', 'mono');
+        trigger('audiomode', 'mono');
       else
-        socket.emit('audiomode', 'stereo');
+        trigger('audiomode', 'stereo');
     });
     $('.vol-main').on('click', function(event) {
       $('.vol-more').toggle()
@@ -211,7 +221,7 @@ $(document).ready(function() {
             selected.push(el.path)
           })
         });
-        socket.emit('add', selected)
+        trigger('add', selected)
         $(".tree").each(function( index ) { $( this ).treeview('unselectAll') });
     });
     $('#selall_btn').click(function(event) {
@@ -230,16 +240,16 @@ $(document).ready(function() {
       PLAYLIST
     */
     $('#clear_btn').click(function(event) {
-        socket.emit('clear')
+        trigger('clear')
     });
 
     playlistAdd = function(path) {
-      socket.emit('add', path)
+      trigger('add', path)
       return false;
     };
 
     playlistRemove = function(path) {
-      socket.emit('remove', path)
+      trigger('remove', path)
       return false;
     };
 
@@ -279,7 +289,7 @@ $(document).ready(function() {
       })
 
       tree.on('nodeClicked', function(event, data) {
-        socket.emit('play', {index: data.nodeId});
+        trigger('playindex', data.nodeId);
       });
 
       playlistMedia()

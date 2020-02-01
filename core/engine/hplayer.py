@@ -174,7 +174,7 @@ class HPlayer2(EventEmitter):
         @module.on('add')
         def add(*args):
             if len(args) > 0:
-                self.playlist.add(args)
+                self.playlist.add(args[0])
 
         @module.on('remove')   #index !
         def remove(*args):

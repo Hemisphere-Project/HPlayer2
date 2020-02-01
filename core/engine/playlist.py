@@ -11,6 +11,11 @@ class Playlist(Module):
     def __init__(self, hplayer):
         super().__init__(hplayer, 'Playlist', 'yellow')
 
+    def __call__(self):
+        return self.export()
+
+    def export(self):
+        return self._playlist.copy()
 
     def onMediaEnd(self):
         # loop one
@@ -45,7 +50,8 @@ class Playlist(Module):
     def clear(self):
         self._playlist = []
         self.emit('cleared')
-        self.emit('stop')
+        self.update()
+        self.emit('stop')   # trigger player stop
 
     # ADD to Playlist
     def add(self, media):

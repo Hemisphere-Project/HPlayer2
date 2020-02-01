@@ -133,30 +133,31 @@ class ThreadedHTTPServer(object):
 
         def background_thread():
             while True:
-                socketio.emit('status', self.http2interface.hplayer.players().status())  # {'msg': 'yo', 'timestamp': time.gmtime()}
+                socketio.emit('status', self.http2interface.hplayer.players()[0].status())  # {'msg': 'yo', 'timestamp': time.gmtime()}
                 
-                if self.sendSettings:
+                if self.sendSettings is not None:
                     socketio.emit('settings', self.sendSettings)
                     self.sendSettings = None
                     
-                if self.sendPlaylist:
+                if self.sendPlaylist is not None:
                     socketio.emit('playlist', self.sendPlaylist)
                     self.sendPlaylist = None
                     
                 socketio.sleep(0.1)
 
-        def settings_send(arg=None):
-            self.sendSettings = arg
+        @self.http2interface.hplayer.on('settings.updated')
+        def settings_send(*args):
+            self.sendSettings = args[0]
 
-        def playlist_send(arg=None):
-            self.sendPlaylist = arg
+        @self.http2interface.hplayer.on('playlist.updated')
+        def playlist_send(*args):
+            self.sendPlaylist = args[0]
 
-        self.http2interface.hplayer.on('settings-update', settings_send)
-        self.http2interface.hplayer.on('playlist-update', playlist_send)
 
         @socketio.on('connect')
         def client_connect():
             socketio.emit('settings', self.http2interface.hplayer.settings())
+            socketio.emit('playlist', self.http2interface.hplayer.playlist())
             socketio.emit('name', self.http2interface.hplayer.name())
             global thread
             with thread_lock:
@@ -183,10 +184,8 @@ class ThreadedHTTPServer(object):
         @socketio.on('event')
         def event_message(message=None):
             if message['event']:
-                if message['data']:
-                    if not isinstance(message['data'], list): 
-                        message['data'] = list(message['data'])
-                    self.http2interface.emit(message['event'], *message['data'])
+                if 'data' in message:
+                    self.http2interface.emit(message['event'], message['data'])
                 else:
                     self.http2interface.emit(message['event'])
 
