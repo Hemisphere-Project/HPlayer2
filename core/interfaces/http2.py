@@ -133,7 +133,7 @@ class ThreadedHTTPServer(object):
 
         def background_thread():
             while True:
-                socketio.emit('status', self.http2interface.hplayer.status())  # {'msg': 'yo', 'timestamp': time.gmtime()}
+                socketio.emit('status', self.http2interface.hplayer.players().status())  # {'msg': 'yo', 'timestamp': time.gmtime()}
                 
                 if self.sendSettings:
                     socketio.emit('settings', self.sendSettings)
