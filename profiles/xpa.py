@@ -57,7 +57,8 @@ def doPlay(*data):
 # Receive an exit command -> last seq
 @hplayer.on('zyre.end')
 def doExit():
-	hplayer.playlist.play( hplayer.files.selectDir(-1)+'/'+HPlayer2.name()+'*' )
+	hplayer.playlist.play( hplayer.files.selectDir(2)+'/'+HPlayer2.name()+'*' )
+
 
 # Media end: next dir / or loop (based on directory name)
 @hplayer.on('playlist.end')
@@ -67,17 +68,19 @@ def endSequence():
 		return
 	if 'loop' in hplayer.files.currentDir():
 		broadcast('playdir', hplayer.files.currentIndex())
+	elif hplayer.files.currentDir() == 2:
+		broadcast('playdir', 0)
 	else:
 		broadcast('playdir', hplayer.files.nextIndex())
 
 
 # Bind Keypad / GPIO events
 #
-hplayer.on('keypad.left', 		lambda: broadcast('playdir', 1))
-hplayer.on('keypad.up', 		lambda: broadcast('playdir', 2))
-hplayer.on('keypad.down', 		lambda: broadcast('playdir', 3))
-hplayer.on('keypad.right', 		lambda: broadcast('playdir', 4)) 
-hplayer.on('keypad.select', 	lambda: broadcast('end'))
+hplayer.on('keypad.left', 		lambda: broadcast('playdir', 0))
+hplayer.on('keypad.up', 		lambda: broadcast('playdir', 1))
+hplayer.on('keypad.down', 		lambda: broadcast('playdir', 2))
+hplayer.on('keypad.right', 		lambda: broadcast('playdir', 3)) 
+hplayer.on('keypad.select', 	lambda: broadcast('stop'))
 hplayer.on('gpio.21-on', 		lambda: broadcast('end'))
 
 
