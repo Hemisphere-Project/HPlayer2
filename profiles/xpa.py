@@ -68,7 +68,7 @@ def endSequence():
 		return
 	if 'loop' in hplayer.files.currentDir():
 		broadcast('playdir', hplayer.files.currentIndex())
-	elif hplayer.files.currentDir() == 2:
+	elif hplayer.files.currentIndex() == 2:
 		broadcast('playdir', 0)
 	else:
 		broadcast('playdir', hplayer.files.nextIndex())
