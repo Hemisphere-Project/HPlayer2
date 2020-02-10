@@ -17,7 +17,7 @@ audio = hplayer.addPlayer('mpv', 'audio')
 
 # Interfaces
 # hplayer.addInterface('osc', 1222, 3737)
-# hplayer.addInterface('zyre', 'wlan0')
+hplayer.addInterface('zyre', 'wlan0')
 # hplayer.addInterface('http2', 8080)
 # hplayer.addInterface('keyboard')
 hplayer.addInterface('teleco')

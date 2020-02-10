@@ -76,6 +76,10 @@ class HPlayer2(EventEmitter):
         return list(self._players.values())
 
 
+    def activePlayer(self):
+        return self.players()[self._lastUsedPlayer]
+
+
     def addInterface(self, iface, *argv):
         InterfaceClass = ifacelib.getInterface(iface)
         self._interfaces[iface] = InterfaceClass(self, *argv)
@@ -202,9 +206,10 @@ class HPlayer2(EventEmitter):
 
         @module.on('doplay')
         def doplay(*args):
-            # stop()
             for i,p in enumerate(self.players()): 
                 if p.validExt(args[0]):
+                    if i != self._lastUsedPlayer:
+                        self.activePlayer().stop()
                     p.play(args[0])
                     self._lastUsedPlayer = i
                     return

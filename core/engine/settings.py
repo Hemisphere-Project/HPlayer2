@@ -16,7 +16,7 @@ class Settings(Module):
 
     def __init__(self, hplayer, persistent=None):
         super().__init__(hplayer, 'Settings', 'yellow')
-
+    
         self._settingspath = persistent
         if self._settingspath and os.path.isfile(self._settingspath):
             try:
@@ -28,8 +28,11 @@ class Settings(Module):
             except:
                 self.log('ERROR loading settings file', self._settingspath)
 
-    def __call__(self):
-        return self.export()
+    def __call__(self, entry=None):
+        if entry:
+            return self.export()[entry]
+        else:
+            return self.export()
 
     def export(self):
         return self._settings.copy()
