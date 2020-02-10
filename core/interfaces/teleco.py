@@ -81,7 +81,7 @@ class TelecoInterface (BaseInterface):
                     if say:
                         say += '¤'
                         self.serial.write( (say).encode() )
-                        self.log(say)
+                        # self.log(say)
                     
                     time.sleep(0.1)
                     self.refresh()
@@ -164,6 +164,9 @@ class TelecoInterface (BaseInterface):
 
         elif self.activePage == PAGE_MEDIA:
             self.line(0, 'MEDIA', True)
+            self.hplayer.files
+
+
             
 
 
@@ -189,9 +192,16 @@ class TelecoInterface (BaseInterface):
             if self.activePage == PAGE_STATUS:
                 self.emit('volume', self.hplayer.settings('volume')+1)
 
+            elif self.activePage == PAGE_PLAYBACK:
+                self.emit('prev')
+            
+            
         
         @self.on('DOWN-down')
         @self.on('DOWN-hold')
         def down():
             if self.activePage == PAGE_STATUS:
                 self.emit('volume', self.hplayer.settings('volume')-1)
+
+            elif self.activePage == PAGE_PLAYBACK:
+                self.emit('next')

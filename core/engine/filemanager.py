@@ -59,11 +59,15 @@ class FileManager(Module):
         self.log('directory list updated', self.unified_dir)
         self.emit('dirlist-updated')
 
+    
+    def listDir(self):
+        return self.unified_dir.copy()
+
 
     def selectDir(self, i):
         """
         Set working directory by index or value.
-        Active directory must exist in available_dir list.
+        Active directory must exist in unified_dir list.
         """
         if isinstance(i, int):
             if i < 0: i = len(self.unified_dir)+i
