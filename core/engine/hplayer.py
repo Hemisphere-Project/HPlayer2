@@ -63,6 +63,7 @@ class HPlayer2(EventEmitter):
             PlayerClass = playerlib.getPlayer(ptype)
             p = PlayerClass(self, name)
             self._players[name] = p
+            self.emit('player-added', p)
         return self._players[name]
 
 

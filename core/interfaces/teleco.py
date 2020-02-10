@@ -1,6 +1,6 @@
 from .base import BaseInterface
 
-import time
+import time, os
 import serial
 from serial.tools import list_ports
 from threading import Timer
@@ -25,6 +25,11 @@ class TelecoInterface (BaseInterface):
         self.nLines = 5
 
         self.activePage = PAGE_WELCOME
+
+        self.mediaIndex = 0
+        self.microIndex = 0
+        self.microOffset = 0
+        self.microList = []
 
         self._buffer = [None]*self.nLines        
         self._hardClear = True
@@ -163,14 +168,24 @@ class TelecoInterface (BaseInterface):
             self.line(4, timestate, False)
 
         elif self.activePage == PAGE_MEDIA:
-            self.line(0, 'MEDIA', True)
-            self.hplayer.files
-
+            self.line(0, 'MEDIA /'+self.hplayer.files.currentDir(), True)
+            
+            for k in range(4):
+                l = '> ' if k == self.microIndex else '  '
+                m = os.path.splitext(self.microList[k])[0] if k < len(self.microList) else ''
+                self.line(k+1, l+m, False)
 
             
 
 
     def bind(self):
+        
+        @self.hplayer.files.on('filelist-updated')
+        def listchanged(*args):
+            self.mediaIndex = 0
+            self.microOffset = 0
+            self.microIndex = 0
+            self.microList = self.hplayer.files.activeList(True)[self.microOffset:][:4]
 
         @self.on('FUNC-down')
         def func_push():
@@ -195,7 +210,19 @@ class TelecoInterface (BaseInterface):
             elif self.activePage == PAGE_PLAYBACK:
                 self.emit('prev')
             
-            
+            elif self.activePage == PAGE_MEDIA:
+                self.mediaIndex = (self.mediaIndex-1) % len(self.hplayer.files.activeList())
+                    
+                if self.microIndex > 0:
+                    self.microIndex -= 1
+                elif self.microOffset > 0:
+                    self.microOffset -= 1
+                else:
+                    self.microIndex  = 3
+                    self.microOffset = len(self.hplayer.files.activeList())-4 
+                self.microList = self.hplayer.files.activeList(True)[self.microOffset:][:4]
+                    
+
         
         @self.on('DOWN-down')
         @self.on('DOWN-hold')
@@ -205,3 +232,40 @@ class TelecoInterface (BaseInterface):
 
             elif self.activePage == PAGE_PLAYBACK:
                 self.emit('next')
+
+            elif self.activePage == PAGE_MEDIA:
+                self.mediaIndex = (self.mediaIndex+1) % len(self.hplayer.files.activeList())
+
+                if self.microIndex < 3:
+                    self.microIndex += 1
+                elif self.microOffset < len(self.hplayer.files.activeList())-4:
+                    self.microOffset += 1
+                else:
+                    self.microIndex  = 0
+                    self.microOffset = 0
+                self.microList = self.hplayer.files.activeList(True)[self.microOffset:][:4]
+
+        @self.on('C-down')
+        @self.on('C-hold')
+        def c():
+            if self.activePage == PAGE_STATUS:
+                pass
+
+            elif self.activePage == PAGE_PLAYBACK:
+                pass    # TODO: SKIP 
+
+            elif self.activePage == PAGE_MEDIA:
+                self.hplayer.files.prevDir()
+
+
+        @self.on('D-down')
+        @self.on('D-hold')
+        def c():
+            if self.activePage == PAGE_STATUS:
+                pass
+
+            elif self.activePage == PAGE_PLAYBACK:
+                pass    # TODO: SKIP 
+
+            elif self.activePage == PAGE_MEDIA:
+                self.hplayer.files.nextDir()

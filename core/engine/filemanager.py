@@ -12,16 +12,20 @@ class FileManager(Module):
         self.root_paths = []
         self.unified_dir = []
         self.active_dir = 0
+        self.active_list = []
         self.refreshTimer = None
         self.pathObservers = []
         
-        @self.on('file-changed')
+        @self.on('file-changed')                # file changed on disk -> trigger full refresh
+        @self.hplayer.on('player-added')        # new player means new authorized extension -> trigger list refresh
         def deferredUpdate(*args): 
             if not self.refreshTimer:
                 self.refreshTimer = Timer(3.0, self.refresh)
                 self.refreshTimer.start()
 
-        if roots: self.add(roots)
+        if roots: 
+            self.add(roots)
+
 
     def add(self, path):
         """
@@ -56,11 +60,15 @@ class FileManager(Module):
         listDirs = sorted(list(dict.fromkeys(listDirs)))
         # listDirs.insert(0,'')
         self.unified_dir = listDirs
-        self.log('directory list updated', self.unified_dir)
-        self.emit('dirlist-updated')
+        # self.log('directory list updated', self.unified_dir)
+        self.selectDir( self.active_dir )   
+        self.emit('dirlist-updated', self.unified_dir)
 
     
     def listDir(self):
+        """
+        List available directories
+        """
         return self.unified_dir.copy()
 
 
@@ -68,12 +76,19 @@ class FileManager(Module):
         """
         Set working directory by index or value.
         Active directory must exist in unified_dir list.
+        Refresh cached files active_list
         """
         if isinstance(i, int):
             if i < 0: i = len(self.unified_dir)+i
-            if i >= 0 and i < len(self.unified_dir): self.active_dir = i
+            if i < 0: i = 0
+            self.active_dir = i % len(self.unified_dir)
         elif i in self.unified_dir: 
             self.active_dir = self.unified_dir.index(i)
+        
+        self.active_list = self.listFiles( self.currentDir() )
+        
+        self.emit('filelist-updated', self.active_list)
+
         return self.currentDir()
 
 
@@ -92,7 +107,7 @@ class FileManager(Module):
         self.active_dir += 1
         if self.active_dir >= len(self.unified_dir): 
             self.active_dir = 0
-        return self.currentDir()
+        return self.selectDir(self.active_dir)
 
 
     def prevDir(self):
@@ -102,7 +117,7 @@ class FileManager(Module):
         self.active_dir -= 1
         if self.active_dir < 0: 
             self.active_dir = len(self.unified_dir)-1
-        return self.currentDir()
+        return self.selectDir(self.active_dir)
 
 
     def currentIndex(self):
@@ -138,4 +153,97 @@ class FileManager(Module):
             i = len(self.unified_dir)-1
         return i
 
+
+    def activeList(self, relative=False):
+        """
+        List of files in activeDir (cached)
+        """
+        liste = self.active_list.copy()
+        if relative:
+            c = self.currentDir()
+            for path in self.root_paths:
+                p = os.path.join(path,c)+'/'
+                liste = [ l[len(p):] for l in liste if l.startswith(p)]
+        return liste 
+
+
+    def validExt(self, filename):
+        """
+        Check with all players to validate extension
+        """
+        for p in self.hplayer.players():
+            if p.validExt(filename):
+                return True
+        return False
+
+
+    def listFiles(self, entries):
+        """
+        Create recursive list of files based on source (can be files, folders, ...)
+        """
+        
+        liste = []
+        if not isinstance(entries, (list,)):
+            entries = [entries]
+
+        for entry in entries:
+
+            # ABSOLUTE PATH
+
+            # full path directory -> add content recursively
+            if os.path.isdir(entry):
+                dirContent = [os.path.join(entry, f) for f in os.listdir(entry) if not f.startswith('.')]
+                dirContent.sort()
+                liste.extend(self.listFiles( dirContent ))
+
+            # full path file -> add it
+            elif os.path.isfile(entry):
+                if self.validExt(entry):
+                    liste.append(entry)
+                # else:
+                #     self.log('invalid ext', entry)
+
+            # full path file with WILDCARD
+            ## TODO PROBABLY BROKEN !
+            # elif entry[0] == '/' and len(glob.glob(entry)) > 0:
+            # 	for e in glob.glob(entry):
+            #         if os.path.isfile(e):
+            #             liste.extend(e)
+
+            # RELATIVE PATH
+
+            # check each base path
+            else:
+                for base in self.root_paths:
+                    if os.path.isdir(base):
+                        fullpath = os.path.join(base, entry)
+                        # relative path directory -> add content recursively
+                        if os.path.isdir(fullpath):
+                            liste.extend(self.listFiles(fullpath))
+                            break
+                        # relative path file -> add content recursively
+                        elif os.path.isfile(fullpath):
+                            if self.validExt(entry):
+                                liste.append(fullpath)
+                            # else:
+                            #     self.log('invalid ext', fullpath)
+                            break
+
+                        # relative path file with WILDCARD
+                        else:
+                            globlist = []
+                            for root, dirs, files in os.walk(base, topdown=False):
+                               for name in files:
+                                  fpath = os.path.join(root, name)
+                                  match = re.match( r''+fullpath.replace('*','.*'), fpath, re.M|re.I)
+                                  if ('/.' not in fpath) and match:
+                                    	globlist.append(fpath)
+                            #print(globlist)
+                            for e in globlist:
+                                if os.path.isfile(e) and self.validExt(e):
+                                    liste.append(e)
+                            break
+
+        liste.sort()
+        return liste
 

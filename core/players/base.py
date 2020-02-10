@@ -53,6 +53,7 @@ class BasePlayer(Module):
 
     # CHECK EXT
     def validExt(self, filename):
+        # self.log('testing', filename, 'against', self._validExt)
         if os.path.basename(filename).startswith('.'):
             return False
         if '*' in self._validExt:
