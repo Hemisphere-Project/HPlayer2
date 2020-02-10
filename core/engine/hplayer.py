@@ -56,7 +56,7 @@ class HPlayer2(EventEmitter):
         return network.get_hostname()
 
     def addPlayer(self, ptype, name=None):
-        if not name: name = ptype+len(self._players)
+        if not name: name = ptype+str(len(self._players))
         if name and name in self._players:
             print("player", name, "already exists")
         else:
@@ -150,17 +150,20 @@ class HPlayer2(EventEmitter):
 
         @module.on('play')
         def play(*args):
-            self.playlist.play(args)
+            if len(args) > 0:
+                self.playlist.play(args[0])
 
         @module.on('playonce')
         def playonce(*args):
-            loop(0)
-            self.playlist.play(args)
+            if len(args) > 0:
+                loop(0)
+                self.playlist.play(args[0])
 
         @module.on('playloop')
         def playloop(*args):
-            loop(2)
-            self.playlist.play(args)
+            if len(args) > 0:
+                loop(2)
+                self.playlist.play(args[0])
 
         @module.on('load')
         def load(*args):
@@ -199,7 +202,7 @@ class HPlayer2(EventEmitter):
 
         @module.on('doplay')
         def doplay(*args):
-            stop()
+            # stop()
             for i,p in enumerate(self.players()): 
                 if p.validExt(args[0]):
                     p.play(args[0])

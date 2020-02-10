@@ -2,6 +2,7 @@ from watchdog.observers import Observer
 from watchdog.events import PatternMatchingEventHandler
 from threading import Timer
 import os
+import pathlib
 from ..module import Module
 
 class FileManager(Module):
@@ -28,6 +29,10 @@ class FileManager(Module):
         """
         if not isinstance(path, list): path = [path]
         for p in path:
+            if not os.path.isdir(p):
+                p = '/tmp'+os.path.abspath(p)
+                pathlib.Path(p).mkdir(parents=True, exist_ok=True)
+                self.log("Basepath not found, using "+p+" instead")
             self.root_paths.append(p)
             handler = PatternMatchingEventHandler("*", "", False, True)
             handler.on_any_event = lambda e: self.emit('file-changed', e)

@@ -7,30 +7,28 @@ from core import overlays
 
 class BasePlayer(Module):
 
-    _running = threading.Event()
-    _running.set()
-
-    name = "Base Player"
-    settingspath = None
-
-    doLog = {
-        'cmds':     False
-    }
-
-    _validExt = []
-
-    _events = {} 
-    _overlays = {}
-    _status = {
-        'isPlaying':    False,
-        'isPaused':     False,
-        'media':        None,
-        'time':         0
-    }
-
-
     def __init__(self, hplayer, name):
         super().__init__(hplayer, name, 'magenta')
+
+        self._running = threading.Event()
+        self._running.set()
+
+        self.name = "Base Player"
+        self.settingspath = None
+
+        self.doLog = {'cmds': False}
+
+        self._validExt = []
+
+        self._events = {} 
+        self._overlays = {}
+        self._status = {
+            'isPlaying':    False,
+            'isPaused':     False,
+            'media':        None,
+            'time':         0
+        }
+
 
         hplayer.settings.on('volume',       self._applyVolume)
         hplayer.settings.on('mute',         self._applyVolume)
@@ -95,8 +93,8 @@ class BasePlayer(Module):
 
     # START
     def start(self):
-        # for olay in self._overlays.values():
-        #     olay.start()
+        for olay in self._overlays.values():
+            olay.start()
         self.isRunning(True)
         self._start()
 

@@ -18,7 +18,6 @@ class RpifadeOverlay (BaseOverlay):
         self.name = "RPI Fade"
         self.nameP = colored(self.name,'cyan')
         # self.texture = rpiopengles.colortexture()
-        self.start()
 
     # Queue processor
     def receive(self):
@@ -49,9 +48,8 @@ class RpifadeOverlay (BaseOverlay):
                                     green=self.currentFader['green'],
                                     blue=self.currentFader['blue'],
                                     alpha=self.currentFader['alpha'])
-
-                    if self.queue.empty(): sleep(0.05)
-                    else: workit = False
+                    sleep(0.05)
+            print('overlay')
 
             sleep(0.1)
 
