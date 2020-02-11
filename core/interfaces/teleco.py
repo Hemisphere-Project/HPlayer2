@@ -52,6 +52,8 @@ class TelecoInterface (BaseInterface):
                     break
                 if not self.port:
                     self.log("no device found.. retrying")
+                    for p in list_ports.comports():
+                        self.log(p)
                     time.sleep(3)
             
             # connect to serial
