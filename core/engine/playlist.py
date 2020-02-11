@@ -38,6 +38,10 @@ class Playlist(Module):
     def size(self):
         return len(self._playlist)
 
+    # Playlist index
+    def index(self):
+        return self._index
+
     # CLEAR Playlist
     def clear(self):
         self._playlist = []
@@ -73,9 +77,16 @@ class Playlist(Module):
 
 
     # PLAY a playlist
-    def play(self, plist):
-        self.load(plist)
-        self.playindex(0)
+    def play(self, plist=None, index=-1):
+        if plist: 
+            self.load(plist)
+        
+        if index >= 0:
+            self.playindex(index)
+        elif self._index >= 0:
+            self.playindex(self._index)
+        else:
+            self.playindex(0)
 
 
     # PLAY at index

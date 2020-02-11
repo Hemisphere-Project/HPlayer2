@@ -124,6 +124,7 @@ class MpvPlayer(BasePlayer):
                         if 'name' in mpvsays:
                             if mpvsays['name'] == 'eof-reached' and mpvsays['data'] == True:
                                 self._status['isPaused'] = False
+                                self._status['isPlaying'] = False
                                 self.emit('end')
                             elif mpvsays['name'] == 'core-idle':
                                 self._status['isPlaying'] = not mpvsays['data']
@@ -132,7 +133,8 @@ class MpvPlayer(BasePlayer):
                                     self._status['time'] = round(float(mpvsays['data']),2)
                             else:
                                 pass
-                                # self.log("IPC event:", mpvsays)
+                        
+                        # self.log("IPC event:", mpvsays)
 
 
                 # Timeout: retry
@@ -219,22 +221,22 @@ class MpvPlayer(BasePlayer):
 
     def _play(self, path):
         self.log("play", path)
+        self._status['isPaused'] = False
         # self._mpv_send('{ "command": ["stop"] }')
         self._mpv_send('{ "command": ["loadfile", "'+path+'"] }')
         self._mpv_send('{ "command": ["set_property", "pause", false] }')
-        self._status['isPaused'] = False
 
     def _stop(self):
-        self._mpv_send('{ "command": ["stop"] }')
         self._status['isPaused'] = False
+        self._mpv_send('{ "command": ["stop"] }')
 
     def _pause(self):
-        self._mpv_send('{ "command": ["set_property", "pause", true] }')
         self._status['isPaused'] = True
+        self._mpv_send('{ "command": ["set_property", "pause", true] }')
 
     def _resume(self):
-        self._mpv_send('{ "command": ["set_property", "pause", false] }')
         self._status['isPaused'] = False
+        self._mpv_send('{ "command": ["set_property", "pause", false] }')
 
     def _seekTo(self, milli):
         self._mpv_send('{ "command": ["seek", "'+str(milli/1000)+'", "absolute"] }')

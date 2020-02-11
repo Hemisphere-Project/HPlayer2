@@ -12,7 +12,7 @@ PAGE_MEDIA      = 1
 
 PAGE_MAX        = 1
 
-SCREEN_REFRESH  = 0.2
+SCREEN_REFRESH  = 0.1
 
 
 class TelecoInterface (BaseInterface):
@@ -26,7 +26,6 @@ class TelecoInterface (BaseInterface):
 
         self.activePage = PAGE_WELCOME
 
-        self.mediaIndex = 0
         self.microIndex = 0
         self.microOffset = 0
         self.microList = []
@@ -91,7 +90,7 @@ class TelecoInterface (BaseInterface):
                     time.sleep(0.1)
                     self.refresh()
 
-                except:
+                except serial.SerialException:
                     self.log("broken link..")
                     self.serial = None
     
@@ -124,9 +123,8 @@ class TelecoInterface (BaseInterface):
     def init(self):
         
         self.bind()
-
         self.clear()
-        self.timer(0.05, lambda: self.page(PAGE_STATUS))
+        self.timer(0.05, lambda: self.page(PAGE_MEDIA))
         self.refresh()
 
 
@@ -149,23 +147,29 @@ class TelecoInterface (BaseInterface):
         
         elif self.activePage == PAGE_PLAYBACK:
 
-            status = self.hplayer.activePlayer().status()
+            player = self.hplayer.activePlayer()
+            status = player.status()
 
-            playstate = 'STOP   '
+            playstate = 'STOP  '
+            loopstate = ''.ljust(4)
             timestate = ''
-            if status['isPlaying']:
-                playstate = 'PAUSE  ' if status['isPaused'] else 'PLAY   '
-                playstate += status['media']
-            
-                timestate = (str(status['time'])+'" ').ljust(10)
-                if self.hplayer.settings('loop') > 0:
-                    timestate += 'LOOP'
+            if player.isPlaying():
+                playstate = 'PAUSE ' if player.isPaused() else 'PLAY  '
+                if status['media']:
+                    playstate += status['media'].split('/')[-1]
+                timestate = (str( round(status['time'], 1) )+'" ')
 
-            self.line(0, 'PLAYBACK', True)
-            self.line(1, '', False)
+            if self.hplayer.settings('loop') == 1:
+                loopstate += 'LOOP   '
+            elif self.hplayer.settings('loop') == 2:
+                loopstate += 'LOOPALL'
+            else: loopstate += '->'
+
+            self.line(0, 'PLAYBACK'.ljust(17)+str(self.hplayer.settings('volume')).rjust(3), True)
+            self.line(1, timestate.rjust(21), False)
             self.line(2, playstate, False)
             self.line(3, '', False)
-            self.line(4, timestate, False)
+            self.line(4, loopstate, False)
 
         elif self.activePage == PAGE_MEDIA:
             self.line(0, 'MEDIA /'+self.hplayer.files.currentDir(), True)
@@ -182,7 +186,6 @@ class TelecoInterface (BaseInterface):
         
         @self.hplayer.files.on('filelist-updated')
         def listchanged(*args):
-            self.mediaIndex = 0
             self.microOffset = 0
             self.microIndex = 0
             self.microList = self.hplayer.files.activeList(True)[self.microOffset:][:4]
@@ -194,6 +197,13 @@ class TelecoInterface (BaseInterface):
                 self.activePage += 1
             else:
                 self.activePage = 0
+            
+            # When switching back to PAGE_MEDIA
+            if self.activePage == PAGE_MEDIA :
+                # self.microOffset = max(0, self.hplayer.playlist.index()-3)
+                # self.microIndex = self.hplayer.playlist.index() - self.microOffset 
+                # self.microList = self.hplayer.files.activeList(True)[self.microOffset:][:4]
+                listchanged()
 
 
         @self.on('FUNC-hold')
@@ -204,14 +214,10 @@ class TelecoInterface (BaseInterface):
         @self.on('UP-down')
         @self.on('UP-hold')
         def up():
-            if self.activePage == PAGE_STATUS:
+            if self.activePage in [PAGE_STATUS, PAGE_PLAYBACK]:
                 self.emit('volume', self.hplayer.settings('volume')+1)
 
-            elif self.activePage == PAGE_PLAYBACK:
-                self.emit('prev')
-            
             elif self.activePage == PAGE_MEDIA:
-                self.mediaIndex = (self.mediaIndex-1) % len(self.hplayer.files.activeList())
                     
                 if self.microIndex > 0:
                     self.microIndex -= 1
@@ -227,14 +233,10 @@ class TelecoInterface (BaseInterface):
         @self.on('DOWN-down')
         @self.on('DOWN-hold')
         def down():
-            if self.activePage == PAGE_STATUS:
+            if self.activePage in [PAGE_STATUS, PAGE_PLAYBACK]:
                 self.emit('volume', self.hplayer.settings('volume')-1)
 
-            elif self.activePage == PAGE_PLAYBACK:
-                self.emit('next')
-
             elif self.activePage == PAGE_MEDIA:
-                self.mediaIndex = (self.mediaIndex+1) % len(self.hplayer.files.activeList())
 
                 if self.microIndex < 3:
                     self.microIndex += 1
@@ -245,27 +247,116 @@ class TelecoInterface (BaseInterface):
                     self.microOffset = 0
                 self.microList = self.hplayer.files.activeList(True)[self.microOffset:][:4]
 
+        #
+        # BUTTON A
+        #  
+
+        @self.on('A-down')
+        def a():
+            if self.activePage == PAGE_STATUS:
+                pass
+
+            elif self.activePage == PAGE_PLAYBACK:
+                if self.hplayer.activePlayer().isPlaying():
+                    self.emit('resume') if self.hplayer.activePlayer().isPaused() else self.emit('pause')
+                else:
+                    self.emit('play')
+
+            elif self.activePage == PAGE_MEDIA:
+                micro = self.hplayer.files.activeList()[self.microOffset:]
+                if self.microIndex < len(micro):  
+                    self.emit('play', micro[self.microIndex])
+                    self.page(PAGE_PLAYBACK)
+
+        @self.on('A-hold')
+        def ah():
+            if self.activePage == PAGE_STATUS:
+                pass
+
+            elif self.activePage == PAGE_PLAYBACK:
+                if self.hplayer.activePlayer().isPlaying():
+                    self.emit('stop')
+
+            elif self.activePage == PAGE_MEDIA:
+                pass
+
+        #
+        # BUTTON B
+        #        
+
+        @self.on('B-down')
+        def b():
+            if self.activePage == PAGE_STATUS:
+                pass
+
+            elif self.activePage == PAGE_PLAYBACK:
+                self.emit('unloop') if self.hplayer.settings('loop') > 0 else self.emit('loop', 1)
+
+            elif self.activePage == PAGE_MEDIA:
+                self.emit('play', self.hplayer.files.activeList(), self.microOffset+self.microIndex)
+                self.page(PAGE_PLAYBACK)
+
+        @self.on('B-hold')
+        def bh():
+            if self.activePage == PAGE_STATUS:
+                pass
+
+            elif self.activePage == PAGE_PLAYBACK:
+                if self.hplayer.settings('loop') < 2: 
+                    self.emit('loop', 2)
+
+            elif self.activePage == PAGE_MEDIA:
+                pass
+
+        #
+        # BUTTON C
+        #
+
         @self.on('C-down')
-        @self.on('C-hold')
         def c():
             if self.activePage == PAGE_STATUS:
                 pass
 
             elif self.activePage == PAGE_PLAYBACK:
-                pass    # TODO: SKIP 
+                self.emit('prev')
+                pass    # TODO: SKIP ON HOLD
 
             elif self.activePage == PAGE_MEDIA:
                 self.hplayer.files.prevDir()
 
-
-        @self.on('D-down')
-        @self.on('D-hold')
-        def c():
+        @self.on('C-hold')
+        def ch():
             if self.activePage == PAGE_STATUS:
                 pass
 
             elif self.activePage == PAGE_PLAYBACK:
-                pass    # TODO: SKIP 
+                pass    # TODO: SKIP ON HOLD
+
+            elif self.activePage == PAGE_MEDIA:
+                self.hplayer.files.prevDir()
+
+        #
+        # BUTTON D
+        #
+
+        @self.on('D-down')
+        def d():
+            if self.activePage == PAGE_STATUS:
+                pass
+
+            elif self.activePage == PAGE_PLAYBACK:
+                self.emit('next')
+
+            elif self.activePage == PAGE_MEDIA:
+                self.hplayer.files.nextDir()
+
+        @self.on('D-hold')
+        def dh():
+            if self.activePage == PAGE_STATUS:
+                pass
+
+            elif self.activePage == PAGE_PLAYBACK:
+                pass    # TODO: SKIP ON HOLD
 
             elif self.activePage == PAGE_MEDIA:
                 self.hplayer.files.nextDir()

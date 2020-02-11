@@ -13,7 +13,7 @@ class BasePlayer(Module):
         self._running = threading.Event()
         self._running.set()
 
-        self.name = "Base Player"
+        self.name = "Player"
         self.settingspath = None
 
         self.doLog = {'cmds': False}
@@ -79,11 +79,14 @@ class BasePlayer(Module):
         return self._running.is_set()
 
     # STATUS Get
-    def status(self):
-        return self._status.copy()
+    def status(self, entry=None):
+        s = self._status.copy()
+        if entry:
+            return s[entry]
+        return s
 
     def isPlaying(self):
-        return self._status['isPlaying']
+        return self._status['isPlaying'] or self._status['isPaused']
 
     def isPaused(self):
         return self._status['isPaused']

@@ -5,7 +5,7 @@ import os, sys, types, platform
 
 # DIRECTORY / FILE
 profilename = os.path.basename(__file__).split('.')[0]
-base_path = '/data/sync/'+profilename
+base_path = ['/data/sync/'+profilename, '/data/usb']
 
 
 # INIT HPLAYER

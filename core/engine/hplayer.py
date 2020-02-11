@@ -155,24 +155,29 @@ class HPlayer2(EventEmitter):
 
         @module.on('play')
         def play(*args):
-            if len(args) > 0:
+            if len(args) > 1:
+                self.playlist.play(args[0], int(args[1]))
+            elif len(args) > 0:
                 self.playlist.play(args[0])
+            else:
+                self.playlist.play()
 
         @module.on('playonce')
         def playonce(*args):
             if len(args) > 0:
                 loop(0)
-                self.playlist.play(args[0])
+                play(*args)
 
         @module.on('playloop')
         def playloop(*args):
             if len(args) > 0:
                 loop(2)
-                self.playlist.play(args[0])
+                play(*args)
 
         @module.on('load')
         def load(*args):
-            self.playlist.load(args)
+            if len(args) > 0:
+                self.playlist.load(args[0])
         
         @module.on('playindex')
         def playindex(*args):

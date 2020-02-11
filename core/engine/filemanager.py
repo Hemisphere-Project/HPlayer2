@@ -38,6 +38,8 @@ class FileManager(Module):
                 p = '/tmp'+os.path.abspath(p)
                 pathlib.Path(p).mkdir(parents=True, exist_ok=True)
                 self.log("Basepath not found, using "+p+" instead")
+            else:
+                self.log("Adding "+p+" as root paths")
             self.root_paths.append(p)
             handler = PatternMatchingEventHandler("*", "", False, True)
             handler.on_any_event = lambda e: self.emit('file-changed', e)
@@ -57,7 +59,7 @@ class FileManager(Module):
             self.refreshTimer = None
         listDirs = []
         for path in self.root_paths:
-            listDirs = [d for d in next(os.walk(path))[1] if not d.startswith('.')]
+            listDirs.extend([d for d in next(os.walk(path))[1] if not d.startswith('.')])
         listDirs = sorted(list(dict.fromkeys(listDirs)))
         # listDirs.insert(0,'')
         self.unified_dir = listDirs
@@ -165,9 +167,11 @@ class FileManager(Module):
         liste = self.active_list.copy()
         if relative:
             c = self.currentDir()
+            relativeliste = []
             for path in self.root_paths:
                 p = os.path.join(path,c)+'/'
-                liste = [ l[len(p):] for l in liste if l.startswith(p)]
+                relativeliste.extend([ l[len(p):] for l in liste if l.startswith(p)])
+            return relativeliste
         return liste 
 
 
