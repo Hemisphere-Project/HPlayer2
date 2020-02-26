@@ -13,7 +13,7 @@ hplayer = HPlayer2(base_path)
 
 # PLAYERS
 video = hplayer.addPlayer('mpv', 'video')
-audio = hplayer.addPlayer('mpv', 'audio')
+# audio = hplayer.addPlayer('mpv', 'audio')
 
 # Interfaces
 # hplayer.addInterface('osc', 1222, 3737)
@@ -23,9 +23,8 @@ hplayer.addInterface('zyre', 'wlan0')
 hplayer.addInterface('teleco')
 
 # Overlay
-# if hplayer.isRPi():
-#     video.addOverlay('rpifade')
-
+if hplayer.isRPi():
+    video.addOverlay('rpifade')
 
     
 # RUN

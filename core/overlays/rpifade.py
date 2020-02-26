@@ -17,7 +17,8 @@ class RpifadeOverlay (BaseOverlay):
 
         self.name = "RPI Fade"
         self.nameP = colored(self.name,'cyan')
-        # self.texture = rpiopengles.colortexture()
+        self.workit = False
+
 
     # Queue processor
     def receive(self):
@@ -28,33 +29,38 @@ class RpifadeOverlay (BaseOverlay):
         while self.isRunning():
             if not self.queue.empty():
                 goalFader = self.queue.get()
-                workit = True
-                while workit:
+                self.workit = True
+                while self.workit:
                     # print (self.currentFader)
-                    workit = False
-                    self.currentFader['red'] = goalFader['red']
-                    self.currentFader['green'] = goalFader['green']
-                    self.currentFader['blue'] = goalFader['blue']
-                    diff =  goalFader['alpha'] - self.currentFader['alpha']
-                    if diff != 0:
-                        workit = True
-                        if diff > 0:
-                            diff = min(0.04, diff)
-                        elif diff < 0:
-                            diff = max(-0.04, diff)
-                        self.currentFader['alpha'] += diff
+                    self.workit = False
+                    self.currentFader['red'] += self._diff( goalFader['red'], self.currentFader['red'])
+                    self.currentFader['green'] += self._diff( goalFader['green'], self.currentFader['green'])
+                    self.currentFader['blue'] += self._diff( goalFader['blue'], self.currentFader['blue'])
+                    self.currentFader['alpha'] += self._diff( goalFader['alpha'], self.currentFader['alpha'])
 
+                    print(self.currentFader)
+                    
                     texture.draw(   red=self.currentFader['red'],
                                     green=self.currentFader['green'],
                                     blue=self.currentFader['blue'],
                                     alpha=self.currentFader['alpha'])
                     sleep(0.05)
-            print('overlay')
 
             sleep(0.1)
 
         self.isRunning(False)
         return
+
+    def _diff(self, goal, current):
+        diff = goal - current
+        if diff != 0:
+            self.workit = True
+            if diff > 0:
+                diff = min(0.1, diff)
+            elif diff < 0:
+                diff = max(-0.1, diff)
+            return diff
+        return 0
 
     # Add instruction
     def set(self, red=None, green=None, blue=None, alpha=None):

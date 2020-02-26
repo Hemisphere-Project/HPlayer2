@@ -290,6 +290,17 @@ class HPlayer2(EventEmitter):
                 doFlip = int(args[0]) > 0
             self.settings.set('flip', doFlip)
 
+        @module.on('fade')
+        def fade(*args):
+            if len(args) > 3:
+                self.players()[0].getOverlay('rpifade').set(float(args[0]),float(args[1]), float(args[2]), float(args[3]))
+            else:
+                self.players()[0].getOverlay('rpifade').set(0.0, 0.0, 0.0, 1.0)
+
+        @module.on('unfade')
+        def unfade(*args):
+            self.players()[0].getOverlay('rpifade').set(0.0, 0.0, 0.0, 0.0)
+
         @module.on('unflip')
         def unflip(*args):
             self.settings.set('flip', False)

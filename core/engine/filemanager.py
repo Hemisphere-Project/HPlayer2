@@ -160,7 +160,7 @@ class FileManager(Module):
         return i
 
 
-    def activeList(self, relative=False):
+    def currentList(self, relative=False):
         """
         List of files in activeDir (cached)
         """

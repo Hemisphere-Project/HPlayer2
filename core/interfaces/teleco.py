@@ -26,6 +26,9 @@ class TelecoInterface (BaseInterface):
 
         self.activePage = PAGE_WELCOME
 
+        self.dirPlayback = ''
+        self.isFaded = False
+
         self.microIndex = 0
         self.microOffset = 0
         self.microList = []
@@ -78,11 +81,12 @@ class TelecoInterface (BaseInterface):
                         if l['dirty']:
                             if not say: say = '¤'
                             else: say += '£'
-                            say += (str(i+1)+" "+str(l['bold'])+"  "+l['txt']).ljust(26, ' ')
-                            # self.log(data.encode())
+                            say += str(i+1)
+                            say += l['txt'].ljust(26, ' ')
                             l['dirty'] = False
                     
                     if say:
+                        # self.log(say.encode())
                         say += '¤'
                         self.serial.write( (say).encode() )
                         # self.log(say)
@@ -105,13 +109,12 @@ class TelecoInterface (BaseInterface):
     def clear(self):
         self._hardClear = True
         for i in range(self.nLines):
-            self._buffer[i] = {'txt': '', 'bold': 0, 'dirty': True}
+            self._buffer[i] = {'txt': '', 'dirty': True}
 
     # change line n
-    def line(self, n, txt, bold=False):
-        if txt != self._buffer[n]['txt'] or int(bold) != self._buffer[n]['bold']:
+    def line(self, n, txt):
+        if txt != self._buffer[n]['txt']:
             self._buffer[n]['txt'] = txt
-            self._buffer[n]['bold'] = int(bold)
             self._buffer[n]['dirty'] = True
 
 
@@ -124,7 +127,8 @@ class TelecoInterface (BaseInterface):
         
         self.bind()
         self.clear()
-        self.timer(0.05, lambda: self.page(PAGE_MEDIA))
+        # self.timer(0.05, lambda: self.page(PAGE_PLAYBACK))
+        self.page(PAGE_PLAYBACK)
         self.refresh()
 
 
@@ -133,51 +137,69 @@ class TelecoInterface (BaseInterface):
 
         if self.activePage == PAGE_WELCOME:
 
-            self.line(1, '       KXKM', False)
-            self.line(2, '    RPi-Teleco', True)
-            self.line(3, '       0.1', False)
+            self.line(1, '       KXKM')
+            self.line(2, '^1    RPi-Teleco')
+            self.line(3, '       0.1')
 
         elif self.activePage == PAGE_STATUS:
 
-            self.line(0, 'STATUS', True)
-            self.line(1, '', False)
-            self.line(2, 'Volume: '+' '+str(self.hplayer.settings('volume')), False)
-            self.line(3, ' Peers: '+' '+str(self.hplayer.interface('zyre').activeCount()), False)
-            self.line(4, '  Link: '+' ?', False)
+            self.line(0, '^1 STATUS')
+            self.line(1, '   Wifi: '+'?')
+            self.line(2, '  Peers: '+str(self.hplayer.interface('zyre').activeCount()))
+            self.line(3, '   Link: '+'?')
+            self.line(4, '')
         
         elif self.activePage == PAGE_PLAYBACK:
 
             player = self.hplayer.activePlayer()
             status = player.status()
 
-            playstate = 'STOP  '
-            loopstate = ''.ljust(4)
+            # Time & Media
             timestate = ''
+            playstate = ''
             if player.isPlaying():
-                playstate = 'PAUSE ' if player.isPaused() else 'PLAY  '
+                
                 if status['media']:
                     playstate += status['media'].split('/')[-1]
-                timestate = (str( round(status['time'], 1) )+'" ')
+                timestate = ( str( round(status['time']) )+'/'+str( round(status['duration']) )+'"')
 
-            if self.hplayer.settings('loop') == 1:
-                loopstate += 'LOOP   '
-            elif self.hplayer.settings('loop') == 2:
-                loopstate += 'LOOPALL'
-            else: loopstate += '->'
+            # MUTE
+            mutestate =  ' ^9JMUTE-VIDEO ' if self.isFaded else ''
 
-            self.line(0, 'PLAYBACK'.ljust(17)+str(self.hplayer.settings('volume')).rjust(3), True)
-            self.line(1, timestate.rjust(21), False)
-            self.line(2, playstate, False)
-            self.line(3, '', False)
-            self.line(4, loopstate, False)
+            # PLAY
+            cmdline = '^5K'
+            if player.isPlaying():
+                cmdline = '^5D' if player.isPaused() else '^5E'
+            cmdline += "    "
+
+            # LOOP
+            if self.hplayer.settings('loop') == 1:      cmdline += '^6W'
+            elif self.hplayer.settings('loop') == 2:    cmdline += '^6X'
+            else:                                       cmdline += '^6Z'
+
+            # PREV/NEXT
+            cmdline += "     ^5G    ^5H"
+
+            # HEAD
+            ind = min(self.hplayer.playlist.index()+1, self.hplayer.playlist.size())
+            headline  = '^5M^1 ' + ( str(ind)+'/'+str(self.hplayer.playlist.size()) )
+            headline += ' '+self.dirPlayback
+            headline = headline[:18].ljust(18)
+            headline += '^0 ^5O'+str(self.hplayer.settings('volume')).rjust(3)
+
+            self.line(0, headline)
+            self.line(1, mutestate)
+            self.line(2, playstate)
+            self.line(3, timestate.rjust(21))
+            self.line(4, cmdline)
 
         elif self.activePage == PAGE_MEDIA:
-            self.line(0, 'MEDIA /'+self.hplayer.files.currentDir(), True)
+            self.line(0, '^8C^1 '+self.hplayer.files.currentDir())
             
             for k in range(4):
-                l = '> ' if k == self.microIndex else '  '
+                l = '^6N' if k == self.microIndex else '  '
                 m = os.path.splitext(self.microList[k])[0] if k < len(self.microList) else ''
-                self.line(k+1, l+m, False)
+                self.line(k+1, l+m)
 
             
 
@@ -188,7 +210,24 @@ class TelecoInterface (BaseInterface):
         def listchanged(*args):
             self.microOffset = 0
             self.microIndex = 0
-            self.microList = self.hplayer.files.activeList(True)[self.microOffset:][:4]
+            self.microList = self.hplayer.files.currentList(True)[self.microOffset:][:4]
+
+
+        @self.on('MUTE-down')
+        def mute_d():
+            if self.isFaded == 0:
+                self.emit('fade')
+                self.isFaded = 1
+            else:
+                self.emit('unfade')
+                self.isFaded = 0
+
+        @self.on('MUTE-hold')
+        def mute_h():
+            if self.isFaded < 2:
+                self.emit('fade', 1.0, 1.0, 1.0, 1.0)
+                self.isFaded = 2
+
 
         @self.on('FUNC-down')
         def func_push():
@@ -198,12 +237,14 @@ class TelecoInterface (BaseInterface):
             else:
                 self.activePage = 0
             
-            # When switching back to PAGE_MEDIA
+            # When switching back to PAGE_MEDIA : go to current dir / file
             if self.activePage == PAGE_MEDIA :
-                # self.microOffset = max(0, self.hplayer.playlist.index()-3)
-                # self.microIndex = self.hplayer.playlist.index() - self.microOffset 
-                # self.microList = self.hplayer.files.activeList(True)[self.microOffset:][:4]
-                listchanged()
+                if self.dirPlayback:
+                    self.hplayer.files.selectDir(self.dirPlayback)
+                    self.microOffset = max(0, self.hplayer.playlist.index()-3)
+                    self.microIndex = self.hplayer.playlist.index() - self.microOffset 
+                    self.microList = self.hplayer.files.currentList(True)[self.microOffset:][:4]
+                    # listchanged()
 
 
         @self.on('FUNC-hold')
@@ -225,8 +266,8 @@ class TelecoInterface (BaseInterface):
                     self.microOffset -= 1
                 else:
                     self.microIndex  = 3
-                    self.microOffset = len(self.hplayer.files.activeList())-4 
-                self.microList = self.hplayer.files.activeList(True)[self.microOffset:][:4]
+                    self.microOffset = len(self.hplayer.files.currentList())-4 
+                self.microList = self.hplayer.files.currentList(True)[self.microOffset:][:4]
                     
 
         
@@ -240,12 +281,12 @@ class TelecoInterface (BaseInterface):
 
                 if self.microIndex < 3:
                     self.microIndex += 1
-                elif self.microOffset < len(self.hplayer.files.activeList())-4:
+                elif self.microOffset < len(self.hplayer.files.currentList())-4:
                     self.microOffset += 1
                 else:
                     self.microIndex  = 0
                     self.microOffset = 0
-                self.microList = self.hplayer.files.activeList(True)[self.microOffset:][:4]
+                self.microList = self.hplayer.files.currentList(True)[self.microOffset:][:4]
 
         #
         # BUTTON A
@@ -263,9 +304,10 @@ class TelecoInterface (BaseInterface):
                     self.emit('play')
 
             elif self.activePage == PAGE_MEDIA:
-                micro = self.hplayer.files.activeList()[self.microOffset:]
+                micro = self.hplayer.files.currentList()[self.microOffset:]
                 if self.microIndex < len(micro):  
                     self.emit('play', micro[self.microIndex])
+                    self.dirPlayback = self.hplayer.files.currentDir()
                     self.page(PAGE_PLAYBACK)
 
         @self.on('A-hold')
@@ -293,7 +335,8 @@ class TelecoInterface (BaseInterface):
                 self.emit('unloop') if self.hplayer.settings('loop') > 0 else self.emit('loop', 1)
 
             elif self.activePage == PAGE_MEDIA:
-                self.emit('play', self.hplayer.files.activeList(), self.microOffset+self.microIndex)
+                self.emit('play', self.hplayer.files.currentList(), self.microOffset+self.microIndex)
+                self.dirPlayback = self.hplayer.files.currentDir()
                 self.page(PAGE_PLAYBACK)
 
         @self.on('B-hold')

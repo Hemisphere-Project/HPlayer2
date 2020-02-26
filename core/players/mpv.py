@@ -98,6 +98,7 @@ class MpvPlayer(BasePlayer):
             self._mpv_send('{ "command": ["observe_property", 1, "eof-reached"] }')
             self._mpv_send('{ "command": ["observe_property", 2, "core-idle"] }')
             self._mpv_send('{ "command": ["observe_property", 3, "time-pos"] }')
+            self._mpv_send('{ "command": ["observe_property", 4, "duration"] }')
 
             # Receive
             while self.isRunning():
@@ -122,15 +123,23 @@ class MpvPlayer(BasePlayer):
                                 self.emit('idle')
 
                         if 'name' in mpvsays:
+
                             if mpvsays['name'] == 'eof-reached' and mpvsays['data'] == True:
                                 self._status['isPaused'] = False
                                 self._status['isPlaying'] = False
                                 self.emit('end')
+
                             elif mpvsays['name'] == 'core-idle':
                                 self._status['isPlaying'] = not mpvsays['data']
+
                             elif mpvsays['name'] == 'time-pos':
                                 if mpvsays['data']:
                                     self._status['time'] = round(float(mpvsays['data']),2)
+
+                            elif mpvsays['name'] == 'duration':
+                                if mpvsays['data']:
+                                    self._status['duration'] = round(float(mpvsays['data']),2)
+                                    
                             else:
                                 pass
                         

@@ -26,7 +26,8 @@ class BasePlayer(Module):
             'isPlaying':    False,
             'isPaused':     False,
             'media':        None,
-            'time':         0
+            'time':         0,
+            'duration':     0
         }
 
 
@@ -104,8 +105,8 @@ class BasePlayer(Module):
 
     # QUIT
     def quit(self):
-        # for olay in self._overlays.values():
-        #     olay.quit()
+        for olay in self._overlays.values():
+            olay.quit()
         self._quit()
         self.isRunning(False)
 
