@@ -46,7 +46,7 @@ class Settings(Module):
     def set(self, key, val):
         self._settings[key] = val
         self.emit('updated', self.export())
-        #self.emit(key, val, self.export())
+        self.emit('do-'+key, val, self.export())
         self.save()
 
     def save(self):

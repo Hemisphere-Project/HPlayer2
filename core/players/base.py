@@ -31,11 +31,11 @@ class BasePlayer(Module):
         }
 
 
-        hplayer.settings.on('volume',       self._applyVolume)
-        hplayer.settings.on('mute',         self._applyVolume)
-        hplayer.settings.on('pan',          self._applyPan)
-        hplayer.settings.on('audiomode',    self._applyPan)
-        hplayer.settings.on('flip',         self._applyFlip)
+        hplayer.settings.on('do-volume',       self._applyVolume)
+        hplayer.settings.on('do-mute',         self._applyVolume)
+        hplayer.settings.on('do-pan',          self._applyPan)
+        hplayer.settings.on('do-audiomode',    self._applyPan)
+        hplayer.settings.on('do-flip',         self._applyFlip)
 
         hplayer.playlist.on('end',          self.stop)                      # Playlist end -> stop
         self.on('end',                      hplayer.playlist.onMediaEnd)    # Media end -> trig playlist
@@ -140,6 +140,11 @@ class BasePlayer(Module):
         self._seekTo(milli)
         self.emit('seekedto', milli)
 
+    # SKIP time
+    def skip(self, milli):
+        self._skip(milli)
+        self.emit('skipped', milli)
+
     #
     # Player INTERNAL actions: Methods to overwrite !
     #
@@ -168,6 +173,9 @@ class BasePlayer(Module):
 
     def _seekTo(self, milli):
         self.log("seek to", milli)
+
+    def _skip(self, milli):
+        self.log("skip", milli)
 
     def _applyVolume(self, volume, settings):
         if not settings['mute']:

@@ -5,6 +5,7 @@ import serial
 from serial.tools import list_ports
 from threading import Timer
 
+PAGE_EXIT       = -3
 PAGE_WELCOME    = -2
 PAGE_STATUS     = -1
 PAGE_PLAYBACK   = 0
@@ -28,6 +29,7 @@ class TelecoInterface (BaseInterface):
 
         self.dirPlayback = ''
         self.isFaded = False
+        self._muteHolded = False
 
         self.microIndex = 0
         self.microOffset = 0
@@ -37,7 +39,11 @@ class TelecoInterface (BaseInterface):
         self._hardClear = True
         self._delegate = None
 
-        self.init()
+        self.bind()
+        self.clear()
+        self.page(PAGE_WELCOME)
+        self.refresh()
+        self.timer(0.3, self.init)
         
 
     # SERIAL receiver THREAD
@@ -52,8 +58,8 @@ class TelecoInterface (BaseInterface):
                     break
                 if not self.port:
                     self.log("no device found.. retrying")
-                    for p in list_ports.comports():
-                        self.log(p)
+                    # for p in list_ports.comports():
+                    #     self.log(p)
                     time.sleep(3)
             
             # connect to serial
@@ -61,6 +67,7 @@ class TelecoInterface (BaseInterface):
                 try:
                     self.serial = serial.Serial(self.port, 115200, timeout=.1)
                     self.log("connected to", self.port, "!")
+                    self.emit('ready')
                     self.clear()
                 except:
                     self.log("connection failed on", self.port)
@@ -126,22 +133,26 @@ class TelecoInterface (BaseInterface):
 
 
     def init(self):
+        self.page(PAGE_MEDIA)
         
-        self.bind()
-        self.clear()
-        # self.timer(0.05, lambda: self.page(PAGE_PLAYBACK))
-        self.page(PAGE_PLAYBACK)
-        self.refresh()
-
-
 
     def refresh(self):
 
         if self.activePage == PAGE_WELCOME:
 
-            self.line(1, '       KXKM')
-            self.line(2, '^1    RPi-Teleco')
-            self.line(3, '       0.1')
+            self.line(0, '       ')
+            self.line(1, '        KXKM')
+            self.line(2, '^1     RPi-Player')
+            self.line(3, '       ')
+            self.line(4, '       ')
+
+        elif self.activePage == PAGE_EXIT:
+
+            self.line(0, '       ')
+            self.line(1, '       ')
+            self.line(2, '^0    ^8Mgoodbye !')
+            self.line(3, '       ')
+            self.line(4, '       ')
 
         elif self.activePage == PAGE_STATUS:
 
@@ -158,11 +169,10 @@ class TelecoInterface (BaseInterface):
 
             # Time & Media
             timestate = ''
-            playstate = ''
+            playstate = '                          '
             if player.isPlaying():
-                
                 if status['media']:
-                    playstate += status['media'].split('/')[-1]
+                    playstate = ' '+status['media'].split('/')[-1]      # leading space : prevent digit display error
                 timestate = ( str( round(status['time']) )+'/'+str( round(status['duration']) )+'"')
 
             # MUTE
@@ -203,21 +213,30 @@ class TelecoInterface (BaseInterface):
                 m = os.path.splitext(self.microList[k])[0] if k < len(self.microList) else ''
                 self.line(k+1, l+m)
 
-            
+
+
 
 
     def bind(self):
         
+        @self.on('ready')
         @self.hplayer.files.on('filelist-updated')
-        def listchanged(*args):
+        def updatelist(*args):
             self.microOffset = 0
             self.microIndex = 0
             self.microList = self.hplayer.files.currentList(True)[self.microOffset:][:4]
 
 
-        @self.on('MUTE-down')
+        @self.hplayer.on('app-closing')
+        def closing(*args):
+            self.off_all()
+            self.page(PAGE_EXIT)
+            self.refresh()
+
+
+        @self.on('MUTE-up')
         def mute_d():
-            if self.isFaded == 0:
+            if self.isFaded == 0:   
                 self.emit('fade')
                 self.isFaded = 1
             else:
@@ -226,9 +245,14 @@ class TelecoInterface (BaseInterface):
 
         @self.on('MUTE-hold')
         def mute_h():
+            self._muteHolded = True
             if self.isFaded < 2:
                 self.emit('fade', 1.0, 1.0, 1.0, 1.0)
                 self.isFaded = 2
+
+        @self.on('MUTE-holdup')
+        def mute_hu():
+            self._muteHolded = False
 
 
         @self.on('FUNC-down')
@@ -252,6 +276,8 @@ class TelecoInterface (BaseInterface):
         @self.on('FUNC-hold')
         def func_hold():
             self.activePage = PAGE_STATUS
+            if self._muteHolded:
+                self.emit('hardreset')
             
             
         @self.on('UP-down')
@@ -363,11 +389,11 @@ class TelecoInterface (BaseInterface):
                 pass
 
             elif self.activePage == PAGE_PLAYBACK:
-                self.emit('prev')
-                pass    # TODO: SKIP ON HOLD
+                pass
 
             elif self.activePage == PAGE_MEDIA:
                 self.hplayer.files.prevDir()
+
 
         @self.on('C-hold')
         def ch():
@@ -375,10 +401,22 @@ class TelecoInterface (BaseInterface):
                 pass
 
             elif self.activePage == PAGE_PLAYBACK:
-                pass    # TODO: SKIP ON HOLD
+                self.emit('skip', -1000)
 
             elif self.activePage == PAGE_MEDIA:
                 self.hplayer.files.prevDir()
+
+
+        @self.on('C-up')
+        def cu():
+            if self.activePage == PAGE_STATUS:
+                pass
+
+            elif self.activePage == PAGE_PLAYBACK:
+                self.emit('prev')
+
+            elif self.activePage == PAGE_MEDIA:
+                pass
 
         #
         # BUTTON D
@@ -390,10 +428,11 @@ class TelecoInterface (BaseInterface):
                 pass
 
             elif self.activePage == PAGE_PLAYBACK:
-                self.emit('next')
+                pass
 
             elif self.activePage == PAGE_MEDIA:
                 self.hplayer.files.nextDir()
+
 
         @self.on('D-hold')
         def dh():
@@ -401,7 +440,19 @@ class TelecoInterface (BaseInterface):
                 pass
 
             elif self.activePage == PAGE_PLAYBACK:
-                pass    # TODO: SKIP ON HOLD
+                self.emit('skip', 1000)
 
             elif self.activePage == PAGE_MEDIA:
                 self.hplayer.files.nextDir()
+
+
+        @self.on('D-up')
+        def du():
+            if self.activePage == PAGE_STATUS:
+                pass
+
+            elif self.activePage == PAGE_PLAYBACK:
+                self.emit('next')
+
+            elif self.activePage == PAGE_MEDIA:
+                pass

@@ -3,7 +3,15 @@
 #######
 # MPV
 #######
-
+DISTRO=''
+if [[ $(command -v apt) ]]; then
+    DISTRO='xbian'
+elif [[ $(command -v pacman) ]]; then
+    DISTRO='arch'
+else
+    echo "Distribution not detected.."
+fi
+    
 ARCHI=`uname -m`
 
 cd "$(dirname "$(readlink -f "$0")")"
@@ -24,7 +32,6 @@ else
     fi
 
     # Get MPV Build tools
-    cd "$(dirname "$0")"
     rm -rf mpv-build
     git clone https://github.com/mpv-player/mpv-build.git
     cd mpv-build
@@ -32,10 +39,11 @@ else
 
     # RPi: enable MMAL
     if [[ $(uname -m) = armv* ]]; then
-        echo --enable-mmal > ffmpeg_options
+        echo --enable-mmal  > ffmpeg_options
+        echo --enable-omx-rpi >> ffmpeg_options
         # echo --enable-libv4l2 > ffmpeg_options
         # echo --disable-vaapi > mpv_options
-        # echo --enable-rpi > mpv_options
+        echo --enable-rpi-mmal > mpv_options
     fi
 
     # Build

@@ -95,7 +95,7 @@ class Playlist(Module):
         # Emit play event
         if 0 <= index < self.size() and os.path.isfile(self._playlist[index]):
             self._index = index
-            self.emit('doplay', self._playlist[self._index], self._index)
+            self.emit('do-play', self._playlist[self._index], self._index)
         
         # Handle error
         else:

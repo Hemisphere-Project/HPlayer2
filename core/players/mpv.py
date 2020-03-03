@@ -251,6 +251,11 @@ class MpvPlayer(BasePlayer):
         self._mpv_send('{ "command": ["seek", "'+str(milli/1000)+'", "absolute"] }')
         # self.log("seek to", milli/1000)
 
+    def _skip(self, milli):
+        if self._status['time'] + milli/1000 < self._status['duration']:
+            self._mpv_send('{ "command": ["seek", "'+str(milli/1000)+'", "relative"] }')
+        # self.log("seek to", milli/1000)
+
     def _applyVolume(self, volume, settings):
         if settings['mute']:
             volume = 0

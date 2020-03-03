@@ -139,17 +139,29 @@ class HPlayer2(EventEmitter):
         # STOP
         self.log()
         self.log("is closing..")
+        self.emit('app-closing')
         for p in self.players():
             p.quit()
         for iface in self.interfaces():
             iface.quit()
 
+        os.system('ps faux | pgrep mpv | xargs kill')
         self.log("stopped. Goodbye !\n");
+        self.emit('app-quit')
         sys.exit(0)
 
 
     def autoBind(self, module):
         
+        # SYSTEM
+        #
+        @module.on('hardreset')
+        def hardreset(*args):
+            os.system('systemctl restart NetworkManager')
+            global runningFlag
+            runningFlag = False
+
+
         # PLAYLIST
         #
 
@@ -210,7 +222,7 @@ class HPlayer2(EventEmitter):
         # PLAYERS
         #
 
-        @module.on('doplay')
+        @module.on('do-play')
         def doplay(*args):
             for i,p in enumerate(self.players()): 
                 if p.validExt(args[0]):
@@ -244,6 +256,14 @@ class HPlayer2(EventEmitter):
                 for p in self.players(): 
                     if p.isPlaying():
                         p.seekTo(int(args[0]))
+
+        @module.on('skip')
+        def skip(*args):
+            if len(args) > 0:
+                for p in self.players(): 
+                    if p.isPlaying():
+                        p.skip(int(args[0]))
+                
 
         # SETTINGS
         #
