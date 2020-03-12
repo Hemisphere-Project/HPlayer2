@@ -1,7 +1,5 @@
 from core.engine import hplayer
 from core.engine import network
-from watchdog.observers import Observer
-from watchdog.events import PatternMatchingEventHandler
 import os, types, platform
 
 # NAME
@@ -13,7 +11,7 @@ player.loop(1)
 # player.doLog['events'] = True
 
 # INTERFACES
-player.addInterface('zyre', 'wlan0')
+player.addInterface('zyre')
 player.addInterface('osc', 4000).hostOut = '10.0.0.255'
 player.addInterface('http', 8037)
 player.addInterface('keyboard')
@@ -33,7 +31,7 @@ def restartEth0():
     sleep(15)
     print('switch ON eth0')
     subprocess.run(['ip', 'link', 'set', 'eth0', 'up'])  
-# Timer(5, restartEth0).start()
+Timer(5, restartEth0).start()
 
 
 # Remote modes
@@ -69,39 +67,13 @@ def vol_dec():
 	broadcast('/volume', player.settings()['volume']-1)
 
 
-# Files list
-#
-base_path = '/data/usb'
-
-available_dir = []
+# DIRECTORY / FILE
+if is_RPi: base_path = '/data/usb'
+else: base_path = '/home/mgr/Videos'
+available_dir = [d for d in next(os.walk(base_path))[1] if not d.startswith('.')]
+available_dir.sort()
 active_dir_length = 0
 active_dir = 0
-refreshTimer = None
-
-def refresh_filelist():
-    global refreshTimer, available_dir
-    refreshTimer = None
-    available_dir = [d for d in next(os.walk(base_path))[1] if not d.startswith('.')]
-    available_dir.sort()
-    if len(available_dir) == 0: available_dir.insert(0,'')
-    if len(available_dir) >= 2: set_activedir(1)
-    else: set_activedir(0)
-    print('File list updated')
-
-def file_change(event):
-	global refreshTimer
-	if not refreshTimer:
-		refreshTimer = Timer(3.0, refresh_filelist)
-		refreshTimer.start()
-
-my_event_handler = PatternMatchingEventHandler("*", "", False, True)
-my_event_handler.on_any_event = file_change
-my_observer = Observer()
-my_observer.schedule(my_event_handler, base_path, recursive=True)
-my_observer.start()
-
-player.setBasePath(base_path)
-
 
 def play_activedir(index):
 	broadcast('/playlist', current_dir(), index)
@@ -149,11 +121,10 @@ def change_scene(dir):
 		active_dir = available_dir.index(dir)
 		# DO NOT RE-BROADCAST !!
 
-
-# Init dirs
-#
-refresh_filelist()
-#set_activedir(0)
+# INIT
+if len(available_dir) == 0: available_dir.insert(0,'')
+if len(available_dir) >= 2: set_activedir(1)
+else: set_activedir(0)
 
 player.on(['/scene'], change_scene)
 
@@ -216,7 +187,6 @@ def syncTest(arg):
 		# PEERS
 		display += "#Dispositifs".ljust(19)+str(player.getInterface('zyre').activeCount()).rjust(2)
 
-	#print('synctest', display)
 	player.getInterface('osc').send(display)
 
 player.on(['/synctest'], syncTest)

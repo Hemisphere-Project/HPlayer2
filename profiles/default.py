@@ -10,7 +10,7 @@ player = hplayer.addplayer('mpv', 'default')
 # INTERFACES
 player.addInterface('osc', 4000, 4001)
 player.addInterface('http', 8090)       # HTTP api
-player.addInterface('http2', 8088)      # WEB interface
+player.addInterface('http2', 8000)      # WEB interface
 
 ## Example event: HTTP + GPIO events
 # player.addInterface('http', 9090)

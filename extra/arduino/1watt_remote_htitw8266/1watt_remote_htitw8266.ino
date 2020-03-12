@@ -82,8 +82,8 @@ void setup(void) {
   settings_load( keys );
 
   // Settings SET EEPROM !
-  //settings_set("id", 5);
-  //settings_set("model", 2);   // 0: ciconia (2btn) -- 1: 1watt v1 (square) -- 2: 1watt v2 (inline)
+  settings_set("id", 5);
+  settings_set("model", 2);   // 0: ciconia (2btn) -- 1: 1watt v1 (square) -- 2: 1watt v2 (inline)
 
   // Oled
   oled2_init();
@@ -162,7 +162,7 @@ void loop(void) {
       msg.send(udp_out);
       udp_out.endPacket();
       lastInfo = millis() - 50;
-      //LOG("sync");
+      LOG("sync");
     }
 
     if (millis() - lastNews > 1500) {

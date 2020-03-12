@@ -17,5 +17,5 @@ player.on(['app-run', 'nomedia'], playloop)
 player.loop(1)
 
 # RUN
-hplayer.setBasePath(["/data/usb"])
+hplayer.setBasePath(["/mnt/usb"])
 hplayer.run()

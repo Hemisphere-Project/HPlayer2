@@ -14,8 +14,9 @@ class KeypadInterface (BaseInterface):
 
     display = ["", ""]
 
-    def __init__(self, hplayer):
-        super(KeypadInterface, self).__init__(hplayer, "KEYPAD")
+    def __init__(self, player):
+        super(KeypadInterface, self).__init__(player, "KEYPAD")
+
         try:
             self.lcd = LCD.Adafruit_CharLCDPlate()
             self.lcd.set_color(0, 0, 0)
@@ -27,14 +28,14 @@ class KeypadInterface (BaseInterface):
         lines = ["", ""]
 
         # Line 1 : MEDIA
-        if not self.hplayer.status()['media']: lines[0] = '-stop-'
-        else: lines[0] = os.path.basename(self.hplayer.status()['media'])[:-4]
+        if not self.player.status()['media']: lines[0] = '-stop-'
+        else: lines[0] = os.path.basename(self.player.status()['media'])[:-4]
         lines[0] = lines[0].ljust(16, ' ')[:16]
 
         # Line 2 : VOLUME / TIME
-        lines[1] = 'VOLUME: '+str(self.hplayer.settings()['volume'])
-        if self.hplayer.status()['time'] is not None:
-            lines[1] += "  \"" + str(int(self.hplayer.status()['time']))
+        lines[1] = 'VOLUME: '+str(self.player.settings()['volume'])
+        if self.player.status()['time'] is not None:
+            lines[1] += "  \"" + str(int(self.player.status()['time']))
         lines[1] = lines[1].ljust(16, ' ')[:16]
 
         return lines
@@ -65,31 +66,31 @@ class KeypadInterface (BaseInterface):
         while self.isRunning():
 
             if self.lcd.is_pressed(LCD.UP) and pressed['UP'] == 0:
-                self.emit('up')
+                self.player.trigger('keypad-up')
                 pressed['UP'] = debounce
             elif pressed['UP'] > 0:
                 pressed['UP']-=1
 
             if self.lcd.is_pressed(LCD.DOWN) and pressed['DOWN'] == 0:
-                self.emit('down')
+                self.player.trigger('keypad-down')
                 pressed['DOWN'] = debounce
             elif pressed['DOWN'] > 0:
                 pressed['DOWN']-=1
 
             if self.lcd.is_pressed(LCD.RIGHT) and pressed['RIGHT'] == 0:
-                self.emit('right')
+                self.player.trigger('keypad-right')
                 pressed['RIGHT'] = debounce
             elif pressed['RIGHT'] > 0:
                 pressed['RIGHT']-=1
 
             if self.lcd.is_pressed(LCD.LEFT) and pressed['LEFT'] == 0:
-                self.emit('left')
+                self.player.trigger('keypad-left')
                 pressed['LEFT'] = debounce
             elif pressed['LEFT'] > 0:
                 pressed['LEFT']-=1
 
             if self.lcd.is_pressed(LCD.SELECT) and pressed['SEL'] == 0:
-                self.emit('select')
+                self.player.trigger('keypad-select')
                 pressed['SEL'] = debounce
             elif pressed['SEL'] > 0:
                 pressed['SEL']-=1
