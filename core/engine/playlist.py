@@ -22,6 +22,10 @@ class Playlist(Module):
         if self.hplayer.settings.get('loop') == 1:
             self.playindex(self._index)
 
+        # only one
+        elif self.hplayer.settings.get('loop') == -1:
+            self.emit('end')
+
         # playlist is not finished OR can loop
         elif self._index < self.size()-1 or self.hplayer.settings.get('loop') == 2:
             self.next()

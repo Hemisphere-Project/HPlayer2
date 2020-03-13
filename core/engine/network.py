@@ -1,5 +1,6 @@
 from netifaces import AF_INET, AF_INET6, AF_LINK, AF_PACKET, AF_BRIDGE
 import netifaces as ni
+import subprocess
 
 def get_ip(iface=None):
     ip = '127.0.0.1'
@@ -88,3 +89,13 @@ def get_ethmac():
             except:
                 pass
     return mac
+
+
+def get_essid(iface):
+    return subprocess.check_output("iw "+iface+" link | grep SSID: | awk '{print $2}'", shell=True)
+
+def get_rssi(iface):
+    rssi = subprocess.check_output("iw "+iface+" link | grep SSID: | awk '{print $2}'", shell=True)
+    minVal = -85
+    maxVal = -45
+    return max(0, (rssi-minVal)*100/(maxVal-minVal))

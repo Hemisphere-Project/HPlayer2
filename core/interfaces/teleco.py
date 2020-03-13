@@ -1,4 +1,5 @@
 from .base import BaseInterface
+from core.engine import network
 
 import time, os
 import serial
@@ -150,17 +151,26 @@ class TelecoInterface (BaseInterface):
 
             self.line(0, '       ')
             self.line(1, '       ')
-            self.line(2, '^0    ^8Mgoodbye !')
+            self.line(2, '^0    ^2Ngoodbye !')
             self.line(3, '       ')
             self.line(4, '       ')
 
         elif self.activePage == PAGE_STATUS:
 
+            net = network.get_essid('wlan0')
+            if net: net += ' '+network.get_rssi('wlan0')+'%'
+            else:   net = 'NO-WIFI !'
+            net = '  ^2P '+net
+
+            z = self.hplayer.interface('zyre')
+            if z: people = '  ^7C '+str(z.activeCount())
+            else: people = '                   '
+
             self.line(0, '^1 STATUS')
-            self.line(1, '   Wifi: '+'?')
-            self.line(2, '  Peers: '+str(self.hplayer.interface('zyre').activeCount()))
-            self.line(3, '   Link: '+'?')
-            self.line(4, '')
+            self.line(1, net)
+            self.line(2, people)
+            self.line(3, '               ')
+            self.line(4, 'ip: '+network.get_ip('wlan0'))
         
         elif self.activePage == PAGE_PLAYBACK:
 
@@ -185,9 +195,9 @@ class TelecoInterface (BaseInterface):
             cmdline += "    "
 
             # LOOP
-            if self.hplayer.settings('loop') == 1:      cmdline += '^6W'
+            if self.hplayer.settings('loop') == 1:      cmdline += '^2O'
             elif self.hplayer.settings('loop') == 2:    cmdline += '^6X'
-            else:                                       cmdline += '^6Z'
+            else:                                       cmdline += '^3@'
 
             # PREV/NEXT
             cmdline += "     ^5G    ^5H"
@@ -278,7 +288,10 @@ class TelecoInterface (BaseInterface):
             self.activePage = PAGE_STATUS
             if self._muteHolded:
                 self.emit('hardreset')
-            
+
+        #
+        # BUTTON UP/DOWN
+        #      
             
         @self.on('UP-down')
         @self.on('UP-hold')
@@ -332,11 +345,14 @@ class TelecoInterface (BaseInterface):
                     self.emit('play')
 
             elif self.activePage == PAGE_MEDIA:
-                micro = self.hplayer.files.currentList()[self.microOffset:]
-                if self.microIndex < len(micro):  
-                    self.emit('play', micro[self.microIndex])
-                    self.dirPlayback = self.hplayer.files.currentDir()
-                    self.page(PAGE_PLAYBACK)
+                # micro = self.hplayer.files.currentList()[self.microOffset:]
+                # if self.microIndex < len(micro):  
+                #     self.emit('play', micro[self.microIndex])
+                #     self.dirPlayback = self.hplayer.files.currentDir()
+                #     self.page(PAGE_PLAYBACK)
+                self.emit('play', self.hplayer.files.currentList(), self.microOffset+self.microIndex)
+                self.dirPlayback = self.hplayer.files.currentDir()
+                self.page(PAGE_PLAYBACK)
 
         @self.on('A-hold')
         def ah():
@@ -346,6 +362,7 @@ class TelecoInterface (BaseInterface):
             elif self.activePage == PAGE_PLAYBACK:
                 if self.hplayer.activePlayer().isPlaying():
                     self.emit('stop')
+                    self.page(PAGE_MEDIA)
 
             elif self.activePage == PAGE_MEDIA:
                 pass
@@ -360,12 +377,11 @@ class TelecoInterface (BaseInterface):
                 pass
 
             elif self.activePage == PAGE_PLAYBACK:
-                self.emit('unloop') if self.hplayer.settings('loop') > 0 else self.emit('loop', 1)
+                self.emit('loop', -1) if self.hplayer.settings('loop') > 0 else self.emit('loop', 1)
 
             elif self.activePage == PAGE_MEDIA:
-                self.emit('play', self.hplayer.files.currentList(), self.microOffset+self.microIndex)
-                self.dirPlayback = self.hplayer.files.currentDir()
-                self.page(PAGE_PLAYBACK)
+                pass
+
 
         @self.on('B-hold')
         def bh():

@@ -7,7 +7,7 @@ class Settings(Module):
     _settings = {
         'flip':         False,
         'autoplay':     False,
-        'loop':         0,              # 0: no loop / 1: loop one / 2: loop all
+        'loop':         0,              # -1: only one no loop / 0: playlist no loop / 1: loop one / 2: loop all
         'volume':       100,
         'mute':         False,
         'audiomode':    'stereo',
