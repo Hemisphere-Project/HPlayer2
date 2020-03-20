@@ -26,7 +26,7 @@ if [[ $(command -v apt) ]]; then
     apt install python python-pip
     apt install python-liblo python-netifaces python-termcolor python-evdev python-flask-socketio python-eventlet -y
     apt install python-watchdog python-pillow python-setuptools python-zeroconf python-socketio -y
-    apt install ttf-dejavu-core -y
+    apt install ttf-dejavu-core python-pyserial -y
 
     # RPi
     if [[ $(uname -m) = armv* ]]; then
@@ -47,7 +47,7 @@ elif [[ $(command -v pacman) ]]; then
     pacman -S python python-pip cython liblo --noconfirm --needed
     pacman -S python-pyliblo python-netifaces python-termcolor python-evdev python-flask-socketio  --noconfirm --needed
     pacman -S python-watchdog python-pillow python-setuptools python-zeroconf python-socketio --noconfirm --needed
-    pacman -S ttf-dejavu --noconfirm --needed
+    pacman -S ttf-dejavu python-pyserial --noconfirm --needed
 
     # RPi
     if [[ $(uname -m) = armv* ]]; then
