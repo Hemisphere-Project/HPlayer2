@@ -17,10 +17,10 @@ video = hplayer.addPlayer('mpv', 'video')
 
 # Interfaces
 # hplayer.addInterface('osc', 1222, 3737)
-hplayer.addInterface('zyre', 'wlan1')
-hplayer.addInterface('http2', 8080)
+hplayer.addInterface('zyre')
+# hplayer.addInterface('http2', 8080)
 # hplayer.addInterface('keyboard')
-hplayer.addInterface('teleco')
+# hplayer.addInterface('teleco')
 
 # Overlay
 if hplayer.isRPi():
@@ -28,4 +28,5 @@ if hplayer.isRPi():
 
     
 # RUN
+hplayer.settings.set('volume', 50)
 hplayer.run()                               						# TODO: non blocking

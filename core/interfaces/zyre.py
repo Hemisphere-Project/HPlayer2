@@ -58,16 +58,17 @@ class TimeClient():
         self.url = ("tcp://"+peer['ip']+":"+peer['port']).encode()
         self.clockshift = 0
         self._actor_fn = zactor_fn(self.actor_fn) # ctypes function reference must live as long as the actor.
-        self.done = False
+        self.done = True
         self.start()
 
     def start(self):
         if not self.done:
             self.stop()
+        self.done = False
         
         self.actor = Zactor(self._actor_fn, create_string_buffer(b"Sync request"))
         
-        self._refresh = Timer(20, self.start)
+        self._refresh = Timer(60*5, self.start)
         self._refresh.start()
 
     def stop(self):
@@ -75,6 +76,7 @@ class TimeClient():
             self.actor.sock().send(b"s", b"$TERM")
         if self._refresh:
             self._refresh.cancel()
+        self.done = True
 
 
     # CLIENT TimeSync REQ Zactor
@@ -140,6 +142,8 @@ class TimeClient():
                 cs = int(cs/cs_count)
 
             print(self.peer['ip'], "clock shift", str(cs)+"ns", "using", len(sampler), "samples")
+            if self.clockshift:
+                print('\t correction =', str(self.clockshift-cs)+"ns" )
             self.clockshift = cs
             self.status = 1
         else:
