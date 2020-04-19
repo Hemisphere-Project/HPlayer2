@@ -304,6 +304,7 @@ class ZyreNode ():
 
 
     def whisper(self, uuid, event, args=None, delay_ms=0):
+        if uuid == 'self': uuid = uuid.encode()
         self.actor.sock().send(b"sss", b"WHISPER", uuid, self.makeMsg(event, args, delay_ms))
 
     def shout(self, group, event, args=None, delay_ms=0):
@@ -487,9 +488,10 @@ class ZyreInterface (BaseInterface):
         @self.on("event")
         def e(ev):
             if ev['event'] == 'whatsup':
-                self.node.whisper(ev['from'], 'peerstatus', ['all right'])
-            else:
-                print(ev)
+                self.node.whisper(ev['from'], 'peerstatus', 
+                    {**self.hplayer.players()[0].status(),
+                     **self.hplayer.settings()})
+
 
     def listen(self):
         self.log( "interface ready")
@@ -507,12 +509,14 @@ class ZyreInterface (BaseInterface):
 
     def enableMonitoring(self):
         if self._refreshMonitor is None:
-
             def mon():
                 self.node.broadcast("whatsup")
                 self._refreshMonitor = Timer(1, mon)
                 self._refreshMonitor.start()
-
             mon()
-            
+    
+    def stopMonitoring(self):
+         if self._refreshMonitor is not None:
+            self._refreshMonitor.cancel()
+            self._refreshMonitor = None
         

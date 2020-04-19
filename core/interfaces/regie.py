@@ -97,6 +97,12 @@ class ThreadedHTTPServer(object):
         def filetree_send(*args):
             self.sendFileTree = True
 
+        @self.regieinterface.hplayer.on('zyre.peerstatus')
+        def peerstatus_send(*args):
+            # send !
+            pass
+
+        # !!! TODO: stop zyre monitoring when every client are disconnected
 
         @socketio.on('connect')
         def client_connect():
