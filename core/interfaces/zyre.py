@@ -304,7 +304,7 @@ class ZyreNode ():
 
 
     def whisper(self, uuid, event, args=None, delay_ms=0):
-        self.actor.sock().send(b"sss", b"WHISPER", uuid.encode(), self.makeMsg(event, args, delay_ms))
+        self.actor.sock().send(b"sss", b"WHISPER", uuid, self.makeMsg(event, args, delay_ms))
 
     def shout(self, group, event, args=None, delay_ms=0):
         self.actor.sock().send(b"sss", b"SHOUT", group.encode(), self.makeMsg(event, args, delay_ms))
