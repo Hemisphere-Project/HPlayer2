@@ -461,6 +461,12 @@ class ZyreInterface (BaseInterface):
         super().__init__(hplayer, "ZYRE")
         self.node = ZyreNode(self, iface)
 
+        self._refreshMonitor = None
+
+        @self.on("event")
+        def e(ev):
+            print(ev)
+
     def listen(self):
         self.log( "interface ready")
         self.stopped.wait()
@@ -472,3 +478,11 @@ class ZyreInterface (BaseInterface):
         c = self.node.timebook.activeCount()+1
         return c
 
+    def peersList(self):
+        return self.node.timebook.phonebook
+
+    def enableMonitoring(self):
+        if self._refreshMonitor is None:
+            self._refreshMonitor = Timer(1, lambda: self.node.broadcast("whatsup"))
+            self._refreshMonitor.start()
+        

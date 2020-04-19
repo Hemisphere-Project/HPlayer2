@@ -328,7 +328,7 @@ class TelecoInterface (BaseInterface):
         @self.on('UP-up')
         def upu():
             if self.activePage == PAGE_PLAYBACK:
-                self.emit('prev'')
+                self.emit('prev')
 
 
         @self.on('UP-hold')

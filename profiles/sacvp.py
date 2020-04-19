@@ -20,7 +20,8 @@ video = hplayer.addPlayer('mpv', 'video')
 hplayer.addInterface('zyre')
 # hplayer.addInterface('http2', 8080)
 # hplayer.addInterface('keyboard')
-hplayer.addInterface('teleco')
+# hplayer.addInterface('teleco')
+hplayer.addInterface('regie', 9111)
 
 # Overlay
 if hplayer.isRPi():

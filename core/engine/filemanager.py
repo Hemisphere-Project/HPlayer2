@@ -1,6 +1,7 @@
 from watchdog.observers import Observer
 from watchdog.events import PatternMatchingEventHandler
 from threading import Timer
+from collections import OrderedDict
 import os
 import re
 import pathlib
@@ -19,13 +20,33 @@ class FileManager(Module):
         
         @self.on('file-changed')                # file changed on disk -> trigger full refresh
         @self.hplayer.on('player-added')        # new player means new authorized extension -> trigger list refresh
-        def deferredUpdate(*args): 
-            if not self.refreshTimer:
-                self.refreshTimer = Timer(3.0, self.refresh)
-                self.refreshTimer.start()
+        def deferredUpdate(*args):
+            if self.refreshTimer:
+                self.refreshTimer.cancel()
+            self.refreshTimer = Timer(.5, self.refresh)
+            self.refreshTimer.start()
 
         if roots: 
             self.add(roots)
+            
+
+    def __call__(self, directory=None, fullpath=False):
+        """
+        Export entire file tree
+        """
+        if not directory:
+            directory = self.listDir()
+        elif not isinstance(directory, list): 
+            directory = [directory]
+
+        tree = OrderedDict()
+        for d in directory:
+            fl = self.listFiles(d)
+            if not fullpath:
+                fl = [f.split(d+'/')[-1] for f in fl] 
+            tree[d] = fl
+
+        return tree
 
 
     def add(self, path):
