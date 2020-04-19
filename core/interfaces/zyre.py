@@ -286,7 +286,7 @@ class ZyreNode ():
             self.actor.sock().send(b"ss", b"$TERM", "gone")
             # self.zyre.log('ZYRE term sent')
 
-    def shout(self, group, event, args=None, delay_ms=0):
+    def makeMsg(self, event, args=None, delay_ms=0):
         data = {}
         data['event'] = event
         data['args'] = []
@@ -300,8 +300,14 @@ class ZyreNode ():
         if delay_ms > 0:
             data['at'] = int(time.time()*PRECISION + delay_ms * PRECISION / 1000)
 
-        data = json.dumps(data)
-        self.actor.sock().send(b"sss", b"SHOUT", group.encode(), data.encode())
+        return json.dumps(data).encode()
+
+
+    def whisper(self, uuid, event, args=None, delay_ms=0):
+        self.actor.sock().send(b"sss", b"WHISPER", uuid.encode(), self.makeMsg(event, args, delay_ms))
+
+    def shout(self, group, event, args=None, delay_ms=0):
+        self.actor.sock().send(b"sss", b"SHOUT", group.encode(), self.makeMsg(event, args, delay_ms))
 
     def broadcast(self, event, args=None, delay_ms=0):
         self.shout('broadcast', event, args, delay_ms)
@@ -430,6 +436,20 @@ class ZyreNode ():
                 elif command == b"LEAVE":
                     group = msg.popstr()
                     zyre_node.leave(group)
+                
+                elif command == b"WHISPER":
+                    peer = msg.popstr()
+                    data = msg.popstr()
+
+                    # if self -> send to self !
+                    if peer.decode() == 'self':
+                        data = json.loads(data.decode())
+                        data['from'] = 'self'
+                        data['group'] = 'whisper'
+                        self.preProcessor1(data)
+                    else:
+                        zyre_node.whispers(peer, data)
+
 
                 elif command == b"SHOUT":
                     group = msg.popstr()
@@ -463,9 +483,13 @@ class ZyreInterface (BaseInterface):
 
         self._refreshMonitor = None
 
+        # Answer to WHATSUP
         @self.on("event")
         def e(ev):
-            print(ev)
+            if ev['event'] == 'whatsup':
+                self.node.whisper(ev['from'], 'peerstatus', ['all right'])
+            else:
+                print(ev)
 
     def listen(self):
         self.log( "interface ready")
@@ -483,6 +507,12 @@ class ZyreInterface (BaseInterface):
 
     def enableMonitoring(self):
         if self._refreshMonitor is None:
-            self._refreshMonitor = Timer(1, lambda: self.node.broadcast("whatsup"))
-            self._refreshMonitor.start()
+
+            def mon():
+                self.node.broadcast("whatsup")
+                self._refreshMonitor = Timer(1, mon)
+                self._refreshMonitor.start()
+
+            mon()
+            
         
