@@ -239,7 +239,7 @@ class PeerBook():
     def sync(self, uuid):
         with self._lock:
             peer = self.peer(uuid)
-            if peer: peer['sync'] = TimeClient(peer)
+            if peer: peer['sync'] = TimeClient(peer['ip'], peer['ts_port'])
 
     def gone(self, uuid):
         with self._lock:
