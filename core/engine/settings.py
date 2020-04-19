@@ -22,11 +22,12 @@ class Settings(Module):
             try:
                 with open(self._settingspath, 'rb') as fd:
                     self._settings = pickle.load(fd)
+                for key, value in self._settings:
+                    self.emit('do-'+key, value, self.export())
+                self.emit('updated', self.export())
                 self.log('settings loaded:', self._settings)
-                for key, value in self._settings.items():
-                    self.emit(key, value, self.export())
             except:
-                self.log('ERROR loading settings file', self._settingspath)
+                self.log('ERROR loading settings file', self._settingspath)       
 
     def __call__(self, entry=None):
         if entry:

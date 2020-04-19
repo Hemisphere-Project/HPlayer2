@@ -53,20 +53,20 @@ class TimeSample():
 #  CLIENT Actor to perform Clock Shift measurment with a remote peer
 #
 class TimeClient():
-    def __init__(self, peer):
-        self.peer = peer
-        self.url = ("tcp://"+peer['ip']+":"+peer['port']).encode()
+    def __init__(self, ip, port):
+        self.client_ip = ip
+        self.url = ("tcp://"+self.client_ip+":"+port).encode()
         self.clockshift = 0
         self._actor_fn = zactor_fn(self.actor_fn) # ctypes function reference must live as long as the actor.
         self.done = True
         self.start()
 
     def start(self):
-        if not self.done:
+        if not self.done: 
             self.stop()
-        self.done = False
         
         self.actor = Zactor(self._actor_fn, create_string_buffer(b"Sync request"))
+        self.done = False
         
         self._refresh = Timer(60*5, self.start)
         self._refresh.start()
@@ -88,7 +88,7 @@ class TimeClient():
         internal_pipe.signal(0)
         retry = 0
 
-        # print("TimeClient: Starts sampling", self.peer['ip'])
+        # print("TimeClient: Starts sampling", self.client_ip)
 
         sampler = []
         sample = TimeSample(req_sock)
@@ -118,7 +118,7 @@ class TimeClient():
                 if not msg or msg.popstr() == b"$TERM":
                     return
 
-        # print("TimeClient: Sampling done", self.peer['ip'])
+        # print("TimeClient: Sampling done", self.client_ip)
         self.compute(sampler)
         self.done = True
 
@@ -141,7 +141,7 @@ class TimeClient():
             if cs_count > 0:
                 cs = int(cs/cs_count)
 
-            print(self.peer['ip'], "clock shift", str(cs)+"ns", "using", len(sampler), "samples")
+            print(self.client_ip, "clock shift", str(cs)+"ns", "using", len(sampler), "samples")
             if self.clockshift:
                 print('\t correction =', str(self.clockshift-cs)+"ns" )
             self.clockshift = cs
@@ -149,63 +149,6 @@ class TimeClient():
         else:
             self.status = 0
             print("ERROR: sampler not full.. something might be broken")
-
-
-
-#
-#  BOOK to perform and record sync with others
-#
-class TimeBook():
-    def  __init__(self):
-        self.peers = {}
-        self.phonebook = {}
-        self.activePeers = 0
-        self._lock = Lock()
-
-    def stop(self):
-        with self._lock:
-            for peer in self.peers.values():
-                peer.stop()
-
-    def newpeer(self, uuid, addr, port):
-        self.gone(uuid)
-        with self._lock:
-            self.phonebook[uuid] = {}
-            self.phonebook[uuid]['uuid'] = uuid
-            self.phonebook[uuid]['ip'] = extract_ip(addr)
-            self.phonebook[uuid]['port'] = port.decode()
-            self.phonebook[uuid]['active'] = True
-            self.activePeers += 1
-            print("New Peer detected", self.phonebook[uuid])
-
-    def sync(self, uuid):
-        with self._lock:
-            if uuid in self.phonebook:
-                ip = self.phonebook[uuid]['ip']
-                # if not ip in self.peers:
-                self.peers[ip] = TimeClient(self.phonebook[uuid])
-
-    def gone(self, uuid):
-        with self._lock:
-            if uuid in self.phonebook and self.phonebook[uuid]['active']:
-                self.phonebook[uuid]['active'] = False
-                self.activePeers -= 1
-
-    def activeCount(self):
-        c = 0
-        with self._lock:
-            c = self.activePeers
-        return c
-
-    def cs(self, uuid):
-        shift = 0
-        with self._lock:
-            if uuid in self.phonebook:
-                ip = self.phonebook[uuid]['ip']
-                if ip in self.peers:
-                    shift = self.peers[ip].clockshift
-        return shift
-
 
 
 #
@@ -227,7 +170,7 @@ class TimeServer():
         internal_pipe = Zsock(pipe, False) # We don't own the pipe, so False.
         reply_sock = Zsock.new_rep(("tcp://*:*").encode())
         if not reply_sock:
-            print('ERROR while binding TimeBook REP socket')
+            print('ERROR while binding PeerBook REP socket')
         else:
             self.port = reply_sock.endpoint().decode().split(':')[2]
 
@@ -237,7 +180,7 @@ class TimeServer():
         print('TimeServer started on port', self.port)
         terminated = False
         while not terminated:
-            sock = poller.wait(1000)
+            sock = poller.wait(500)
             if not sock:
                 continue
 
@@ -259,6 +202,67 @@ class TimeServer():
         self.done = True
 
 
+#
+#  BOOK to perform and record sync with others
+#
+class PeerBook():
+    def  __init__(self):
+        self.phonebook = {}
+        self.activePeers = 0
+        self._lock = Lock()
+
+    def stop(self):
+        with self._lock:
+            for peer in self.phonebook.values():
+                if peer['sync']: peer['sync'].stop()
+
+    def newpeer(self, peer):
+
+        # peer completion
+        peer['active'] = True
+        peer['sync'] = None
+        peer['status'] = None
+
+        uuid = peer['uuid']
+        self.gone(uuid)
+        with self._lock:
+            self.phonebook[uuid] = peer
+            self.activePeers += 1
+            print("New Peer detected", self.phonebook[uuid])
+
+    def peer(self, uuid):
+        if uuid in self.phonebook:
+            return self.phonebook[uuid]
+        else:
+            return None
+
+    def sync(self, uuid):
+        with self._lock:
+            peer = self.peer(uuid)
+            if peer: peer['sync'] = TimeClient(peer)
+
+    def gone(self, uuid):
+        with self._lock:
+            peer = self.peer(uuid)
+            if peer and peer['active']:
+                peer['active'] = False
+                self.activePeers -= 1
+
+    def activeCount(self):
+        c = 0
+        with self._lock:
+            c = self.activePeers
+        return c
+
+    def cs(self, uuid):
+        shift = 0
+        with self._lock:
+            peer = self.peer(uuid)
+            if peer and peer['sync']:
+                shift = peer['sync'].clockshift
+        return shift
+
+
 
 #
 #  NODE zyre peers discovery, sync and communication
@@ -267,7 +271,7 @@ class ZyreNode ():
     def  __init__(self, zyre, iface=None):
         self.zyre = zyre
 
-        self.timebook = TimeBook()
+        self.peerbook = PeerBook()
         self.timeserver = TimeServer()
 
         self._actor_fn = zactor_fn(self.actor_fn) # ctypes function reference must live as long as the actor.
@@ -281,7 +285,7 @@ class ZyreNode ():
 
     def stop(self):
         self.timeserver.stop()
-        self.timebook.stop()
+        self.peerbook.stop()
         if not self.done:
             self.actor.sock().send(b"ss", b"$TERM", "gone")
             # self.zyre.log('ZYRE term sent')
@@ -292,7 +296,7 @@ class ZyreNode ():
         data['args'] = []
         if args:
             if not isinstance(args, list):
-                self.zyre.log('NOT al LIST', args)
+                # self.zyre.log('NOT al LIST', args)
                 args = [args]
             data['args'] = args
 
@@ -302,6 +306,8 @@ class ZyreNode ():
 
         return json.dumps(data).encode()
 
+    def publish(self, topic, args=None, delay_ms=0):
+        self.actor.sock().send(b"sss", b"PUBLISH", topic.encode(), self.makeMsg(topic, args, delay_ms))
 
     def whisper(self, uuid, event, args=None, delay_ms=0):
         if uuid == 'self': uuid = uuid.encode()
@@ -324,7 +330,7 @@ class ZyreNode ():
         # if a programmed time is provided, correct it with peer CS
         # Set timer
         if 'at' in data:
-            data['at'] -= self.timebook.cs( data['from'] )
+            data['at'] -= self.peerbook.cs( data['from'] )
             #delay =  (data['at']-self.deltadelay) / PRECISION - time.time()    # Might get crazy..
             delay =  (data['at']) / PRECISION - time.time()
 
@@ -350,22 +356,36 @@ class ZyreNode ():
 
     # ZYRE Zactor
     def actor_fn(self, pipe, iface):
+
+        # Internal
         internal_pipe = Zsock(pipe, False) # We don't own the pipe, so False.
 
+        # Publisher
+        pub_sock = Zsock.new_pub(("tcp://*:*").encode())
+        pub_port = 0
+        if not pub_sock: print('ERROR while binding Publisher PUB socket')
+        else: pub_port = pub_sock.endpoint().decode().split(':')[2]
+
+        # Zyre 
         zyre_node = Zyre(None)
         if iface:
             zyre_node.set_interface( string_at(iface) )
             print("ZYRE Node forced iface: ", string_at(iface) )
+
+        zyre_node.set_header (b"NAME", str(self.zyre.hplayer.name()).encode());
         zyre_node.set_header (b"TS-PORT", str(self.timeserver.port).encode());
+        zyre_node.set_header (b"PUB-PORT", str(pub_port).encode());
         zyre_node.start()
         zyre_node.join(b"broadcast")
         zyre_node.join(b"sync")
         zyre_pipe = zyre_node.socket()
 
+        # Poller
         poller = Zpoller(zyre_pipe, internal_pipe, None)
 
         internal_pipe.signal(0)
 
+        # RUN
         print('ZYRE Node started')
         terminated = False
         while not terminated:
@@ -386,11 +406,18 @@ class ZyreNode ():
 
                 # ENTER: add to phonebook for external contact (i.e. TimeSync)
                 if e.type() == b"ENTER":
-                    self.timebook.newpeer(e.peer_uuid(), e.peer_addr(), e.header(b"TS-PORT"))
+                    newpeer = {
+                        'uuid':      e.peer_uuid(),
+                        'ip':        extract_ip( e.peer_addr() ),
+                        'name':      e.header(b"NAME").decode(),
+                        'ts_port':   e.header(b"TS-PORT").decode(),
+                        'pub_port':  e.header(b"PUB-PORT").decode()
+                    }
+                    self.peerbook.newpeer(newpeer)
 
                 # EXIT
                 elif e.type() == b"EXIT":
-                    self.timebook.gone(e.peer_uuid())
+                    self.peerbook.gone(e.peer_uuid())
                     print( "ZYRE Node: peer is gone..")
 
                 # JOIN
@@ -398,7 +425,7 @@ class ZyreNode ():
 
                     # SYNC clocks
                     if e.group() == b"sync":
-                        self.timebook.sync(e.peer_uuid())
+                        self.peerbook.sync(e.peer_uuid())
 
                 # LEAVE
                 elif e.type() == b"LEAVE":
@@ -451,7 +478,6 @@ class ZyreNode ():
                     else:
                         zyre_node.whispers(peer, data)
 
-
                 elif command == b"SHOUT":
                     group = msg.popstr()
                     data = msg.popstr()
@@ -464,6 +490,12 @@ class ZyreNode ():
                         data['from'] = 'self'
                         data['group'] = group.decode()
                         self.preProcessor1(data)
+
+                elif command == b"PUBLISH":
+                    topic = msg.popstr()
+                    data = msg.popstr()
+                    Zmsg.sendm(topic, pub_sock)
+                    Zmsg.send(data, pub_sock )
 
 
         # zyre_node.stop()  # HANGS !
@@ -492,6 +524,11 @@ class ZyreInterface (BaseInterface):
                     {**self.hplayer.players()[0].status(),
                      **self.hplayer.settings()})
 
+        # Publish status
+        @self.hplayer.on('status')
+        def s(status):
+            self.node.publish('status', )
+
 
     def listen(self):
         self.log( "interface ready")
@@ -501,11 +538,11 @@ class ZyreInterface (BaseInterface):
         sleep(0.2)
 
     def activeCount(self):
-        c = self.node.timebook.activeCount()+1
+        c = self.node.peerbook.activeCount()+1
         return c
 
     def peersList(self):
-        return self.node.timebook.phonebook
+        return self.node.peerbook.phonebook
 
     def enableMonitoring(self):
         if self._refreshMonitor is None:
@@ -513,7 +550,7 @@ class ZyreInterface (BaseInterface):
                 self.node.broadcast("whatsup")
                 self._refreshMonitor = Timer(1, mon)
                 self._refreshMonitor.start()
-            mon()
+            # mon()
     
     def stopMonitoring(self):
          if self._refreshMonitor is not None:

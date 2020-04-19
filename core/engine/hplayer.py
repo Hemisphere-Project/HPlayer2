@@ -55,6 +55,10 @@ class HPlayer2(EventEmitter):
     def name():
         return network.get_hostname()
 
+    #
+    # PLAYERS
+    #
+
     def addPlayer(self, ptype, name=None):
         if not name: name = ptype+str(len(self._players))
         if name and name in self._players:
@@ -63,7 +67,25 @@ class HPlayer2(EventEmitter):
             PlayerClass = playerlib.getPlayer(ptype)
             p = PlayerClass(self, name)
             self._players[name] = p
+
+            # Bind settings
+            self.settings.on('do-volume',       p._applyVolume)
+            self.settings.on('do-mute',         p._applyVolume)
+            self.settings.on('do-pan',          p._applyPan)
+            self.settings.on('do-audiomode',    p._applyPan)
+            self.settings.on('do-flip',         p._applyFlip)
+
+            # Bind playlist
+            p.on('end',                         self.playlist.onMediaEnd)    # Media end    -> Playlist next
+            self.playlist.on('end',             p.stop)                      # Playlist end -> Stop player
+
+            # Bind status (player update triggers hplayer emit)
+            @p.on('status')
+            def emitStatus(*args):
+                self.emit('status', self.status())
+
             self.emit('player-added', p)
+
         return self._players[name]
 
 
@@ -80,6 +102,13 @@ class HPlayer2(EventEmitter):
     def activePlayer(self):
         return self.players()[self._lastUsedPlayer]
 
+    def status(self):
+        return [p.status() for p in self.players()]
+
+
+    #
+    # INTERFACES
+    #
 
     def addInterface(self, iface, *argv):
         InterfaceClass = ifacelib.getInterface(iface)
@@ -96,6 +125,10 @@ class HPlayer2(EventEmitter):
     def interfaces(self):
         return self._interfaces.values()
 
+
+    #
+    # RUN
+    #
 
     def running(self):
         run = True
@@ -150,6 +183,10 @@ class HPlayer2(EventEmitter):
         self.emit('app-quit')
         sys.exit(0)
 
+
+    #
+    # BINDINGS
+    #
 
     def autoBind(self, module):
         

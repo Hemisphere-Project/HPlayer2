@@ -125,20 +125,20 @@ class MpvPlayer(BasePlayer):
                         if 'name' in mpvsays:
 
                             if mpvsays['name'] == 'eof-reached' and mpvsays['data'] == True:
-                                self._status['isPaused'] = False
-                                self._status['isPlaying'] = False
+                                self.update('isPaused', False)
+                                self.update('isPlaying', False)
                                 self.emit('end')
 
                             elif mpvsays['name'] == 'core-idle':
-                                self._status['isPlaying'] = not mpvsays['data']
+                                self.update('isPlaying', not mpvsays['data'])
 
                             elif mpvsays['name'] == 'time-pos':
                                 if mpvsays['data']:
-                                    self._status['time'] = round(float(mpvsays['data']),2)
+                                    self.update('time', round(float(mpvsays['data']),2))
 
                             elif mpvsays['name'] == 'duration':
                                 if mpvsays['data']:
-                                    self._status['duration'] = round(float(mpvsays['data']),2)
+                                    self.update('duration', round(float(mpvsays['data']),2))
                                     
                             else:
                                 pass
@@ -230,21 +230,21 @@ class MpvPlayer(BasePlayer):
 
     def _play(self, path):
         self.log("play", path)
-        self._status['isPaused'] = False
+        self.update('isPaused', False)
         # self._mpv_send('{ "command": ["stop"] }')
         self._mpv_send('{ "command": ["loadfile", "'+path+'"] }')
         self._mpv_send('{ "command": ["set_property", "pause", false] }')
 
     def _stop(self):
-        self._status['isPaused'] = False
+        self.update('isPaused', False)
         self._mpv_send('{ "command": ["stop"] }')
 
     def _pause(self):
-        self._status['isPaused'] = True
+        self.update('isPaused', True)
         self._mpv_send('{ "command": ["set_property", "pause", true] }')
 
     def _resume(self):
-        self._status['isPaused'] = False
+        self.update('isPaused', False)
         self._mpv_send('{ "command": ["set_property", "pause", false] }')
 
     def _seekTo(self, milli):

@@ -31,16 +31,6 @@ class BasePlayer(Module):
         }
 
 
-        hplayer.settings.on('do-volume',       self._applyVolume)
-        hplayer.settings.on('do-mute',         self._applyVolume)
-        hplayer.settings.on('do-pan',          self._applyPan)
-        hplayer.settings.on('do-audiomode',    self._applyPan)
-        hplayer.settings.on('do-flip',         self._applyFlip)
-
-        hplayer.playlist.on('end',          self.stop)                      # Playlist end -> stop
-        self.on('end',                      hplayer.playlist.onMediaEnd)    # Media end -> trig playlist
-
-
     def addOverlay(self, olay, args=[]):
         OverlayClass = overlays.getOverlay(olay)
         self._overlays[olay] = OverlayClass()
@@ -68,6 +58,12 @@ class BasePlayer(Module):
     # Player STATUS
     #
 
+    # Status SET 
+    def update(self, key, value):
+        self._status[key] = value
+        if key != 'time':
+            self.emit('status', self.status())
+
     # SET/GET is running
     def isRunning(self, state=None):
         # SET (optionnal)
@@ -79,7 +75,7 @@ class BasePlayer(Module):
                 return False
         return self._running.is_set()
 
-    # STATUS Get
+    # STATUS Set/Get
     def status(self, entry=None):
         s = self._status.copy()
         if entry:
@@ -114,15 +110,15 @@ class BasePlayer(Module):
     # Play Media
     def play(self, media):
         self._play(media)
-        self._status['media'] = media
-        self._status['time'] = 0
+        self.update('media', media)
+        self.update('time', 0)
         self.emit('playing', media)
 
     # STOP Playback
     def stop(self):
         self._stop()
-        self._status['media'] = None
-        self._status['time'] = 0
+        self.update('media', None)
+        self.update('time', 0)
         self.emit('stopped')
 
     # PAUSE Playback
@@ -156,19 +152,19 @@ class BasePlayer(Module):
         self.log("quit")
 
     def _play(self, path):
-        self._status['isPlaying'] = True
+        self.update('isPlaying', True)
         self.log("play", path)
 
     def _stop(self):
-        self._status['isPlaying'] = False
+        self.update('isPlaying', False)
         self.log("stop")
 
     def _pause(self):
-        self._status['isPaused'] = True
+        self.update('isPaused', True)
         self.log("pause")
 
     def _resume(self):
-        self._status['isPaused'] = False
+        self.update('isPaused', False)
         self.log("resume")
 
     def _seekTo(self, milli):

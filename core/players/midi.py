@@ -119,24 +119,24 @@ class MidiPlayer(BasePlayer):
       self.log("play", path)	
       self._runflag.clear()	
       self._midiFile = iter(mido.MidiFile(path))	
-      self._status['isPlaying'] = True	
-      self._status['isPaused'] = False	
+      self.update('isPlaying', True)	
+      self.update('isPaused', False)	
       self._runflag.set()	
 
    def _stop(self):	
       self.log("stop")	
       self._runflag.clear()	
       self._midiFile = None	
-      self._status['isPlaying'] = False	
-      self._status['isPaused'] = False	
+      self.update('isPlaying', False)	
+      self.update('isPaused', False)	
 
    # def _pause(self):	
    #     self._mpv_send('{ "command": ["set_property", "pause", true] }')	
-   #     self._status['isPaused'] = True	
+   #     self.update('isPaused', True)	
 
    # def _resume(self):	
    #     self._mpv_send('{ "command": ["set_property", "pause", false] }')	
-   #     self._status['isPaused'] = False	
+   #     self.update('isPaused', False)	
 
    # def _seekTo(self, milli):	
    #     self._mpv_send('{ "command": ["seek", "'+str(milli/1000)+'", "absolute"] }')	
