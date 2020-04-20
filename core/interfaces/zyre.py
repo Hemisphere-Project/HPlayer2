@@ -471,9 +471,9 @@ class ZyreNode ():
         zyre_node.set_header(b"TS-PORT", str(self.timeserver.port).encode())
         zyre_node.set_header(b"PUB-PORT", str(pub_port).encode())
 
-        zyre_node.set_evasive_timeout(2000)
-        zyre_node.set_silent_timeout(4000)
-        zyre_node.set_expired_timeout(10000)
+        zyre_node.set_evasive_timeout(4000)
+        zyre_node.set_silent_timeout(8000)
+        zyre_node.set_expired_timeout(12000)
 
         zyre_node.start()
         zyre_node.join(b"broadcast")
@@ -489,7 +489,7 @@ class ZyreNode ():
         print('ZYRE Node started')
         terminated = False
         while not terminated:
-            sock = poller.wait(1000)
+            sock = poller.wait(500)
             if not sock:
                 continue
 
