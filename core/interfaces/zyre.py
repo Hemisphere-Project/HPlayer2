@@ -471,6 +471,7 @@ class ZyreNode ():
         zyre_node.set_header(b"TS-PORT", str(self.timeserver.port).encode())
         zyre_node.set_header(b"PUB-PORT", str(pub_port).encode())
 
+        zyre_node.set_interval(1000)
         zyre_node.set_evasive_timeout(4000)
         zyre_node.set_silent_timeout(8000)
         zyre_node.set_expired_timeout(12000)
@@ -517,16 +518,16 @@ class ZyreNode ():
 
                 # EVASIVE
                 elif e.type() == b"EVASIVE":
-                    self.zyre.log(e.peer_addr(), "is evasive..")
+                    self.zyre.log(e.peer_name(), "is evasive..")
 
                 # SILENT
                 elif e.type() == b"SILENT":
-                    self.zyre.log(e.peer_addr(), "is silent..")
+                    self.zyre.log(e.peer_name(), "is silent..")
 
                 # EXIT
                 elif e.type() == b"EXIT":
                     self.peerbook.gone(e.peer_uuid())
-                    self.zyre.log(e.peer_addr(), "is gone..")
+                    self.zyre.log(e.peer_name(), "is gone..")
 
                 # JOIN
                 elif e.type() == b"JOIN":
