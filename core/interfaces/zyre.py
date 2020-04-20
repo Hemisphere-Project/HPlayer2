@@ -226,6 +226,8 @@ class Subscriber():
             self.actor.sock().send(b"s", b"$TERM")
         self.done = True
 
+    def subscribe(self, topic):
+        self.actor.sock().send(b"ss", b"SUBSCRIBE", topic.encode())
 
     # SUB Zactor
     def actor_fn(self, pipe, args):
@@ -255,8 +257,11 @@ class Subscriber():
                 msg = Zmsg.recv(internal_pipe)
                 if not msg or msg.popstr() == b"$TERM":
                     break
+                
+                elif msg.popstr() == b"SUBSCRIBE":
+                    topic = msg.popstr()
+                    Zsock.set_subscribe(sub_sock, topic)
 
-        # print("TimeClient: Sampling done", self.client_ip)
         self.done = True
 
 
@@ -275,6 +280,7 @@ class PeerBook():
             for peer in self.phonebook.values():
                 if peer['sync']: peer['sync'].stop()
 
+
     def newpeer(self, peer):
 
         # peer completion
@@ -282,6 +288,7 @@ class PeerBook():
         peer['sync'] = None
         peer['status'] = None
 
+        # add to phonebook
         uuid = peer['uuid']
         self.gone(uuid)
         with self._lock:
@@ -289,16 +296,23 @@ class PeerBook():
             self.activePeers += 1
             print("New Peer detected", self.phonebook[uuid])
 
+        # subscribe to if necessary
+        for topic in self._topics:
+            self.subscribePeer(topic, uuid)
+
+
     def peer(self, uuid):
         if uuid in self.phonebook:
             return self.phonebook[uuid]
         else:
             return None
 
+
     def sync(self, uuid):
         with self._lock:
             peer = self.peer(uuid)
             if peer: peer['sync'] = TimeClient(peer['ip'], peer['ts_port'])
+
 
     def gone(self, uuid):
         with self._lock:
@@ -307,11 +321,13 @@ class PeerBook():
                 peer['active'] = False
                 self.activePeers -= 1
 
+
     def activeCount(self):
         c = 0
         with self._lock:
             c = self.activePeers
         return c
+
 
     def cs(self, uuid):
         shift = 0
@@ -321,12 +337,25 @@ class PeerBook():
                 shift = peer['sync'].clockshift
         return shift
 
-    def subscribe(self, topic):
+
+    def subscribePeer(self, topic, uuid):
+        peer = self.peer(uuid)
+        if peer:
+            with self._lock:
+                # create SUB socket
+                if not peer['subscriber']:
+                    peer['subscriber'] = Subscriber(peer['ip'], peer['pub_port'])
+
+                # subscribe to this new topic
+                peer['subscriber'].subscribe(topic)
+            
+
+    def subscribeAll(self, topic):
         if not topic in self._topics:
             with self._lock:
                 self._topics.append(topic)
-                for peer in self.phonebook.values():
-                    peer['']
+            for uuid in self.phonebook.keys():
+                self.subscribePeer(topic, uuid)
 
 
 
@@ -488,16 +517,16 @@ class ZyreNode ():
 
                 # EVASIVE
                 elif e.type() == b"EVASIVE":
-                    self.zyre.log(extract_ip(e.peer_addr()), "is evasive..")
+                    self.zyre.log(e.peer_addr(), "is evasive..")
 
                 # SILENT
                 elif e.type() == b"SILENT":
-                    self.zyre.log(extract_ip(e.peer_addr()), "is silent..")
+                    self.zyre.log(e.peer_addr(), "is silent..")
 
                 # EXIT
                 elif e.type() == b"EXIT":
                     self.peerbook.gone(e.peer_uuid())
-                    self.zyre.log(extract_ip(e.peer_addr()), "is gone..")
+                    self.zyre.log(e.peer_addr(), "is gone..")
 
                 # JOIN
                 elif e.type() == b"JOIN":
@@ -596,12 +625,12 @@ class ZyreInterface (BaseInterface):
         self.node = ZyreNode(self, iface)
 
         # Answer to WHATSUP
-        @self.on("event")
-        def e(ev):
-            if ev['event'] == 'whatsup':
-                self.node.whisper(ev['from'], 'peerstatus', 
-                    {**self.hplayer.players()[0].status(),
-                     **self.hplayer.settings()})
+        # @self.on("event")
+        # def e(ev):
+        #     if ev['event'] == 'whatsup':
+        #         self.node.whisper(ev['from'], 'peerstatus', 
+        #             {**self.hplayer.players()[0].status(),
+        #              **self.hplayer.settings()})
 
         # Publish status
         @self.hplayer.on('status')
@@ -624,7 +653,7 @@ class ZyreInterface (BaseInterface):
         return self.node.peerbook.phonebook
 
     def enableMonitoring(self):
-        self.node.subscribeTo('status')
+        self.node.subscribeAll('status')
 
     # def enableMonitoring(self):
     #     if self._refreshMonitor is None:
