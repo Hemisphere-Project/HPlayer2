@@ -189,6 +189,7 @@ class Subscriber():
     def stop(self):
         if not self.done:
             self.actor.sock().send(b"s", b"$TERM")
+        self.sub.__del__()
         self.done = True
 
     def subscribe(self, topic):
@@ -225,7 +226,7 @@ class Subscriber():
                 if not msg or msg.popstr() == b"$TERM":
                     break
 
-        self.sub.__del__()
+        internal_pipe.__del__()
         self.done = True
 
 
@@ -455,9 +456,6 @@ class ZyreNode ():
 
         # self.zyre.stop()  # HANGS !
         internal_pipe.__del__()
-        self.zyre.__del__()
-        self.publisher.__del__()
-        self.timereply.__del__()
         print('ZYRE Node stopped')   # WEIRD: print helps the closing going smoothly..
         self.done = True
 
@@ -467,6 +465,9 @@ class ZyreNode ():
         if not self.done:
             self.actor.sock().send(b"ss", b"$TERM", "gone")
             # self.interface.log('ZYRE term sent')
+        self.zyre.__del__()
+        self.publisher.__del__()
+        self.timereply.__del__()
 
     def peer(self, uuid):
         if uuid in self.book:
