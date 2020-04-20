@@ -68,7 +68,7 @@ class TimeClient():
         self.actor = Zactor(self._actor_fn, create_string_buffer(b"Sync request"))
         self.done = False
         
-        self._refresh = Timer(60*5, self.start)
+        self._refresh = Timer(60, self.start)
         self._refresh.start()
 
     def stop(self):
@@ -203,6 +203,64 @@ class TimeServer():
 
 
 #
+#  SUBSCRIBER to others publishing
+#
+class Subscriber():
+    def __init__(self, ip, port):
+        self.client_ip = ip
+        self.url = ("tcp://"+self.client_ip+":"+port).encode()
+        self._actor_fn = zactor_fn(self.actor_fn) # ctypes function reference must live as long as the actor.
+        self.done = True
+        self.start()
+
+    def start(self):
+        if not self.done: 
+            self.stop()
+        
+        self.actor = Zactor(self._actor_fn, create_string_buffer(b"Subscriber"))
+        self.done = False
+        
+
+    def stop(self):
+        if not self.done:
+            self.actor.sock().send(b"s", b"$TERM")
+        self.done = True
+
+
+    # SUB Zactor
+    def actor_fn(self, pipe, args):
+        internal_pipe = Zsock(pipe, False) # We don't own the pipe, so False.
+        sub_sock = Zsock.new_sub(self.url)
+        poller = Zpoller(internal_pipe, sub_sock, None)
+        internal_pipe.signal(0)
+        retry = 0
+
+        print("Subscribing to", self.client_ip)
+
+        terminated = False
+        while not terminated:
+            sock = poller.wait(500)
+
+            # NOBODY responded ...
+            if not sock:
+                continue
+
+            # PUB received
+            elif sock == sub_sock:
+                msgin = Zmsg.recv(sub_sock)
+                print('Rcv pub:', msgin)
+
+            # INTERNAL commands
+            elif sock == internal_pipe:
+                msg = Zmsg.recv(internal_pipe)
+                if not msg or msg.popstr() == b"$TERM":
+                    break
+
+        # print("TimeClient: Sampling done", self.client_ip)
+        self.done = True
+
+
+#
 #  BOOK to perform and record sync with others
 #
 class PeerBook():
@@ -210,6 +268,7 @@ class PeerBook():
         self.phonebook = {}
         self.activePeers = 0
         self._lock = Lock()
+        self._topics = []
 
     def stop(self):
         with self._lock:
@@ -261,6 +320,13 @@ class PeerBook():
             if peer and peer['sync']:
                 shift = peer['sync'].clockshift
         return shift
+
+    def subscribe(self, topic):
+        if not topic in self._topics:
+            with self._lock:
+                self._topics.append(topic)
+                for peer in self.phonebook.values():
+                    peer['']
 
 
 
@@ -372,9 +438,14 @@ class ZyreNode ():
             zyre_node.set_interface( string_at(iface) )
             print("ZYRE Node forced iface: ", string_at(iface) )
 
-        zyre_node.set_header (b"NAME", str(self.zyre.hplayer.name()).encode());
-        zyre_node.set_header (b"TS-PORT", str(self.timeserver.port).encode());
-        zyre_node.set_header (b"PUB-PORT", str(pub_port).encode());
+        zyre_node.set_name(str(self.zyre.hplayer.name()).encode())
+        zyre_node.set_header(b"TS-PORT", str(self.timeserver.port).encode())
+        zyre_node.set_header(b"PUB-PORT", str(pub_port).encode())
+
+        zyre_node.set_evasive_timeout(2000)
+        zyre_node.set_silent_timeout(4000)
+        zyre_node.set_expired_timeout(10000)
+
         zyre_node.start()
         zyre_node.join(b"broadcast")
         zyre_node.join(b"sync")
@@ -409,16 +480,24 @@ class ZyreNode ():
                     newpeer = {
                         'uuid':      e.peer_uuid(),
                         'ip':        extract_ip( e.peer_addr() ),
-                        'name':      e.header(b"NAME").decode(),
+                        'name':      e.peer_name().decode(),
                         'ts_port':   e.header(b"TS-PORT").decode(),
                         'pub_port':  e.header(b"PUB-PORT").decode()
                     }
                     self.peerbook.newpeer(newpeer)
 
+                # EVASIVE
+                elif e.type() == b"EVASIVE":
+                    self.zyre.log(extract_ip(e.peer_addr()), "is evasive..")
+
+                # SILENT
+                elif e.type() == b"SILENT":
+                    self.zyre.log(extract_ip(e.peer_addr()), "is silent..")
+
                 # EXIT
                 elif e.type() == b"EXIT":
                     self.peerbook.gone(e.peer_uuid())
-                    print( "ZYRE Node: peer is gone..")
+                    self.zyre.log(extract_ip(e.peer_addr()), "is gone..")
 
                 # JOIN
                 elif e.type() == b"JOIN":
@@ -493,8 +572,10 @@ class ZyreNode ():
 
                 elif command == b"PUBLISH":
                     topic = msg.popstr()
+                    myuuid = zyre_node.uuid()
                     data = msg.popstr()
                     Zmsg.sendm(topic, pub_sock)
+                    Zmsg.sendm(myuuid, pub_sock)
                     Zmsg.send(data, pub_sock )
 
 
@@ -514,8 +595,6 @@ class ZyreInterface (BaseInterface):
         super().__init__(hplayer, "ZYRE")
         self.node = ZyreNode(self, iface)
 
-        self._refreshMonitor = None
-
         # Answer to WHATSUP
         @self.on("event")
         def e(ev):
@@ -527,7 +606,7 @@ class ZyreInterface (BaseInterface):
         # Publish status
         @self.hplayer.on('status')
         def s(status):
-            self.node.publish('status', )
+            self.node.publish('status', status)
 
 
     def listen(self):
@@ -545,15 +624,18 @@ class ZyreInterface (BaseInterface):
         return self.node.peerbook.phonebook
 
     def enableMonitoring(self):
-        if self._refreshMonitor is None:
-            def mon():
-                self.node.broadcast("whatsup")
-                self._refreshMonitor = Timer(1, mon)
-                self._refreshMonitor.start()
-            # mon()
+        self.node.subscribeTo('status')
+
+    # def enableMonitoring(self):
+    #     if self._refreshMonitor is None:
+    #         def mon():
+    #             self.node.broadcast("whatsup")
+    #             self._refreshMonitor = Timer(1, mon)
+    #             self._refreshMonitor.start()
+    #         # mon()
     
-    def stopMonitoring(self):
-         if self._refreshMonitor is not None:
-            self._refreshMonitor.cancel()
-            self._refreshMonitor = None
+    # def stopMonitoring(self):
+    #      if self._refreshMonitor is not None:
+    #         self._refreshMonitor.cancel()
+    #         self._refreshMonitor = None
         
