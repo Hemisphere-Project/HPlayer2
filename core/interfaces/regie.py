@@ -97,20 +97,18 @@ class ThreadedHTTPServer(object):
         def filetree_send(*args):
             self.sendFileTree = True
 
-        @self.regieinterface.hplayer.on('zyre.peerstatus')
+        @self.regieinterface.hplayer.on('*.peer-status')
         def peerstatus_send(*args):
-            # send !
-            pass
+            socketio.emit('peer-status', args[0])
 
         # !!! TODO: stop zyre monitoring when every client are disconnected
 
         @socketio.on('connect')
         def client_connect():
-            print("web client connected")
             emit('fileTree', self.regieinterface.hplayer.files())
-
-            # enable monitor enquery
-            self.regieinterface.hplayer.interface('zyre').enableMonitoring()
+            
+            # enable peer monitoring
+            self.regieinterface.emit('peers-subscribe', 'peer-status')
             
             # Start update broadcaster
             global thread

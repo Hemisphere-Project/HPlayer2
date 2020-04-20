@@ -99,10 +99,12 @@ class MpvPlayer(BasePlayer):
             self._mpv_send('{ "command": ["observe_property", 2, "core-idle"] }')
             self._mpv_send('{ "command": ["observe_property", 3, "time-pos"] }')
             self._mpv_send('{ "command": ["observe_property", 4, "duration"] }')
+            
+            self.emit('status', self.status())
 
             # Receive
             while self.isRunning():
-
+    
                 # Listen socket
                 try:
                     msg = self._mpv_sock.recv(4096)

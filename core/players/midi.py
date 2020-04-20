@@ -38,6 +38,7 @@ class MidiPlayer(BasePlayer):
                break	
 
       self.emit('player-ready')	
+      self.emit('status', self.status())
 
       while self.isRunning():	
 
