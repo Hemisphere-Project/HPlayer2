@@ -345,7 +345,7 @@ class ZyreNode ():
         poller = Zpoller(self.zyre_sock, internal_pipe, self.publisher, self.timereply, None)
 
         # RUN
-        print('ZYRE Node started')
+        self.interface.log('Node started')
         internal_pipe.signal(0)
         terminated = False
         while not terminated:
@@ -389,7 +389,7 @@ class ZyreNode ():
 
                 # JOIN
                 elif e.type() == b"JOIN":
-                    print("ZYRE Node: peer join a group..", e.peer_name(), e.group().decode())
+                    # self.interface.log("peer join a group..", e.peer_name(), e.group().decode())
 
                     # SYNC clocks
                     if e.group() == b"sync":
@@ -398,7 +398,8 @@ class ZyreNode ():
 
                 # LEAVE
                 elif e.type() == b"LEAVE":
-                    print("ZYRE Node: peer left a group..")
+                    # self.interface.log("peer left a group..")
+                    pass
 
                 # SHOUT -> process event
                 elif e.type() == b"SHOUT" or e.type() == b"WHISPER":
@@ -426,12 +427,13 @@ class ZyreNode ():
                 if len(topic) > 0 and topic[0] == 1:
                     topic = topic[1:]
                     if topic in self.pub_cache:
-                        # print('XPUB lvc send for', topic.decode())
+                        # self.interface.log('XPUB lvc send for', topic.decode())
                         msg = Zmsg.dup(self.pub_cache[topic])
                         Zmsg.send(msg, self.publisher)
 
                     else:
-                        print('XPUB lvc empty for', topic.decode())
+                        # self.interface.log('XPUB lvc empty for', topic.decode())
+                        pass
 
             #
             # TIMESERVER event
@@ -456,7 +458,7 @@ class ZyreNode ():
 
         # self.zyre.stop()  # HANGS !
         internal_pipe.__del__()
-        print('ZYRE Node stopped')   # WEIRD: print helps the closing going smoothly..
+        self.interface.log('Node stopped')   # WEIRD: print helps the closing going smoothly..
         self.done = True
 
     def stop(self):
