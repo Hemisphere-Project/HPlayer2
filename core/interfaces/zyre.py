@@ -31,7 +31,7 @@ def zlist_strlist(zlist):
     return list
 
 
-
+PING_PEER = 1000
 
 PRECISION = 1000000
 SAMPLER_SIZE = 500
@@ -250,14 +250,30 @@ class Peer():
         for key in conf:
             setattr(self, key, conf[key])
 
+        self.link = 3   # 0: GONE / 1: SILENT / 2: EVASIVE / 3: OK
+        self.timerLink = None
+        self.linker(3)
+
         self.timeclient = None
         self.subscribers = None
 
     def stop(self):
+        if self.timerLink:
+            self.timerLink.cancel()
         if self.timeclient: 
             self.timeclient.stop()
         if self.subscribers: 
             self.subscribers.stop()
+
+    def linker(self, l):
+        if self.timerLink:
+            self.timerLink.cancel()
+            print ('timer cancelled')
+        self.link = l
+        print('set link', self.name, l)
+        if self.link < 3:
+            self.timerLink = Timer(PING_PEER*1.5/1000.0, self.linker, args=[l+1])
+            self.timerLink.start()
 
     def sync(self):
         self.timeclient = TimeClient(self.ip, self.ts_port)
@@ -308,10 +324,10 @@ class ZyreNode ():
         self.zyre.set_header(b"TS-PORT",  str(get_port(self.timereply)).encode())
         self.zyre.set_header(b"PUB-PORT", str(get_port(self.publisher)).encode())
 
-        self.zyre.set_interval(1000)
-        self.zyre.set_evasive_timeout(5000)
-        self.zyre.set_silent_timeout(8000)
-        self.zyre.set_expired_timeout(15000)
+        self.zyre.set_interval(PING_PEER)
+        self.zyre.set_evasive_timeout(PING_PEER*3)
+        self.zyre.set_silent_timeout(PING_PEER*6)
+        self.zyre.set_expired_timeout(PING_PEER*10)
 
         self.zyre.start()
         self.zyre.join(b"broadcast")
@@ -362,11 +378,12 @@ class ZyreNode ():
 
                 # ENTER: add to book for external contact (i.e. TimeSync)
                 if e.type() == b"ENTER":
-                    newpeer = Peer(self, e) 
-                    uuid = newpeer.uuid
                     if uuid in self.book:
+                        print ('Already exist: replacing')  ## !!! PROBELEM : REPLACE BY NAME, NOT UUID !
                         self.book[uuid].stop()
                         del self.book[uuid]
+
+                    newpeer = Peer(self, e) 
                     self.book[uuid] = newpeer
                     self.book[uuid].subscribe(self.topics)
 
@@ -374,11 +391,15 @@ class ZyreNode ():
                 elif e.type() == b"EVASIVE":
                     # self.interface.log(e.peer_name(), "is evasive..")
                     # e.print()
+                    # if uuid in self.book:
+                    #     self.book[uuid].linker(2)
                     pass
 
                 # SILENT
                 elif e.type() == b"SILENT":
                     self.interface.log(e.peer_name(), "is silent..")
+                    if uuid in self.book:
+                        self.book[uuid].linker(1)
 
                 # EXIT
                 elif e.type() == b"EXIT":

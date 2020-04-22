@@ -79,32 +79,42 @@ class ThreadedHTTPServer(object):
         #
         # SOCKETIO Routing
         #
-        
-        self.sendFileTree = None
+
+        self.sendLock = threading.Lock()
+        self.dataLock = threading.Lock()
+        self.dataLock.acquire()
+
+        self.sendEvent = None
+        self.sendData = None
+
+        def sendAsync(event, data):
+            self.sendLock.acquire()
+            self.sendEvent = event
+            self.sendData = data
+            self.dataLock.release()
 
         def background_thread():
             while True:
-                # socketio.emit('status', self.regieinterface.hplayer.players()[0].status())  # {'msg': 'yo', 'timestamp': time.gmtime()}
+                while self.dataLock.locked():
+                    socketio.sleep(0.1)
 
-                if self.sendFileTree is not None:
-                    socketio.emit('fileTree', self.regieinterface.hplayer.files())
-                    self.sendFileTree = None
-                    
-                socketio.sleep(0.5)
+                self.dataLock.acquire()
+                socketio.emit(self.sendEvent, self.sendData)
+                self.sendLock.release()
 
 
         @self.regieinterface.hplayer.on('files.dirlist-updated')
         def filetree_send(*args):
-            self.sendFileTree = True
+            sendAsync('fileTree', args[0])
 
         @self.regieinterface.hplayer.on('*.peer.status')
         def peerstatus_send(*args):
-            socketio.emit('peer.status', args[0])
+            sendAsync('peer.status', args[0])
+
 
         @self.regieinterface.hplayer.on('*.peer.settings')
         def peersettings_send(*args):
-            socketio.emit('peer.settings', args[0])
-            print('EMIT settings')
+            sendAsync('peer.settings', args[0])
 
         # !!! TODO: stop zyre monitoring when every client are disconnected
 
