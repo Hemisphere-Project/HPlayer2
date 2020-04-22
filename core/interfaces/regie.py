@@ -88,6 +88,8 @@ class ThreadedHTTPServer(object):
         self.sendData = None
 
         def sendAsync(event, data):
+            while self.sendLock.locked():
+                    socketio.sleep(0.01)
             self.sendLock.acquire()
             self.sendEvent = event
             self.sendData = data
@@ -97,11 +99,9 @@ class ThreadedHTTPServer(object):
             while True:
                 while self.dataLock.locked():
                     socketio.sleep(0.1)
-
                 self.dataLock.acquire()
                 socketio.emit(self.sendEvent, self.sendData)
                 self.sendLock.release()
-
 
         @self.regieinterface.hplayer.on('files.dirlist-updated')
         def filetree_send(*args):
@@ -111,50 +111,73 @@ class ThreadedHTTPServer(object):
         def peerstatus_send(*args):
             sendAsync('peer.status', args[0])
 
-
         @self.regieinterface.hplayer.on('*.peer.settings')
         def peersettings_send(*args):
             sendAsync('peer.settings', args[0])
+
+        @self.regieinterface.hplayer.on('*.peer.link')
+        def peersettings_send(*args):
+            sendAsync('peer.link', args[0])
+            pass
 
         # !!! TODO: stop zyre monitoring when every client are disconnected
 
         @socketio.on('connect')
         def client_connect():
             emit('fileTree', self.regieinterface.hplayer.files())
-            
-            # enable peer monitoring
-            self.regieinterface.emit('peers.subscribe', ['status', 'settings'])
-            
+                        
             # Start update broadcaster
             global thread
             with thread_lock:
                 if thread is None:
                     thread = socketio.start_background_task(target=background_thread)
+            
+            # enable peer monitoring
+            self.regieinterface.emit('peers.getlink')
+            self.regieinterface.emit('peers.subscribe', ['status', 'settings'])
 
-
-        @socketio.on('PLAY')
-        def play(data):
-            print("PLAY", data)
 
         @socketio.on('PLAYSEQ')
         def playseq(data):
             print("PLAYSEQ", data)
 
+        @socketio.on('STOPALL')
+        def playseq(data):
+            print("PLAYSEQ", data)
+
+        @socketio.on('PLAY')
+        def play(data):
+            print("PLAY", data)
+
+        @socketio.on('STOP')
+        def stop(data):
+            print("STOP", data)
+
         @socketio.on('MUTE')
         def mute(data):
             print("MUTE", data)
+
+        @socketio.on('UNMUTE')
+        def unmute(data):
+            print("UNMUTE", data)
 
         @socketio.on('LOOP')
         def loop(data):
             print("LOOP", data)
 
+        @socketio.on('UNLOOP')
+        def unloop(data):
+            print("UNLOOP", data)
+
         @socketio.on('PAUSE')
         def pause(data):
             print("PAUSE", data)
 
-        @socketio.on('STOP')
-        def stop(data):
-            print("STOP", data)
+        @socketio.on('RESUME')
+        def resume(data):
+            print("RESUME", data)
+
+        
 
         # prepare sub-thread
         self.server_thread = threading.Thread(target=lambda:socketio.run(app, host='0.0.0.0', port=port))

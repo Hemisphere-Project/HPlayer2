@@ -210,6 +210,12 @@ class Subscriber():
             if not sock:
                 continue
 
+            # INTERNAL commands
+            elif sock == internal_pipe:
+                msg = Zmsg.recv(internal_pipe)
+                if not msg or msg.popstr() == b"$TERM":
+                    break
+
             # SUB received
             elif sock == self.sub:
                 msg = Zmsg.recv(self.sub)
@@ -218,15 +224,10 @@ class Subscriber():
                 peer = self.node.peer(uuid)
                 name = peer.name if peer else uuid.decode()
                 data = json.loads(msg.popstr().decode())
-                arg = {'peer': name, 'data': data, 'at': int(time.time()*PRECISION)}
+                arg = {'name': name, 'data': data, 'at': int(time.time()*PRECISION)}
                 self.cache[topic] = arg
                 self.node.interface.emit(topic, arg)
 
-            # INTERNAL commands
-            elif sock == internal_pipe:
-                msg = Zmsg.recv(internal_pipe)
-                if not msg or msg.popstr() == b"$TERM":
-                    break
 
         internal_pipe.__del__()
         self.done = True
@@ -250,7 +251,7 @@ class Peer():
         for key in conf:
             setattr(self, key, conf[key])
 
-        self.link = 3   # 0: GONE / 1: SILENT / 2: EVASIVE / 3: OK
+        self.link = 0   # 0: GONE / 1: SILENT / 2: EVASIVE / 3: OK
         self.timerLink = None
         self.linker(3)
 
@@ -268,9 +269,11 @@ class Peer():
     def linker(self, l):
         if self.timerLink:
             self.timerLink.cancel()
-            print ('timer cancelled')
-        self.link = l
-        print('set link', self.name, l)
+        
+        if l != self.link:
+            self.link = l
+            self.node.interface.emit('peer.link', {'name': self.name, 'data': self.link})
+        
         if self.link < 3:
             self.timerLink = Timer(PING_PEER*1.5/1000.0, self.linker, args=[l+1])
             self.timerLink.start()
@@ -379,7 +382,7 @@ class ZyreNode ():
                 # ENTER: add to book for external contact (i.e. TimeSync)
                 if e.type() == b"ENTER":
                     if uuid in self.book:
-                        print ('Already exist: replacing')  ## !!! PROBELEM : REPLACE BY NAME, NOT UUID !
+                        # print ('Already exist: replacing')  ## !!! PROBLEM : Same name may appear with different uuid (not a real problem, only if crash and restart with new uuid in a short time..)
                         self.book[uuid].stop()
                         del self.book[uuid]
 
@@ -389,24 +392,21 @@ class ZyreNode ():
 
                 # EVASIVE
                 elif e.type() == b"EVASIVE":
-                    # self.interface.log(e.peer_name(), "is evasive..")
-                    # e.print()
                     # if uuid in self.book:
                     #     self.book[uuid].linker(2)
                     pass
 
                 # SILENT
                 elif e.type() == b"SILENT":
-                    self.interface.log(e.peer_name(), "is silent..")
                     if uuid in self.book:
                         self.book[uuid].linker(1)
 
                 # EXIT
                 elif e.type() == b"EXIT":
                     if uuid in self.book:
+                        self.book[uuid].linker(0)
                         self.book[uuid].stop()
                         del self.book[uuid]
-                    self.interface.log(e.peer_name(), "is gone..")
 
                 # JOIN
                 elif e.type() == b"JOIN":
@@ -500,9 +500,9 @@ class ZyreNode ():
 
     def subscribe(self, topics):
         if not isinstance(topics, list): topics = [topics]
-        list(set(self.topics) | set(topics))    # merge lists and remove duplicates
+        self.topics = list(set(self.topics) | set(topics))    # merge lists and remove duplicates
         for peer in self.book.values():
-            peer.subscribe(topics)
+            peer.subscribe(self.topics)
 
     def publish(self, topic, args=None):
         topic = topic.encode()
@@ -614,10 +614,16 @@ class ZyreInterface (BaseInterface):
         def se(*args):
             self.node.publish('peer.settings', args[0])
 
-        # Connect to peers
+        # Subscribe to peers
         @self.hplayer.on('*.peers.subscribe')
         def mon(*args):
             self.node.subscribe(*args)
+
+        # Trig peers link status
+        @self.hplayer.on('*.peers.getlink')
+        def links(*args):
+            for peer in self.node.book.values():
+                self.emit('peer.link', {'name': peer.name, 'data': peer.link})
 
 
     def listen(self):
