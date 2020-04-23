@@ -494,6 +494,11 @@ class ZyreNode ():
         if uuid in self.book:
             return self.book[uuid]
 
+    def peerByName(self, name):
+        for peer in self.book.values():
+            if peer.name == name:
+                return peer
+
     #
     # PUB/SUB
     #
@@ -537,7 +542,7 @@ class ZyreNode ():
 
     def whisper(self, uuid, event, args=None, delay_ms=0):
         data = self.makeMsg(event, args, delay_ms)
-        if uuid == 'self':
+        if uuid == self.zyre.uuid():
             data = json.loads(data.decode())
             data['from'] = 'self'
             data['group'] = 'whisper'
@@ -625,6 +630,16 @@ class ZyreInterface (BaseInterface):
             for peer in self.node.book.values():
                 self.emit('peer.link', {'name': peer.name, 'data': peer.link})
 
+        # Triggers event on peers
+        @self.hplayer.on('*.peers.triggers')
+        def trig(*args):
+            delay = args[1] if len(args) > 1 else 0
+            for ev in args[0]:
+                if 'peer' in ev:
+                    peer = self.node.peerByName(ev['peer'])
+                    self.node.whisper( peer.uuid, ev['event'], ev['data'], delay)
+                else:
+                    self.node.broadcast(ev['event'], ev['data'], delay)
 
     def listen(self):
         self.log( "interface ready")

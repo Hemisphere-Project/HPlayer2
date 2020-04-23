@@ -136,48 +136,10 @@ class ThreadedHTTPServer(object):
             self.regieinterface.emit('peers.getlink')
             self.regieinterface.emit('peers.subscribe', ['status', 'settings'])
 
+        @socketio.on('event')
+        def event(data):
+            self.regieinterface.emit('peers.triggers', data, 150)
 
-        @socketio.on('PLAYSEQ')
-        def playseq(data):
-            print("PLAYSEQ", data)
-
-        @socketio.on('STOPALL')
-        def playseq(data):
-            print("PLAYSEQ", data)
-
-        @socketio.on('PLAY')
-        def play(data):
-            print("PLAY", data)
-
-        @socketio.on('STOP')
-        def stop(data):
-            print("STOP", data)
-
-        @socketio.on('MUTE')
-        def mute(data):
-            print("MUTE", data)
-
-        @socketio.on('UNMUTE')
-        def unmute(data):
-            print("UNMUTE", data)
-
-        @socketio.on('LOOP')
-        def loop(data):
-            print("LOOP", data)
-
-        @socketio.on('UNLOOP')
-        def unloop(data):
-            print("UNLOOP", data)
-
-        @socketio.on('PAUSE')
-        def pause(data):
-            print("PAUSE", data)
-
-        @socketio.on('RESUME')
-        def resume(data):
-            print("RESUME", data)
-
-        
 
         # prepare sub-thread
         self.server_thread = threading.Thread(target=lambda:socketio.run(app, host='0.0.0.0', port=port))
