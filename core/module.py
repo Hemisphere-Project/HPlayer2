@@ -18,7 +18,7 @@ class Module(EventEmitterX):
         self.name = name.replace(" ", "_")
         self.nameP = colored(('['+self.name+']').ljust(10, ' ')+' ', color)
         self.hplayer = hplayer
-        self.logEvents = True
+        self.logEvents = False
 
     def log(self, *argv):
         with printlock:
