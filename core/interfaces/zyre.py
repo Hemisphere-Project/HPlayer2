@@ -222,7 +222,10 @@ class Subscriber():
                 topic = msg.popstr().decode()
                 uuid = msg.popstr()
                 peer = self.node.peer(uuid)
-                name = peer.name if peer else uuid.decode()
+                if not peer:
+                    print('INVALID message received: Unknown Publisher !')
+                    return
+                name = peer.name
                 data = json.loads(msg.popstr().decode())
                 arg = {'name': name, 'data': data, 'at': int(time.time()*PRECISION)}
                 self.cache[topic] = arg
@@ -598,7 +601,7 @@ class ZyreNode ():
 
     def preProcessor1(self, data):
         # if a programmed time is provided, correct it with peer CS
-        # Set timer
+        # Set timer        
         if 'at' in data:
             if self.peer(data['from']):
                 data['at'] -= self.peer(data['from']).clockshift()
@@ -607,7 +610,7 @@ class ZyreNode ():
             if delay <= 0:
                 self.preProcessor2(data)
             else:
-                self.interface.log('programmed event in', delay, 'seconds')
+                # self.interface.log('programmed event in', delay, 'seconds')
                 t = Timer( delay, self.preProcessor2, args=[data])
                 t.start()
                 self.interface.emit('planned', data)
@@ -618,7 +621,6 @@ class ZyreNode ():
     def preProcessor2(self, data):
         self.interface.emit('event', *[data])
         self.interface.emit(data['event'], *data['args'])
-
 
 
 #
@@ -664,6 +666,7 @@ class ZyreInterface (BaseInterface):
                 if 'peer' in ev:
                     peer = self.node.peerByName(ev['peer'])
                     if peer:
+                        # self.log('whisper', ev['event'], data)
                         self.node.whisper( peer.uuid, ev['event'], data, delay)
                 else:
                     self.node.broadcast(ev['event'], data, delay)
