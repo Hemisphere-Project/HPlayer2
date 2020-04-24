@@ -152,8 +152,9 @@ class MpvPlayer(BasePlayer):
                             else:
                                 pass
                         
-                        if 'name' not in mpvsays or mpvsays['name'] != 'time-pos':
-                            self.log("IPC event:", mpvsays)
+                        if self.doLog['recv']:
+                            if 'name' not in mpvsays or mpvsays['name'] != 'time-pos':
+                                self.log("IPC event:", mpvsays)
 
 
                 # Timeout: retry
@@ -181,7 +182,7 @@ class MpvPlayer(BasePlayer):
                 if self.doLog['cmds']:
                     self.log("cmds:", msg)
             except socket.error:
-                print (self.nameP, "socket send error:", msg)
+                self.log("socket send error:", msg)
                 self.isRunning(False)
         else:
             self.log("socket not connected, can't send \""+msg+"\"")

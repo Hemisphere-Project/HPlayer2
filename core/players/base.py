@@ -16,7 +16,10 @@ class BasePlayer(Module):
         self.name = "Player"
         self.settingspath = None
 
-        self.doLog = {'cmds': False}
+        self.doLog = {
+            'recv': True,
+            'cmds': True
+        }
 
         self._validExt = []
 
