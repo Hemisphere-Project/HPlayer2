@@ -138,6 +138,8 @@ class MpvPlayer(BasePlayer):
                                     self.emit('playing')
                                 elif self.status('isPaused'): 
                                     self.emit('paused')
+                                else: 
+                                    self.emit('stopped')
 
                             elif mpvsays['name'] == 'time-pos':
                                 if mpvsays['data']:
@@ -150,7 +152,8 @@ class MpvPlayer(BasePlayer):
                             else:
                                 pass
                         
-                        # self.log("IPC event:", mpvsays)
+                        if 'name' not in mpvsays or mpvsays['name'] != 'time-pos':
+                            self.log("IPC event:", mpvsays)
 
 
                 # Timeout: retry

@@ -633,7 +633,7 @@ class ZyreInterface (BaseInterface):
         # Publish self status
         @self.hplayer.on('player.playing')
         @self.hplayer.on('player.paused')
-        @self.hplayer.on('player.end')
+        @self.hplayer.on('player.stopped')
         def st(*args):
             self.node.publish('peer.status', self.hplayer.status())
 
