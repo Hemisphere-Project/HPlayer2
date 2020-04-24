@@ -125,7 +125,7 @@ class ThreadedHTTPServer(object):
 
         @socketio.on('event')
         def event(data):
-            print('event', data)
+            # print('event', data)
             self.regieinterface.emit('peers.triggers', data, 150)
 
 

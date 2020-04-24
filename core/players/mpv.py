@@ -20,6 +20,8 @@ class MpvPlayer(BasePlayer):
         self._mpv_recvThread = None
         self._mpv_socketpath = '/tmp/hplayer-' + name
 
+        self._mpv_lockedout = 0
+
     def log(self, *argv):
         print(self.nameP, *argv)    
 
@@ -112,6 +114,9 @@ class MpvPlayer(BasePlayer):
                     assert len(msg) != 0, "socket disconnected"
                     # print(len(msg))
 
+                    self.doLog['recv'] = False
+                    self.doLog['cmds'] = False
+
                     # self.log("IPC says:", msg.rstrip())
                     
                     # Message received
@@ -121,9 +126,6 @@ class MpvPlayer(BasePlayer):
                         except:
                             #self.log("IPC invalid json:", event)
                             pass
-
-                        if 'event' in mpvsays and mpvsays['event'] == 'playback-restart':
-                            self._mpv_send('{ "command": ["set_property", "pause", false] }')
                         
                         if 'name' in mpvsays:
 
@@ -135,15 +137,15 @@ class MpvPlayer(BasePlayer):
 
                                 if self.status('isPlaying'): 
                                     self.emit('playing')
-                                    self.log('play')
+                                    # self.log('play')
 
                                 elif self.status('isPaused'): 
                                     self.emit('paused')
-                                    self.log('pause')
+                                    # self.log('pause')
 
                                 else: 
                                     self.emit('stopped')
-                                    self.log('stop')
+                                    # self.log('stop')
 
                             elif mpvsays['name'] == 'time-pos':
                                 if mpvsays['data']:
@@ -162,6 +164,7 @@ class MpvPlayer(BasePlayer):
                                 pass
                         
                         if 'name' in mpvsays and mpvsays['name'] == 'time-pos':
+                            self._mpv_lockedout = 0
                             print('#', end ="")
 
                         if self.doLog['recv']:
@@ -172,6 +175,13 @@ class MpvPlayer(BasePlayer):
                 # Timeout: retry
                 except socket.timeout:
                     print('-', end ="")
+                    if self.status('isPlaying'):
+                        self.log('PLAYBACK LOCKED OUT', self._mpv_lockedout)
+                        self._mpv_send('{ "command": ["set_property", "pause", false] }')
+                        self._mpv_lockedout = self._mpv_lockedout + 1
+                        if self._mpv_lockedout > 1:
+                            print("CRASH STOP")
+                            self._mpv_send('{ "command": ["stop"] }')
                     pass
 
                 # Socket error: exit
@@ -257,6 +267,7 @@ class MpvPlayer(BasePlayer):
         self.update('isPaused', False)
         # self._mpv_send('{ "command": ["stop"] }')
         self._mpv_send('{ "command": ["loadfile", "'+path+'"] }')
+        self._mpv_send('{ "command": ["set_property", "pause", false] }')
 
     def _stop(self):
         self.update('isPaused', False)
