@@ -96,62 +96,12 @@ class ThreadedHTTPServer(object):
         @self.regieinterface.hplayer.on('files.dirlist-updated')
         def filetree_send(ev, *args):
             self.sendBuffer.put( ('fileTree', args[0]) )
-            
-        @self.regieinterface.hplayer.on('*.peer.status')
-        def peerstatus_send(ev, *args):
-            self.sendBuffer.put( ('peer.status', args[0]) )
 
-        @self.regieinterface.hplayer.on('*.peer.settings')
-        def peersettings_send(ev, *args):
-            self.sendBuffer.put( ('peer.settings', args[0]) )
+        @self.regieinterface.hplayer.on('*.peer.*')
+        def peer_send(ev, *args):
+            args[0].update({'type': ev.split('.')[-1]})
+            self.sendBuffer.put( ('dispo', args[0]) )
 
-        @self.regieinterface.hplayer.on('*.peer.link')
-        def peersettings_send(ev, *args):
-            self.sendBuffer.put( ('peer.link', args[0]) )
-            pass
-
-        ##
-
-
-        # self.sendLock = threading.Lock()
-        # self.dataLock = threading.Lock()
-        # self.dataLock.acquire()
-
-        # self.sendEvent = None
-        # self.sendData = None
-
-        # def sendAsync(event, data):
-        #     while self.sendLock.locked():
-        #             socketio.sleep(0.01)
-        #     self.sendLock.acquire()
-        #     self.sendEvent = event
-        #     self.sendData = data
-        #     self.dataLock.release()
-
-        # def background_thread():
-        #     while True:
-        #         while self.dataLock.locked():
-        #             socketio.sleep(0.1)
-        #         self.dataLock.acquire()
-        #         socketio.emit(self.sendEvent, self.sendData)
-        #         self.sendLock.release()
-
-        # @self.regieinterface.hplayer.on('files.dirlist-updated')
-        # def filetree_send(ev, *args):
-        #     sendAsync('fileTree', args[0])
-
-        # @self.regieinterface.hplayer.on('*.peer.status')
-        # def peerstatus_send(ev, *args):
-        #     sendAsync('peer.status', args[0])
-
-        # @self.regieinterface.hplayer.on('*.peer.settings')
-        # def peersettings_send(ev, *args):
-        #     sendAsync('peer.settings', args[0])
-
-        # @self.regieinterface.hplayer.on('*.peer.link')
-        # def peersettings_send(ev, *args):
-        #     sendAsync('peer.link', args[0])
-        #     pass
 
         # !!! TODO: stop zyre monitoring when every client are disconnected
 
