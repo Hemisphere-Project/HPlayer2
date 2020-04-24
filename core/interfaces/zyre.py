@@ -635,11 +635,14 @@ class ZyreInterface (BaseInterface):
         def trig(*args):
             delay = args[1] if len(args) > 1 else 0
             for ev in args[0]:
+                data = None
+                if 'data' in ev: 
+                    data = ev['data']
                 if 'peer' in ev:
                     peer = self.node.peerByName(ev['peer'])
-                    self.node.whisper( peer.uuid, ev['event'], ev['data'], delay)
+                    self.node.whisper( peer.uuid, ev['event'], data, delay)
                 else:
-                    self.node.broadcast(ev['event'], ev['data'], delay)
+                    self.node.broadcast(ev['event'], data, delay)
 
     def listen(self):
         self.log( "interface ready")
