@@ -251,6 +251,8 @@ class Peer():
         for key in conf:
             setattr(self, key, conf[key])
 
+        self.active = True
+
         self.link = 0   # 0: GONE / 1: SILENT / 2: EVASIVE / 3: OK
         self.timerLink = None
         self.linker(3)
@@ -259,6 +261,7 @@ class Peer():
         self.subscribers = None
 
     def stop(self):
+        self.active = False
         if self.timerLink:
             self.timerLink.cancel()
         if self.timeclient: 
@@ -267,6 +270,8 @@ class Peer():
             self.subscribers.stop()
 
     def linker(self, l):
+        if not self.active: return
+
         if self.timerLink:
             self.timerLink.cancel()
         
@@ -279,6 +284,7 @@ class Peer():
             self.timerLink.start()
 
     def sync(self):
+        if not self.active: return
         self.timeclient = TimeClient(self.ip, self.ts_port)
 
     def clockshift(self):
@@ -288,6 +294,7 @@ class Peer():
         return 0
 
     def subscribe(self, topics):
+        if not self.active: return
         if not isinstance(topics, list): topics = [topics]
         for t in topics:
             top = 'peer.'+t
@@ -329,7 +336,7 @@ class ZyreNode ():
 
         self.zyre.set_interval(PING_PEER)
         self.zyre.set_evasive_timeout(PING_PEER*3)
-        self.zyre.set_silent_timeout(PING_PEER*6)
+        self.zyre.set_silent_timeout(PING_PEER*5)
         self.zyre.set_expired_timeout(PING_PEER*10)
 
         self.zyre.start()
@@ -371,7 +378,7 @@ class ZyreNode ():
             sock = poller.wait(500)
             if not sock:
                 continue
-
+            
             #
             # ZYRE receive
             #
@@ -379,14 +386,28 @@ class ZyreNode ():
                 e = ZyreEvent(self.zyre)
                 uuid = e.peer_uuid()
 
+                # self.interface.log("ZYREmsg", uuid, e.peer_name().decode(), e.type().decode())
+
                 # ENTER: add to book for external contact (i.e. TimeSync)
                 if e.type() == b"ENTER":
-                    if uuid in self.book:
-                        # print ('Already exist: replacing')  ## PROBLEM : Same name may appear with different uuid (not a real problem, only if crash and restart with new uuid in a short time..)
-                        self.book[uuid].stop()
-                        del self.book[uuid]
-
                     newpeer = Peer(self, e) 
+
+                    existing = None
+
+                    if uuid in self.book:
+                        # print ('UUID already exist: replacing')  ## PROBLEM : Same name may appear with different uuid (not a real problem, only if crash and restart with new uuid in a short time..)
+                        self.book[uuid].stop()
+                        existing=uuid
+                    
+                    for p in self.book.values():
+                        if p.name == newpeer.name:
+                            # print ('Name already exist: replacing')
+                            p.stop()
+                            existing=p.uuid
+                    
+                    if existing:
+                        del self.book[existing]
+
                     self.book[uuid] = newpeer
                     self.book[uuid].subscribe(self.topics)
 
@@ -491,12 +512,12 @@ class ZyreNode ():
         self.timereply.__del__()
 
     def peer(self, uuid):
-        if uuid in self.book:
+        if uuid in self.book and self.book[uuid].active:
             return self.book[uuid]
 
     def peerByName(self, name):
         for peer in self.book.values():
-            if peer.name == name:
+            if peer.active and peer.name == name:
                 return peer
 
     #
@@ -642,7 +663,8 @@ class ZyreInterface (BaseInterface):
                     data = ev['data']
                 if 'peer' in ev:
                     peer = self.node.peerByName(ev['peer'])
-                    self.node.whisper( peer.uuid, ev['event'], data, delay)
+                    if peer:
+                        self.node.whisper( peer.uuid, ev['event'], data, delay)
                 else:
                     self.node.broadcast(ev['event'], data, delay)
 

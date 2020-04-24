@@ -4,7 +4,7 @@ import eventlet
 from flask import Flask, render_template, session, request, send_from_directory
 from flask_socketio import SocketIO, emit, join_room, leave_room, close_room, rooms, disconnect
 from werkzeug.utils import secure_filename
-import threading, os, time
+import threading, os, time, queue
 import logging
 
 from ..engine.network import get_allip, get_hostname
@@ -80,45 +80,78 @@ class ThreadedHTTPServer(object):
         # SOCKETIO Routing
         #
 
-        self.sendLock = threading.Lock()
-        self.dataLock = threading.Lock()
-        self.dataLock.acquire()
-
-        self.sendEvent = None
-        self.sendData = None
-
-        def sendAsync(event, data):
-            while self.sendLock.locked():
-                    socketio.sleep(0.01)
-            self.sendLock.acquire()
-            self.sendEvent = event
-            self.sendData = data
-            self.dataLock.release()
+        self.sendBuffer = queue.Queue()
 
         def background_thread():
             while True:
-                while self.dataLock.locked():
+                try:
+                    task = self.sendBuffer.get_nowait()
+                    if len(task) > 1: socketio.emit(task[0], task[1])
+                    else: socketio.emit(task[0], None)
+                    self.sendBuffer.task_done()
+                except queue.Empty:
                     socketio.sleep(0.1)
-                self.dataLock.acquire()
-                socketio.emit(self.sendEvent, self.sendData)
-                self.sendLock.release()
+
 
         @self.regieinterface.hplayer.on('files.dirlist-updated')
         def filetree_send(ev, *args):
-            sendAsync('fileTree', args[0])
-
+            self.sendBuffer.put( ('fileTree', args[0]) )
+            
         @self.regieinterface.hplayer.on('*.peer.status')
         def peerstatus_send(ev, *args):
-            sendAsync('peer.status', args[0])
+            self.sendBuffer.put( ('peer.status', args[0]) )
 
         @self.regieinterface.hplayer.on('*.peer.settings')
         def peersettings_send(ev, *args):
-            sendAsync('peer.settings', args[0])
+            self.sendBuffer.put( ('peer.settings', args[0]) )
 
         @self.regieinterface.hplayer.on('*.peer.link')
         def peersettings_send(ev, *args):
-            sendAsync('peer.link', args[0])
+            self.sendBuffer.put( ('peer.link', args[0]) )
             pass
+
+        ##
+
+
+        # self.sendLock = threading.Lock()
+        # self.dataLock = threading.Lock()
+        # self.dataLock.acquire()
+
+        # self.sendEvent = None
+        # self.sendData = None
+
+        # def sendAsync(event, data):
+        #     while self.sendLock.locked():
+        #             socketio.sleep(0.01)
+        #     self.sendLock.acquire()
+        #     self.sendEvent = event
+        #     self.sendData = data
+        #     self.dataLock.release()
+
+        # def background_thread():
+        #     while True:
+        #         while self.dataLock.locked():
+        #             socketio.sleep(0.1)
+        #         self.dataLock.acquire()
+        #         socketio.emit(self.sendEvent, self.sendData)
+        #         self.sendLock.release()
+
+        # @self.regieinterface.hplayer.on('files.dirlist-updated')
+        # def filetree_send(ev, *args):
+        #     sendAsync('fileTree', args[0])
+
+        # @self.regieinterface.hplayer.on('*.peer.status')
+        # def peerstatus_send(ev, *args):
+        #     sendAsync('peer.status', args[0])
+
+        # @self.regieinterface.hplayer.on('*.peer.settings')
+        # def peersettings_send(ev, *args):
+        #     sendAsync('peer.settings', args[0])
+
+        # @self.regieinterface.hplayer.on('*.peer.link')
+        # def peersettings_send(ev, *args):
+        #     sendAsync('peer.link', args[0])
+        #     pass
 
         # !!! TODO: stop zyre monitoring when every client are disconnected
 
