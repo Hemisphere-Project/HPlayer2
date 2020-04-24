@@ -218,14 +218,14 @@ class HPlayer2(EventEmitterX):
         @module.on('playonce')
         def playonce(ev, *args):
             if len(args) > 0:
-                loop(0)
-                play(*args)
+                loop(ev, 0)
+                play(ev, *args)
 
         @module.on('playloop')
         def playloop(ev, *args):
             if len(args) > 0:
-                loop(2)
-                play(*args)
+                loop(ev, 2)
+                play(ev, *args)
 
         @module.on('load')
         def load(ev, *args):
