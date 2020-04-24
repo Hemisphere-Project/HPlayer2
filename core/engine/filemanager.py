@@ -20,7 +20,7 @@ class FileManager(Module):
         
         @self.on('file-changed')                # file changed on disk -> trigger full refresh
         @self.hplayer.on('player-added')        # new player means new authorized extension -> trigger list refresh
-        def deferredUpdate(*args):
+        def deferredUpdate(ev, *args):
             if self.refreshTimer:
                 self.refreshTimer.cancel()
             self.refreshTimer = Timer(.5, self.refresh)

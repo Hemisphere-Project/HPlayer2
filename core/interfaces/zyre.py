@@ -382,7 +382,7 @@ class ZyreNode ():
                 # ENTER: add to book for external contact (i.e. TimeSync)
                 if e.type() == b"ENTER":
                     if uuid in self.book:
-                        # print ('Already exist: replacing')  ## !!! PROBLEM : Same name may appear with different uuid (not a real problem, only if crash and restart with new uuid in a short time..)
+                        # print ('Already exist: replacing')  ## PROBLEM : Same name may appear with different uuid (not a real problem, only if crash and restart with new uuid in a short time..)
                         self.book[uuid].stop()
                         del self.book[uuid]
 
@@ -610,29 +610,31 @@ class ZyreInterface (BaseInterface):
         self.node = ZyreNode(self, netiface)
 
         # Publish self status
-        @self.hplayer.on('status')
+        @self.hplayer.on('player.playing')
+        @self.hplayer.on('player.paused')
+        @self.hplayer.on('player.end')
         def st(*args):
-            self.node.publish('peer.status', args[0])
+            self.node.publish('peer.status', self.hplayer.status())
 
-        # Publish self status
+        # Publish self settings
         @self.hplayer.on('settings.updated')
-        def se(*args):
-            self.node.publish('peer.settings', args[0])
+        def se(ev, settings):
+            self.node.publish('peer.settings', settings)
 
         # Subscribe to peers
         @self.hplayer.on('*.peers.subscribe')
-        def mon(*args):
-            self.node.subscribe(*args)
+        def mon(ev, topics):
+            self.node.subscribe(topics)
 
         # Trig peers link status
         @self.hplayer.on('*.peers.getlink')
-        def links(*args):
+        def links(ev):
             for peer in self.node.book.values():
                 self.emit('peer.link', {'name': peer.name, 'data': peer.link})
 
         # Triggers event on peers
         @self.hplayer.on('*.peers.triggers')
-        def trig(*args):
+        def trig(ev, *args):
             delay = args[1] if len(args) > 1 else 0
             for ev in args[0]:
                 data = None

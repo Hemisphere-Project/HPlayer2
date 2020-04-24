@@ -104,19 +104,19 @@ class ThreadedHTTPServer(object):
                 self.sendLock.release()
 
         @self.regieinterface.hplayer.on('files.dirlist-updated')
-        def filetree_send(*args):
+        def filetree_send(ev, *args):
             sendAsync('fileTree', args[0])
 
         @self.regieinterface.hplayer.on('*.peer.status')
-        def peerstatus_send(*args):
+        def peerstatus_send(ev, *args):
             sendAsync('peer.status', args[0])
 
         @self.regieinterface.hplayer.on('*.peer.settings')
-        def peersettings_send(*args):
+        def peersettings_send(ev, *args):
             sendAsync('peer.settings', args[0])
 
         @self.regieinterface.hplayer.on('*.peer.link')
-        def peersettings_send(*args):
+        def peersettings_send(ev, *args):
             sendAsync('peer.link', args[0])
             pass
 
@@ -124,6 +124,10 @@ class ThreadedHTTPServer(object):
 
         @socketio.on('connect')
         def client_connect():
+            self.regieinterface.log('New Remote Regie connected')
+
+        @socketio.on('init')
+        def init(data):
             emit('fileTree', self.regieinterface.hplayer.files())
                         
             # Start update broadcaster

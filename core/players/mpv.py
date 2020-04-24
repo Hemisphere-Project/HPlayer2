@@ -134,6 +134,11 @@ class MpvPlayer(BasePlayer):
                             elif mpvsays['name'] == 'core-idle':
                                 self.update('isPlaying', not mpvsays['data'])
 
+                                if self.status('isPlaying'): 
+                                    self.emit('playing')
+                                elif self.status('isPaused'): 
+                                    self.emit('paused')
+
                             elif mpvsays['name'] == 'time-pos':
                                 if mpvsays['data']:
                                     self.update('time', round(float(mpvsays['data']),2))
@@ -258,14 +263,12 @@ class MpvPlayer(BasePlayer):
             self._mpv_send('{ "command": ["seek", "'+str(milli/1000)+'", "relative"] }')
         # self.log("seek to", milli/1000)
 
-    def _applyVolume(self, volume, settings):
-        if settings['mute']:
-            volume = 0
+    def _applyVolume(self, volume):
         self._mpv_send('{ "command": ["set_property", "volume", '+str(volume)+'] }')
         self.log("VOLUME to", volume)
 
-    def _applyPan(self, pan, settings):
-        if settings['audiomode'] == 'mono':
+    def _applyPan(self, pan):
+        if pan == 'mono':
             self._mpv_send('{"command": ["set_property", "af", "lavfi=[pan=stereo|c0=.5*c0+.5*c1|c1=.5*c0+.5*c1]"]}')            
         else:
             left = pan[0]/100.0
@@ -273,7 +276,7 @@ class MpvPlayer(BasePlayer):
             self._mpv_send('{"command": ["set_property", "af", "lavfi=[pan=stereo|c0='+str(left)+'*c0|c1='+str(right)+'*c1]"]}')
             self.log("PAN to", left, right, '{"command": ["set_property", "af", "lavfi=[pan=stereo|c0='+str(left)+'*c0|c1='+str(right)+'*c1]"]}')
     
-    def _applyFlip(self, flip, settings):
+    def _applyFlip(self, flip):
         if flip:
             # self._mpv_send('{ "command": ["vf", "add", "mirror"] }')
             pass

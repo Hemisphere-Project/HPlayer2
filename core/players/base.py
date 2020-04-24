@@ -60,9 +60,7 @@ class BasePlayer(Module):
 
     # Status SET 
     def update(self, key, value):
-        self._status[key] = value
-        if key != 'time':
-            self.emit('status', self.status())
+        self._status[key] = value  
 
     # SET/GET is running
     def isRunning(self, state=None):
@@ -112,34 +110,28 @@ class BasePlayer(Module):
         self._play(media)
         self.update('media', media)
         self.update('time', 0)
-        self.emit('playing', media)
 
     # STOP Playback
     def stop(self):
         self._stop()
         self.update('media', None)
         self.update('time', 0)
-        self.emit('stopped')
 
     # PAUSE Playback
     def pause(self):
         self._pause()
-        self.emit('paused')
 
     # RESUME Playback
     def resume(self):
         self._resume()
-        self.emit('resumed')
 
      # SEEK to position
     def seekTo(self, milli):
         self._seekTo(milli)
-        self.emit('seekedto', milli)
 
     # SKIP time
     def skip(self, milli):
         self._skip(milli)
-        self.emit('skipped', milli)
 
     #
     # Player INTERNAL actions: Methods to overwrite !
@@ -154,39 +146,36 @@ class BasePlayer(Module):
     def _play(self, path):
         self.update('isPlaying', True)
         self.log("play", path)
+        self.emit('playing', path)
 
     def _stop(self):
         self.update('isPlaying', False)
         self.log("stop")
+        self.emit('stopped')
 
     def _pause(self):
         self.update('isPaused', True)
         self.log("pause")
+        self.emit('paused')
 
     def _resume(self):
         self.update('isPaused', False)
         self.log("resume")
+        self.emit('resumed')
 
     def _seekTo(self, milli):
         self.log("seek to", milli)
+        self.emit('seekedto', milli)
 
     def _skip(self, milli):
         self.log("skip", milli)
+        self.emit('skipped', milli)
 
-    def _applyVolume(self, volume, settings):
-        if not settings['mute']:
-            self.log("volume set to", volume)
-        else:
-            self.log("volume muted")
+    def _applyVolume(self, volume):
+        self.log("volume set to", volume)
 
-    def _applyPan(self, pan, settings):
-        if settings['audiomode'] == 'mono':
-            self.log("audio mode is mono")
-        else:
-            self.log("pan set to", pan)
+    def _applyPan(self, pan):
+        self.log("pan set to", pan)
 
-    def _applyFlip(self, flip, settings):
-        if flip:
-            self.log("screen flipped")
-        else:
-            self.log("screen not flipped")
+    def _applyFlip(self, flip):
+        self.log("screen flip", flip)

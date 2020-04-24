@@ -250,14 +250,14 @@ class TelecoInterface (BaseInterface):
         
         @self.on('ready')
         @self.hplayer.files.on('filelist-updated')
-        def updatelist(*args):
+        def updatelist(ev, *args):
             self.microOffset = 0
             self.microIndex = 0
             self.microList = self.hplayer.files.currentList(True)[self.microOffset:][:4]
 
 
         @self.hplayer.on('app-closing')
-        def closing(*args):
+        def closing(ev, *args):
             self.off_all()
             self.page(PAGE_EXIT)
             self.refresh()
@@ -267,7 +267,7 @@ class TelecoInterface (BaseInterface):
         #  
 
         @self.on('MUTE-up')
-        def mute_d():
+        def mute_d(ev):
             if self.isFaded == 0:   
                 self.emit('fade')
                 self.isFaded = 1
@@ -276,14 +276,14 @@ class TelecoInterface (BaseInterface):
                 self.isFaded = 0
 
         @self.on('MUTE-hold')
-        def mute_h():
+        def mute_h(ev):
             self._muteHolded = True
             if self.isFaded < 2:
                 self.emit('fade', 1.0, 1.0, 1.0, 1.0)
                 self.isFaded = 2
 
         @self.on('MUTE-holdup')
-        def mute_hu():
+        def mute_hu(ev):
             self._muteHolded = False
 
         #
@@ -291,7 +291,7 @@ class TelecoInterface (BaseInterface):
         #   
 
         @self.on('FUNC-down')
-        def func_push():
+        def func_push(ev):
             self.clear()
             if self.activePage < PAGE_MAX:
                 self.activePage += 1
@@ -309,7 +309,7 @@ class TelecoInterface (BaseInterface):
 
 
         @self.on('FUNC-hold')
-        def func_hold():
+        def func_hold(ev):
             self.activePage = PAGE_STATUS
             if self._muteHolded:
                 self.emit('hardreset')
@@ -320,19 +320,19 @@ class TelecoInterface (BaseInterface):
             
         @self.on('UP-down')
         @self.on('UP-hold')
-        def up():
+        def up(ev):
             if self.activePage == PAGE_MEDIA:
                 self.scrollUp()
 
         
         @self.on('UP-up')
-        def upu():
+        def upu(ev):
             if self.activePage == PAGE_PLAYBACK:
                 self.emit('prev')
 
 
         @self.on('UP-hold')
-        def uph():
+        def uph(ev):
             if self.activePage == PAGE_PLAYBACK:
                 self.emit('skip', -1000)            
 
@@ -342,19 +342,19 @@ class TelecoInterface (BaseInterface):
         
         @self.on('DOWN-down')
         @self.on('DOWN-hold')
-        def down():
+        def down(ev):
             if self.activePage == PAGE_MEDIA:
                 self.scrollDown()
 
         
         @self.on('DOWN-up')
-        def downu():
+        def downu(ev):
             if self.activePage == PAGE_PLAYBACK:
                 self.emit('next')
 
 
         @self.on('DOWN-hold')
-        def downh():
+        def downh(ev):
             if self.activePage == PAGE_PLAYBACK:
                 self.emit('skip', 1000)         
         #
@@ -362,7 +362,7 @@ class TelecoInterface (BaseInterface):
         #  
 
         @self.on('A-down')
-        def a():
+        def a(ev):
             if self.activePage == PAGE_PLAYBACK:
                 if self.hplayer.activePlayer().isPlaying():
                     self.emit('resume') if self.hplayer.activePlayer().isPaused() else self.emit('pause')
@@ -376,7 +376,7 @@ class TelecoInterface (BaseInterface):
 
 
         @self.on('A-hold')
-        def ah():
+        def ah(ev):
             if self.activePage == PAGE_PLAYBACK:
                 if self.hplayer.activePlayer().isPlaying():
                     self.emit('stop')
@@ -387,13 +387,13 @@ class TelecoInterface (BaseInterface):
         #        
 
         @self.on('B-down')
-        def b():
+        def b(ev):
             if self.activePage == PAGE_PLAYBACK:
                 self.emit('loop', -1) if self.hplayer.settings('loop') > 0 else self.emit('loop', 1)
 
 
         @self.on('B-hold')
-        def bh():
+        def bh(ev):
             if self.activePage == PAGE_PLAYBACK:
                 if self.hplayer.settings('loop') < 2: 
                     self.emit('loop', 2)
@@ -405,7 +405,7 @@ class TelecoInterface (BaseInterface):
 
         @self.on('C-down')
         @self.on('C-hold')
-        def c():
+        def c(ev):
             if self.activePage == PAGE_PLAYBACK:
                 self.emit('volume', self.hplayer.settings('volume')-1)
 
@@ -419,7 +419,7 @@ class TelecoInterface (BaseInterface):
 
         @self.on('D-down')
         @self.on('D-hold')
-        def d():
+        def d(ev):
             if self.activePage == PAGE_PLAYBACK:
                 self.emit('volume', self.hplayer.settings('volume')+1)
 
