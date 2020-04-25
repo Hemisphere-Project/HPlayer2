@@ -170,6 +170,7 @@ class TimeClient():
 class Subscriber():
     def __init__(self, node, ip, port, topic):
         self.node = node
+        self.cache = {}
 
         self.sub = Zsock.new_sub(("tcp://"+ip+":"+port).encode(), topic.encode())
 
@@ -177,7 +178,7 @@ class Subscriber():
         self.done = True
         self.start()
 
-        print("Subscribing to", ip)
+        # self.node.interface.log("Subscribing to", ip)
 
     def start(self):
         if not self.done: 
@@ -217,7 +218,8 @@ class Subscriber():
                 peer = self.node.peer(uuid)
                 name = peer.name if peer else uuid.decode()
                 data = json.loads(msg.popstr().decode())
-                arg = {'peer': name, 'data': data}
+                arg = {'peer': name, 'data': data, 'at': int(time.time()*PRECISION)}
+                self.cache[topic] = arg
                 self.node.interface.emit(topic, arg)
 
             # INTERNAL commands
@@ -315,19 +317,17 @@ class ZyreNode ():
         self.zyre.join(b"broadcast")
         self.zyre.join(b"sync")
 
-        self.zyre_sock = self.zyre.socket()
-
         # Add self to book
         self.book[self.zyre.uuid()] = Peer(self, {
             'uuid':         self.zyre.uuid(),
-            'name':         self.zyre.name(),
+            'name':         self.zyre.name().decode(),
             'ip':           '127.0.0.1',
             'ts_port':      get_port(self.timereply),
             'pub_port':     get_port(self.publisher)
         }) 
         self.book[self.zyre.uuid()].subscribe(self.topics)
 
-        # Start Node poller
+        # Start Poller
         self._actor_fn = zactor_fn(self.actor_fn) # ctypes function reference must live as long as the actor.
         if netiface:
             netiface = create_string_buffer(str.encode(netiface))
@@ -342,7 +342,7 @@ class ZyreNode ():
         internal_pipe = Zsock(pipe, False) # We don't own the pipe, so False.
 
         # Poller
-        poller = Zpoller(self.zyre_sock, internal_pipe, self.publisher, self.timereply, None)
+        poller = Zpoller(self.zyre.socket(), internal_pipe, self.publisher, self.timereply, None)
 
         # RUN
         self.interface.log('Node started')
@@ -356,7 +356,7 @@ class ZyreNode ():
             #
             # ZYRE receive
             #
-            if sock == self.zyre_sock:
+            if sock == self.zyre.socket():
                 e = ZyreEvent(self.zyre)
                 uuid = e.peer_uuid()
 
@@ -431,9 +431,8 @@ class ZyreNode ():
                         msg = Zmsg.dup(self.pub_cache[topic])
                         Zmsg.send(msg, self.publisher)
 
-                    else:
-                        # self.interface.log('XPUB lvc empty for', topic.decode())
-                        pass
+                    # else:
+                    #     self.interface.log('XPUB lvc empty for', topic.decode())
 
             #
             # TIMESERVER event
@@ -466,7 +465,6 @@ class ZyreNode ():
             peer.stop()
         if not self.done:
             self.actor.sock().send(b"ss", b"$TERM", "gone")
-            # self.interface.log('ZYRE term sent')
         self.zyre.__del__()
         self.publisher.__del__()
         self.timereply.__del__()
@@ -485,8 +483,7 @@ class ZyreNode ():
         for peer in self.book.values():
             peer.subscribe(topics)
 
-    def publish(self, topic, args=None, delay_ms=0):
-        # self.actor.sock().send(b"sss", b"PUBLISH", topic.encode(), json.dumps(args).encode())
+    def publish(self, topic, args=None):
         topic = topic.encode()
         
         msg = Zmsg()

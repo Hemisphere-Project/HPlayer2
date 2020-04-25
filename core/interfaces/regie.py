@@ -104,6 +104,7 @@ class ThreadedHTTPServer(object):
         @self.regieinterface.hplayer.on('*.peer.settings')
         def peersettings_send(*args):
             socketio.emit('peer.settings', args[0])
+            print('EMIT settings')
 
         # !!! TODO: stop zyre monitoring when every client are disconnected
 

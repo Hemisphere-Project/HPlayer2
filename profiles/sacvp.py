@@ -18,7 +18,7 @@ video = hplayer.addPlayer('mpv', 'video')
 # Interfaces
 # hplayer.addInterface('osc', 1222, 3737)
 hplayer.addInterface('zyre')
-# hplayer.addInterface('http2', 8080)
+hplayer.addInterface('http2', 8080)
 # hplayer.addInterface('keyboard')
 # hplayer.addInterface('teleco')
 hplayer.addInterface('regie', 9111)
