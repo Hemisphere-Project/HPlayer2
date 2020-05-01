@@ -111,21 +111,25 @@ class BasePlayer(Module):
     # Play Media
     def play(self, media):
         self._play(media)
+        self.update('isPaused', False)
         self.update('media', media)
         self.update('time', 0)
 
     # STOP Playback
     def stop(self):
         self._stop()
+        self.update('isPaused', False)
         self.update('media', None)
         self.update('time', 0)
 
     # PAUSE Playback
     def pause(self):
+        self.update('isPaused', True)
         self._pause()
 
     # RESUME Playback
     def resume(self):
+        self.update('isPaused', False)
         self._resume()
 
      # SEEK to position
@@ -147,22 +151,18 @@ class BasePlayer(Module):
         self.log("quit")
 
     def _play(self, path):
-        self.update('isPlaying', True)
         self.log("play", path)
         self.emit('playing', path)
 
     def _stop(self):
-        self.update('isPlaying', False)
         self.log("stop")
         self.emit('stopped')
 
     def _pause(self):
-        self.update('isPaused', True)
         self.log("pause")
         self.emit('paused')
 
     def _resume(self):
-        self.update('isPaused', False)
         self.log("resume")
         self.emit('resumed')
 

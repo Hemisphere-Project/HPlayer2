@@ -16,8 +16,6 @@ class MidiPlayer(BasePlayer):
       self._midiFile = None	
       self._runflag = threading.Event()	
 
-   def log(self, *argv):	
-      print(self.nameP, *argv)	
 
    ############	
    ## private METHODS	
