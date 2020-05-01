@@ -41,23 +41,25 @@ else
     if [[ $(uname -m) = armv* ]]; then
         echo --enable-mmal  > ffmpeg_options
         echo --enable-omx-rpi >> ffmpeg_options
-        # echo --enable-libv4l2 > ffmpeg_options
-        # echo --disable-vaapi > mpv_options
-        echo --enable-rpi-mmal > mpv_options
+        echo --enable-libv4l2 >> ffmpeg_options
+
+        echo --enable-rpi > mpv_options
+        echo --enable-rpi-mmal >> mpv_options
+        # echo --disable-vaapi >> mpv_options
     fi
 
     # Build
-    ./use-mpv-release
-    ./use-ffmpeg-release
+    # ./use-mpv-release
+    # ./use-ffmpeg-release
 
     # fixed rebuild
     set -e
     export LC_ALL=C
-    ./update
-    ./clean
+    # ./update
+    # ./clean
     
     #cd mpv 
-    #git checkout refs/tags/"v0.29.1"    # 0.30.0 release is broken on RPi
+    #git checkout refs/tags/"v0.28.2"    # 0.30.0 release is broken on RPi / 0.29.1 has random freeze
     #cd ..
 
     if [[ $(uname -m) = armv* ]]; then

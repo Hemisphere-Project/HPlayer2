@@ -137,7 +137,7 @@ class MpvPlayer(BasePlayer):
 
                                 if self.status('isPlaying'): 
                                     self.emit('playing')
-                                    # self.log('play')
+                                    self.log('play')
 
                                 elif self.status('isPaused'): 
                                     self.emit('paused')
@@ -145,7 +145,7 @@ class MpvPlayer(BasePlayer):
 
                                 else: 
                                     self.emit('stopped')
-                                    # self.log('stop')
+                                    self.log('stop')
 
                             elif mpvsays['name'] == 'time-pos':
                                 if mpvsays['data']:
@@ -263,7 +263,7 @@ class MpvPlayer(BasePlayer):
 
 
     def _play(self, path):
-        self.log("play", path)
+        # self.log("play", path)
         self.update('isPaused', False)
         # self._mpv_send('{ "command": ["stop"] }')
         self._mpv_send('{ "command": ["loadfile", "'+path+'"] }')

@@ -222,14 +222,15 @@ class Subscriber():
                 topic = msg.popstr().decode()
                 uuid = msg.popstr()
                 peer = self.node.peer(uuid)
-                if not peer:
+                if peer:
+                    name = peer.name
+                    data = json.loads(msg.popstr().decode())
+                    arg = {'name': name, 'data': data, 'at': int(time.time()*PRECISION)}
+                    self.cache[topic] = arg
+                    self.node.interface.emit(topic, arg)
+                else:
                     print('INVALID message received: Unknown Publisher !')
-                    return
-                name = peer.name
-                data = json.loads(msg.popstr().decode())
-                arg = {'name': name, 'data': data, 'at': int(time.time()*PRECISION)}
-                self.cache[topic] = arg
-                self.node.interface.emit(topic, arg)
+                
 
 
         internal_pipe.__del__()
@@ -637,6 +638,7 @@ class ZyreInterface (BaseInterface):
         @self.hplayer.on('player.paused')
         @self.hplayer.on('player.stopped')
         def st(*args):
+            # print('peer.status', self.hplayer.status())
             self.node.publish('peer.status', self.hplayer.status())
 
         # Publish self settings
@@ -666,8 +668,10 @@ class ZyreInterface (BaseInterface):
                 if 'peer' in ev:
                     peer = self.node.peerByName(ev['peer'])
                     if peer:
-                        # self.log('whisper', ev['event'], data)
+                        self.log('whisper', ev['peer'], ev['event'], data)
                         self.node.whisper( peer.uuid, ev['event'], data, delay)
+                    else:
+                        self.log('peer is missing', ev['peer'])
                 else:
                     self.node.broadcast(ev['event'], data, delay)
 
