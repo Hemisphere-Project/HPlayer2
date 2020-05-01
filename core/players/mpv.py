@@ -121,6 +121,9 @@ class MpvPlayer(BasePlayer):
                         except:
                             #self.log("IPC invalid json:", event)
                             pass
+
+                        if 'event' in mpvsays and mpvsays['event'] == 'playback-restart':
+                            self._mpv_send('{ "command": ["set_property", "pause", false] }')
                         
                         if 'name' in mpvsays:
 
@@ -133,9 +136,6 @@ class MpvPlayer(BasePlayer):
                                 if self.status('isPlaying'): 
                                     self.emit('playing')
                                     self.log('play')
-                                    
-                                    if not self.status('isPaused'):
-                                        self._mpv_send('{ "command": ["set_property", "pause", false] }')
 
                                 elif self.status('isPaused'): 
                                     self.emit('paused')
