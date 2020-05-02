@@ -353,8 +353,13 @@ class HPlayer2(EventEmitterX):
 
         @module.on('fade')
         def fade(ev, *args):
-            if len(args) > 3:
+            if len(args) == 1 and args[0][0] == '#':
+                color = tuple(int(args[0][i:i+2], 16)/255.0 for i in (1, 3, 5))
+                self.players()[0].getOverlay('rpifade').set(color[0], color[1], color[2], 1.0)
+            elif len(args) > 3:
                 self.players()[0].getOverlay('rpifade').set(float(args[0]),float(args[1]), float(args[2]), float(args[3]))
+            elif len(args) > 2:
+                self.players()[0].getOverlay('rpifade').set(float(args[0]),float(args[1]), float(args[2]), 1.0)
             else:
                 self.players()[0].getOverlay('rpifade').set(0.0, 0.0, 0.0, 1.0)
 

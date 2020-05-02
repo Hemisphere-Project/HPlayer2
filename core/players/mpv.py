@@ -137,7 +137,7 @@ class MpvPlayer(BasePlayer):
 
                                 if self.status('isPlaying'): 
                                     self.emit('playing')
-                                    self.log('play')
+                                    # self.log('play')
 
                                 elif self.status('isPaused'): 
                                     self.emit('paused')
@@ -145,7 +145,7 @@ class MpvPlayer(BasePlayer):
 
                                 else: 
                                     self.emit('stopped')
-                                    self.log('stop')
+                                    # self.log('stop')
 
                             elif mpvsays['name'] == 'time-pos':
                                 if mpvsays['data']:
@@ -165,7 +165,7 @@ class MpvPlayer(BasePlayer):
                         
                         if 'name' in mpvsays and mpvsays['name'] == 'time-pos':
                             self._mpv_lockedout = 0
-                            print('#', end ="")
+                            # print('#', end ="")
 
                         if self.doLog['recv']:
                             if 'name' not in mpvsays or mpvsays['name'] != 'time-pos':
@@ -174,11 +174,11 @@ class MpvPlayer(BasePlayer):
 
                 # Timeout: retry
                 except socket.timeout:
-                    print('-', end ="")
+                    # print('-', end ="")
                     if self.status('isPlaying'):
                         self.log('PLAYBACK LOCKED OUT', self._mpv_lockedout)
                         self._mpv_send('{ "command": ["set_property", "pause", false] }')
-                        self._mpv_lockedout = self._mpv_lockedout + 1
+                        self._mpv_lockedout += 1
                         if self._mpv_lockedout > 1:
                             print("CRASH STOP")
                             self._mpv_send('{ "command": ["stop"] }')
@@ -258,7 +258,7 @@ class MpvPlayer(BasePlayer):
         if self._mpv_recvThread:
             # self.log("stopping socket thread")
             self._mpv_recvThread.join()
-
+        
         self.log("stopped")
 
 
@@ -272,6 +272,8 @@ class MpvPlayer(BasePlayer):
     def _stop(self):
         self.update('isPaused', False)
         self._mpv_send('{ "command": ["stop"] }')
+        if not self.status('isPlaying'):
+            self.emit('stopped')    # already stopped, so manually trigger event
 
     def _pause(self):
         self.update('isPaused', True)
