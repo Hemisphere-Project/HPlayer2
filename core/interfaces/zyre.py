@@ -12,15 +12,7 @@ from sys import getsizeof
 from binascii import hexlify
 
 # current_milli_time = lambda: int(round(time.time() * 1000))
-
-def get_port(sock):
-    if not sock: 
-        print('ERROR while binding socket')
-        return 0
-    return sock.endpoint().decode().split(':')[2]
-
-def extract_ip(x): 
-    return str(x).split('//')[1].split(':')[0]
+extract_ip = lambda x: str(x).split('//')[1].split(':')[0]
 
 def zlist_strlist(zlist):
     list = []
@@ -31,11 +23,9 @@ def zlist_strlist(zlist):
     return list
 
 
-PING_PEER = 1000
-
 PRECISION = 1000000
 SAMPLER_SIZE = 500
-KEEP_SAMPLE = [0.01, 0.3]
+KEEP_SAMPLE = [0.05, 0.5]
 
 
 #
@@ -63,31 +53,44 @@ class TimeSample():
 #  CLIENT Actor to perform Clock Shift measurment with a remote peer
 #
 class TimeClient():
-    def __init__(self, ip, port):
-        self.client_ip = ip
-        self.url = ("tcp://"+self.client_ip+":"+port).encode()
+    def __init__(self, peer):
+        self.peer = peer
+        self.url = ("tcp://"+peer['ip']+":"+peer['port']).encode()
         self.clockshift = 0
-        self._actor_fn = zactor_fn(self.actor_fn) # ctypes function reference must live as long as the actor.
-        self.done = True
-        self.start()
 
-    def start(self):
-        if not self.done: 
-            self.stop()
-        
+        self._actor_fn = zactor_fn(self.actor_fn) # ctypes function reference must live as long as the actor.
         self.actor = Zactor(self._actor_fn, create_string_buffer(b"Sync request"))
         self.done = False
-        
-        self._refresh = Timer(60, self.start)
-        self._refresh.start()
 
     def stop(self):
         if not self.done:
             self.actor.sock().send(b"s", b"$TERM")
-        if self._refresh:
-            self._refresh.cancel()
-        self.done = True
 
+
+    #  COMPUTE average Clock Shift
+    #  - remove firsts samples / keep 70% lower RTT / ponderate lower RTT -
+    def compute(self, sampler):
+        if len(sampler) >= SAMPLER_SIZE:
+            RTTs = sorted(sampler, key=lambda x: x.RTT)
+            RTTs = RTTs[int(len(RTTs) * KEEP_SAMPLE[0]) : int(len(RTTs) * KEEP_SAMPLE[1])]
+            sampler = RTTs
+            sampler.reverse()
+
+            cs = 0
+            cs_count = 0
+            for k, s in enumerate(sampler):
+                p = 10*k/len(sampler)   # higher index are lower RTT -> more value
+                cs += s.CS * p
+                cs_count += p
+            if cs_count > 0:
+                cs = int(cs/cs_count)
+
+            print(self.peer['ip'], "clock shift", str(cs)+"ns", "using", len(sampler), "samples")
+            self.clockshift = cs
+            self.status = 1
+        else:
+            self.status = 0
+            print("ERROR: sampler not full.. something might be broken")
 
     # CLIENT TimeSync REQ Zactor
     def actor_fn(self, pipe, args):
@@ -98,7 +101,7 @@ class TimeClient():
         internal_pipe.signal(0)
         retry = 0
 
-        # print("TimeClient: Starts sampling", self.client_ip)
+        # print("TimeClient: Starts sampling", self.peer['ip'])
 
         sampler = []
         sample = TimeSample(req_sock)
@@ -128,87 +131,106 @@ class TimeClient():
                 if not msg or msg.popstr() == b"$TERM":
                     return
 
-        # print("TimeClient: Sampling done", self.client_ip)
+        # print("TimeClient: Sampling done", self.peer['ip'])
         self.compute(sampler)
         self.done = True
 
+#
+#  BOOK to perform and record sync with others
+#
+class TimeBook():
+    def  __init__(self):
+        self.peers = {}
+        self.phonebook = {}
+        self.activePeers = 0
+        self._lock = Lock()
 
-    #  COMPUTE average Clock Shift
-    #  - remove firsts samples / keep 70% lower RTT / ponderate lower RTT -
-    def compute(self, sampler):
-        if len(sampler) >= SAMPLER_SIZE:
-            RTTs = sorted(sampler, key=lambda x: x.RTT)
-            RTTs = RTTs[int(len(RTTs) * KEEP_SAMPLE[0]) : int(len(RTTs) * KEEP_SAMPLE[1])]
-            sampler = RTTs
-            sampler.reverse()
+    def stop(self):
+        with self._lock:
+            for peer in self.peers.values():
+                peer.stop()
 
-            cs = 0
-            cs_count = 0
-            for k, s in enumerate(sampler):
-                p = 10*k/len(sampler)   # higher index are lower RTT -> more value
-                cs += s.CS * p
-                cs_count += p
-            if cs_count > 0:
-                cs = int(cs/cs_count)
+    def newpeer(self, uuid, addr, port):
+        self.gone(uuid)
+        with self._lock:
+            self.phonebook[uuid] = {}
+            self.phonebook[uuid]['uuid'] = uuid
+            self.phonebook[uuid]['ip'] = extract_ip(addr)
+            self.phonebook[uuid]['port'] = port.decode()
+            self.phonebook[uuid]['active'] = True
+            self.activePeers += 1
+            print("New Peer detected", self.phonebook[uuid])
 
-            print(self.client_ip, "clock shift", str(cs)+"ns", "using", len(sampler), "samples")
-            if self.clockshift:
-                print('\t correction =', str(self.clockshift-cs)+"ns" )
-            self.clockshift = cs
-            self.status = 1
-        else:
-            self.status = 0
-            print("ERROR: sampler not full.. something might be broken")
+    def sync(self, uuid):
+        with self._lock:
+            if uuid in self.phonebook:
+                ip = self.phonebook[uuid]['ip']
+                # if not ip in self.peers:
+                self.peers[ip] = TimeClient(self.phonebook[uuid])
 
+    def gone(self, uuid):
+        with self._lock:
+            if uuid in self.phonebook and self.phonebook[uuid]['active']:
+                self.phonebook[uuid]['active'] = False
+                self.activePeers -= 1
 
+    def activeCount(self):
+        c = 0
+        with self._lock:
+            c = self.activePeers
+        return c
+
+    def cs(self, uuid):
+        shift = 0
+        with self._lock:
+            if uuid in self.phonebook:
+                ip = self.phonebook[uuid]['ip']
+                if ip in self.peers:
+                    shift = self.peers[ip].clockshift
+        return shift
 
 
 
 #
-#  SUBSCRIBER to others publishing
+#  SERVER to handle Time sync request from remote clients
 #
-class Subscriber():
-    def __init__(self, node, ip, port, topic):
-        self.node = node
-        self.cache = {}
-
-        self.sub = Zsock.new_sub(("tcp://"+ip+":"+port).encode(), topic.encode())
-
+class TimeServer():
+    def  __init__(self):
+        self.port = 0
         self._actor_fn = zactor_fn(self.actor_fn) # ctypes function reference must live as long as the actor.
-        self.done = True
-        self.start()
-
-        # self.node.interface.log("Subscribing to", ip)
-
-    def start(self):
-        if not self.done: 
-            self.stop()
-        
-        self.actor = Zactor(self._actor_fn, create_string_buffer(b"Subscriber"))
+        self.actor = Zactor(self._actor_fn, create_string_buffer(b"Sync reply"))
         self.done = False
-        
+
     def stop(self):
         if not self.done:
             self.actor.sock().send(b"s", b"$TERM")
-        self.sub.__del__()
-        self.done = True
 
-    def subscribe(self, topic):
-        Zsock.set_unsubscribe(self.sub, topic.encode())
-        Zsock.set_subscribe(self.sub, topic.encode())
-
-    # SUB Zactor
+    # REPLY Sync Zactor
     def actor_fn(self, pipe, args):
         internal_pipe = Zsock(pipe, False) # We don't own the pipe, so False.
-        poller = Zpoller(internal_pipe, self.sub, None)
+        reply_sock = Zsock.new_rep(("tcp://*:*").encode())
+        if not reply_sock:
+            print('ERROR while binding TimeBook REP socket')
+        else:
+            self.port = reply_sock.endpoint().decode().split(':')[2]
+
+        poller = Zpoller(internal_pipe, reply_sock, None)
         internal_pipe.signal(0)
+
+        print('TimeServer started on port', self.port)
         terminated = False
         while not terminated:
-            sock = poller.wait(500)
-
-            # NOBODY responded ...
+            sock = poller.wait(1000)
             if not sock:
                 continue
+
+            # REQ received
+            if sock == reply_sock:
+                msgin = Zmsg.recv(reply_sock)
+                msg = Zmsg()
+                msg.addstr(str(int(time.time()*PRECISION)).encode())
+                Zmsg.send( msg, reply_sock )
+                # self.log("Go")
 
             # INTERNAL commands
             elif sock == internal_pipe:
@@ -216,96 +238,8 @@ class Subscriber():
                 if not msg or msg.popstr() == b"$TERM":
                     break
 
-            # SUB received
-            elif sock == self.sub:
-                msg = Zmsg.recv(self.sub)
-                topic = msg.popstr().decode()
-                uuid = msg.popstr()
-                peer = self.node.peer(uuid)
-                if not peer:
-                    print('INVALID message received: Unknown Publisher !')
-                    return
-                name = peer.name
-                data = json.loads(msg.popstr().decode())
-                arg = {'name': name, 'data': data, 'at': int(time.time()*PRECISION)}
-                self.cache[topic] = arg
-                self.node.interface.emit(topic, arg)
-
-
-        internal_pipe.__del__()
+        # print('TimeServer stopped')
         self.done = True
-
-
-#
-#   PEER
-#
-class Peer():
-    def __init__(self, node, conf):
-        self.node = node
-
-        if isinstance(conf, ZyreEvent):
-            conf = {
-                'uuid':         conf.peer_uuid(),
-                'ip':           extract_ip( conf.peer_addr() ),
-                'name':         conf.peer_name().decode(),
-                'ts_port':      conf.header(b"TS-PORT").decode(),
-                'pub_port':     conf.header(b"PUB-PORT").decode(),
-            }
-        for key in conf:
-            setattr(self, key, conf[key])
-
-        self.active = True
-
-        self.link = 0   # 0: GONE / 1: SILENT / 2: EVASIVE / 3: OK
-        self.timerLink = None
-        self.linker(3)
-
-        self.timeclient = None
-        self.subscribers = None
-
-    def stop(self):
-        self.active = False
-        if self.timerLink:
-            self.timerLink.cancel()
-        if self.timeclient: 
-            self.timeclient.stop()
-        if self.subscribers: 
-            self.subscribers.stop()
-
-    def linker(self, l):
-        if not self.active: return
-
-        if self.timerLink:
-            self.timerLink.cancel()
-        
-        if l != self.link:
-            self.link = l
-            self.node.interface.emit('peer.link', {'name': self.name, 'data': self.link})
-        
-        if self.link < 3:
-            self.timerLink = Timer(PING_PEER*1.5/1000.0, self.linker, args=[l+1])
-            self.timerLink.start()
-
-    def sync(self):
-        if not self.active: return
-        self.timeclient = TimeClient(self.ip, self.ts_port)
-
-    def clockshift(self):
-        shift = 0
-        if self.timeclient:
-            return self.timeclient.clockshift
-        return 0
-
-    def subscribe(self, topics):
-        if not self.active: return
-        if not isinstance(topics, list): topics = [topics]
-        for t in topics:
-            top = 'peer.'+t
-            if not self.subscribers:
-                self.subscribers = Subscriber(self.node, self.ip, self.pub_port, top)
-            else:
-                self.subscribers.subscribe(top)
-    
 
 
 
@@ -313,145 +247,144 @@ class Peer():
 #  NODE zyre peers discovery, sync and communication
 #
 class ZyreNode ():
-    def  __init__(self, interface, netiface=None):
-        self.interface = interface
+    def  __init__(self, processor=None, iface=None):
+        self.processor = processor
 
-        # Peers book
-        self.book = {}
-        self.topics = []
+        self.timebook = TimeBook()
+        self.timeserver = TimeServer()
 
-        # Publisher
-        self.pub_cache  = {}
-        self.publisher  = Zsock.new_xpub(("tcp://*:*").encode())
-
-        # TimeServer
-        self.timereply = Zsock.new_rep(("tcp://*:*").encode())
-        
-        # Zyre 
-        self.zyre = Zyre(None)
-        if netiface:
-            self.zyre.set_interface( string_at(netiface) )
-            print("ZYRE Node forced netiface: ", string_at(netiface) )
-
-        self.zyre.set_name(str(self.interface.hplayer.name()).encode())
-        self.zyre.set_header(b"TS-PORT",  str(get_port(self.timereply)).encode())
-        self.zyre.set_header(b"PUB-PORT", str(get_port(self.publisher)).encode())
-
-        self.zyre.set_interval(PING_PEER)
-        self.zyre.set_evasive_timeout(PING_PEER*3)
-        self.zyre.set_silent_timeout(PING_PEER*5)
-        self.zyre.set_expired_timeout(PING_PEER*10)
-
-        self.zyre.start()
-        self.zyre.join(b"broadcast")
-        self.zyre.join(b"sync")
-
-        # Add self to book
-        self.book[self.zyre.uuid()] = Peer(self, {
-            'uuid':         self.zyre.uuid(),
-            'name':         self.zyre.name().decode(),
-            'ip':           '127.0.0.1',
-            'ts_port':      get_port(self.timereply),
-            'pub_port':     get_port(self.publisher)
-        }) 
-        self.book[self.zyre.uuid()].subscribe(self.topics)
-
-        # Start Poller
         self._actor_fn = zactor_fn(self.actor_fn) # ctypes function reference must live as long as the actor.
-        if netiface:
-            netiface = create_string_buffer(str.encode(netiface))
-        self.actor = Zactor(self._actor_fn, netiface)
+
+        if iface:
+            iface = create_string_buffer(str.encode(iface))
+        self.actor = Zactor(self._actor_fn, iface)
         self.done = False
+
+        self.deltadelay = 0
+
+    def stop(self):
+        self.timeserver.stop()
+        self.timebook.stop()
+        if not self.done:
+            self.actor.sock().send(b"ss", b"$TERM", "gone")
+            # print('ZYRE term sent')
+
+    def shout(self, group, event, args=None, delay_ms=0):
+        data = {}
+        data['event'] = event
+        data['args'] = []
+        if args:
+            if not isinstance(args, list):
+                print('NOT al LIST', args)
+                args = [args]
+            data['args'] = args
+
+        # add delay
+        if delay_ms > 0:
+            data['at'] = int(time.time()*PRECISION + delay_ms * PRECISION / 1000)
+
+        data = json.dumps(data)
+        self.actor.sock().send(b"sss", b"SHOUT", group.encode(), data.encode())
+
+    def broadcast(self, event, args=None, delay_ms=0):
+        self.shout('broadcast', event, args, delay_ms)
+
+    def join(self, group):
+        self.actor.sock().send(b"ss", b"JOIN", group.encode())
+
+    def leave(self, group):
+        self.actor.sock().send(b"ss", b"LEAVE", group.encode())
+
+    def preProcessor1(self, data):
+
+        # if a programmed time is provided, correct it with peer CS
+        # Set timer
+        if 'at' in data:
+            data['at'] -= self.timebook.cs( data['from'] )
+            #delay =  (data['at']-self.deltadelay) / PRECISION - time.time()    # Might get crazy..
+            delay =  (data['at']) / PRECISION - time.time()
+
+
+            if delay <= 0:
+                self.preProcessor2(data)
+            else:
+                print('programmed event in', delay, 'seconds')
+                t = Timer( delay, self.preProcessor2, args=[data])
+                t.start()
+
+        elif self.processor:
+            self.preProcessor2(data)
+
+    def preProcessor2(self, data):
+        if 'at' in data:
+            self.deltadelay += (int(time.time()*PRECISION)-data['at'])      # Might get crazy..
+
+        self.processor(data)
+
 
 
     # ZYRE Zactor
-    def actor_fn(self, pipe, netiface):
-
-        # Internal
+    def actor_fn(self, pipe, iface):
         internal_pipe = Zsock(pipe, False) # We don't own the pipe, so False.
 
-        # Poller
-        poller = Zpoller(self.zyre.socket(), internal_pipe, self.publisher, self.timereply, None)
+        zyre_node = Zyre(None)
+        if iface:
+            zyre_node.set_interface( string_at(iface) )
+            print("ZYRE Node forced iface: ", string_at(iface) )
+        zyre_node.set_header (b"TS-PORT", str(self.timeserver.port).encode());
+        zyre_node.start()
+        zyre_node.join(b"broadcast")
+        zyre_node.join(b"sync")
+        zyre_pipe = zyre_node.socket()
 
-        # RUN
-        self.interface.log('Node started')
+        poller = Zpoller(zyre_pipe, internal_pipe, None)
+
         internal_pipe.signal(0)
+
+        print('ZYRE Node started')
         terminated = False
         while not terminated:
-            sock = poller.wait(500)
+            sock = poller.wait(1000)
             if not sock:
                 continue
-            
+
             #
             # ZYRE receive
             #
-            if sock == self.zyre.socket():
-                e = ZyreEvent(self.zyre)
-                uuid = e.peer_uuid()
+            if sock == zyre_pipe:
+                e = ZyreEvent(zyre_node)
 
-                # self.interface.log("ZYREmsg", uuid, e.peer_name().decode(), e.type().decode())
-
-                # ENTER: add to book for external contact (i.e. TimeSync)
-                if e.type() == b"ENTER":
-                    newpeer = Peer(self, e) 
-
-                    existing = None
-
-                    if uuid in self.book:
-                        # print ('UUID already exist: replacing')  ## PROBLEM : Same name may appear with different uuid (not a real problem, only if crash and restart with new uuid in a short time..)
-                        self.book[uuid].stop()
-                        existing=uuid
-                    
-                    for p in self.book.values():
-                        if p.name == newpeer.name:
-                            # print ('Name already exist: replacing')
-                            p.stop()
-                            existing=p.uuid
-                    
-                    if existing:
-                        del self.book[existing]
-
-                    self.book[uuid] = newpeer
-                    self.book[uuid].subscribe(self.topics)
-
-                # EVASIVE
-                elif e.type() == b"EVASIVE":
-                    # if uuid in self.book:
-                    #     self.book[uuid].linker(2)
+                # ANY
+                if e.type() != b"EVASIVE":
+                    # e.print()
                     pass
 
-                # SILENT
-                elif e.type() == b"SILENT":
-                    if uuid in self.book:
-                        self.book[uuid].linker(1)
+                # ENTER: add to phonebook for external contact (i.e. TimeSync)
+                if e.type() == b"ENTER":
+                    self.timebook.newpeer(e.peer_uuid(), e.peer_addr(), e.header(b"TS-PORT"))
 
                 # EXIT
                 elif e.type() == b"EXIT":
-                    if uuid in self.book:
-                        self.book[uuid].linker(0)
-                        self.book[uuid].stop()
-                        del self.book[uuid]
+                    self.timebook.gone(e.peer_uuid())
+                    print( "ZYRE Node: peer is gone..")
 
                 # JOIN
                 elif e.type() == b"JOIN":
-                    # self.interface.log("peer join a group..", e.peer_name(), e.group().decode())
 
                     # SYNC clocks
                     if e.group() == b"sync":
-                        if self.peer(uuid): 
-                            self.peer(uuid).sync()
+                        self.timebook.sync(e.peer_uuid())
 
                 # LEAVE
                 elif e.type() == b"LEAVE":
-                    # self.interface.log("peer left a group..")
-                    pass
+                    print("ZYRE Node: peer left a group..")
 
                 # SHOUT -> process event
                 elif e.type() == b"SHOUT" or e.type() == b"WHISPER":
 
                     # Parsing message
                     data = json.loads(e.msg().popstr().decode())
-                    data['from'] = uuid
+                    data['from'] = e.peer_uuid()
 
                     # add group
                     if e.type() == b"SHOUT": data['group'] = e.group().decode()
@@ -461,166 +394,44 @@ class ZyreNode ():
 
 
             #
-            # PUBLISHER event
-            #
-            elif sock == self.publisher:
-                msg = Zmsg.recv(self.publisher)
-                if not msg: break
-                topic = msg.popstr()
-
-                # Somebody subscribed: push Last Value Cache !
-                if len(topic) > 0 and topic[0] == 1:
-                    topic = topic[1:]
-                    if topic in self.pub_cache:
-                        # self.interface.log('XPUB lvc send for', topic.decode())
-                        msg = Zmsg.dup(self.pub_cache[topic])
-                        Zmsg.send(msg, self.publisher)
-
-                    # else:
-                    #     self.interface.log('XPUB lvc empty for', topic.decode())
-
-            #
-            # TIMESERVER event
-            #
-            elif sock == self.timereply:
-                msgin = Zmsg.recv(self.timereply)
-                msg = Zmsg()
-                msg.addstr(str(int(time.time()*PRECISION)).encode())
-                Zmsg.send( msg, self.timereply )
-
-            #
             # INTERNAL commands
             #
             elif sock == internal_pipe:
                 msg = Zmsg.recv(internal_pipe)
                 if not msg: break
 
-                if msg.popstr() == b"$TERM":
+                command = msg.popstr()
+                if command == b"$TERM":
                     print('ZYRE Node TERM')
                     break
-                    
 
-        # self.zyre.stop()  # HANGS !
+                elif command == b"JOIN":
+                    group = msg.popstr()
+                    zyre_node.join(group)
+
+                elif command == b"LEAVE":
+                    group = msg.popstr()
+                    zyre_node.leave(group)
+
+                elif command == b"SHOUT":
+                    group = msg.popstr()
+                    data = msg.popstr()
+                    zyre_node.shouts(group, data)
+
+                    # if own group -> send to self too !
+                    groups = zlist_strlist( zyre_node.own_groups() )
+                    if group.decode() in groups:
+                        data = json.loads(data.decode())
+                        data['from'] = 'self'
+                        data['group'] = group.decode()
+                        self.preProcessor1(data)
+
+
+        # zyre_node.stop()  # HANGS !
         internal_pipe.__del__()
-        self.interface.log('Node stopped')   # WEIRD: print helps the closing going smoothly..
+        zyre_node.__del__()
+        print('ZYRE Node stopped')   # WEIRD: print helps the closing going smoothly..
         self.done = True
-
-    def stop(self):
-        for peer in self.book.values():
-            peer.stop()
-        if not self.done:
-            self.actor.sock().send(b"ss", b"$TERM", "gone")
-        self.zyre.__del__()
-        self.publisher.__del__()
-        self.timereply.__del__()
-
-    def peer(self, uuid):
-        if uuid in self.book and self.book[uuid].active:
-            return self.book[uuid]
-
-    def peerByName(self, name):
-        for peer in self.book.values():
-            if peer.active and peer.name == name:
-                return peer
-
-    #
-    # PUB/SUB
-    #
-
-    def subscribe(self, topics):
-        if not isinstance(topics, list): topics = [topics]
-        self.topics = list(set(self.topics) | set(topics))    # merge lists and remove duplicates
-        for peer in self.book.values():
-            peer.subscribe(self.topics)
-
-    def publish(self, topic, args=None):
-        topic = topic.encode()
-        
-        msg = Zmsg()
-        msg.addstr(topic)
-        msg.addstr(self.zyre.uuid())
-        msg.addstr(json.dumps(args).encode())
-
-        self.pub_cache[topic] = Zmsg.dup(msg)
-        Zmsg.send(msg, self.publisher)
-
-    #
-    # ZYRE send messages
-    #
-
-    def makeMsg(self, event, args=None, delay_ms=0):
-        data = {}
-        data['event'] = event
-        data['args'] = []
-        if args:
-            if not isinstance(args, list):
-                # self.interface.log('NOT al LIST', args)
-                args = [args]
-            data['args'] = args
-
-        # add delay
-        if delay_ms > 0:
-            data['at'] = int(time.time()*PRECISION + delay_ms * PRECISION / 1000)
-
-        return json.dumps(data).encode()
-
-    def whisper(self, uuid, event, args=None, delay_ms=0):
-        data = self.makeMsg(event, args, delay_ms)
-        if uuid == self.zyre.uuid():
-            data = json.loads(data.decode())
-            data['from'] = 'self'
-            data['group'] = 'whisper'
-            self.preProcessor1(data)
-        else:
-            self.zyre.whispers(uuid, data)
-
-    def shout(self, group, event, args=None, delay_ms=0):
-        data = self.makeMsg(event, args, delay_ms)
-        self.zyre.shouts(group.encode(), data)
-
-        # if own group -> send to self too !
-        groups = zlist_strlist( self.zyre.own_groups() )
-        if group in groups:
-            data = json.loads(data.decode())
-            data['from'] = 'self'
-            data['group'] = group
-            self.preProcessor1(data)
-
-    def broadcast(self, event, args=None, delay_ms=0):
-        self.shout('broadcast', event, args, delay_ms)
-
-    def join(self, group):
-        self.zyre.join(group.encode())
-
-    def leave(self, group):
-        self.zyre.leave(group.encode())
-
-    #
-    # ZYRE messages processor
-    #
-
-    def preProcessor1(self, data):
-        # if a programmed time is provided, correct it with peer CS
-        # Set timer        
-        if 'at' in data:
-            if self.peer(data['from']):
-                data['at'] -= self.peer(data['from']).clockshift()
-            delay =  (data['at']) / PRECISION - time.time()
-
-            if delay <= 0:
-                self.preProcessor2(data)
-            else:
-                # self.interface.log('programmed event in', delay, 'seconds')
-                t = Timer( delay, self.preProcessor2, args=[data])
-                t.start()
-                self.interface.emit('planned', data)
-
-        else:
-            self.preProcessor2(data)
-
-    def preProcessor2(self, data):
-        self.interface.emit('event', *[data])
-        self.interface.emit(data['event'], *data['args'])
 
 
 #
@@ -628,60 +439,104 @@ class ZyreNode ():
 #
 class ZyreInterface (BaseInterface):
 
-    def  __init__(self, hplayer, netiface=None):
-        super().__init__(hplayer, "ZYRE")
-        self.node = ZyreNode(self, netiface)
-
-        # Publish self status
-        @self.hplayer.on('player.playing')
-        @self.hplayer.on('player.paused')
-        @self.hplayer.on('player.stopped')
-        def st(*args):
-            self.node.publish('peer.status', self.hplayer.status())
-
-        # Publish self settings
-        @self.hplayer.on('settings.updated')
-        def se(ev, settings):
-            self.node.publish('peer.settings', settings)
-
-        # Subscribe to peers
-        @self.hplayer.on('*.peers.subscribe')
-        def mon(ev, topics):
-            self.node.subscribe(topics)
-
-        # Trig peers link status
-        @self.hplayer.on('*.peers.getlink')
-        def links(ev):
-            for peer in self.node.book.values():
-                self.emit('peer.link', {'name': peer.name, 'data': peer.link})
-
-        # Triggers event on peers
-        @self.hplayer.on('*.peers.triggers')
-        def trig(ev, *args):
-            delay = args[1] if len(args) > 1 else 0
-            for ev in args[0]:
-                data = None
-                if 'data' in ev: 
-                    data = ev['data']
-                if 'peer' in ev:
-                    peer = self.node.peerByName(ev['peer'])
-                    if peer:
-                        # self.log('whisper', ev['event'], data)
-                        self.node.whisper( peer.uuid, ev['event'], data, delay)
-                else:
-                    self.node.broadcast(ev['event'], data, delay)
+    def  __init__(self, player, iface=None):
+        super().__init__(player, "ZYRE")
+        self.node = ZyreNode(self.processor, iface)
 
     def listen(self):
         self.log( "interface ready")
         self.stopped.wait()
         self.node.stop()
         self.log( "closing sockets...") # CLOSING is messy !
-        sleep(0.2)
+        sleep(1)
 
     def activeCount(self):
-        return len(self.node.book)
+        c = self.node.timebook.activeCount()+1
+        return c
 
-    def peersList(self):
-        return self.node.book
+    def processor(self, data):
 
-        
+        self.log('Received: ', data)
+
+        if 'at' in data:
+            # self.log('DELTA', int(time.time()*PRECISION)-data['at'], 'ns' )
+            pass
+
+        if not self.player:
+            return
+
+        path = data['event']
+        args = data['args']
+
+        if path == '/play':
+            self.player.loop(0)
+            if args and len(args) >= 1:
+                self.player.play(args[0])
+            else:
+                self.player.play()
+
+        elif path == '/playloop':
+            self.player.loop(1)
+            if args and len(args) >= 1:
+                self.player.play(args[0])
+            else:
+                self.player.play()
+
+        elif path == '/playindex':
+            if args and len(args) >= 1:
+                self.player.play(args[0])
+
+        elif path == '/playlist':
+            if args and len(args) >= 1:
+                self.player.load(args[0])
+                if len(args) >= 2: self.player.play(args[1])
+                else: self.player.play()
+                # self.log('DELTA PLAY', int(time.time()*PRECISION)-data['at'], 'ns' )
+
+        elif path == '/load':
+            if args and len(args) >= 1:
+                self.player.load(args[0])
+
+        elif path == '/stop':
+            self.player.stop()
+
+        elif path == '/pause':
+            self.player.pause()
+
+        elif path == '/resume':
+            self.player.resume()
+
+        elif path == '/next':
+            self.player.next()
+
+        elif path == '/prev':
+            self.player.prev()
+
+        elif path == '/loop':
+            self.player.loop(1)
+
+        elif path == '/unloop':
+            self.player.loop(0)
+
+        elif path == '/volume':
+            if args and len(args) >= 1:
+                self.player.volume(args[0])
+
+        elif path == '/mute':
+            self.player.mute(True)
+
+        elif path == '/unmute':
+            self.player.mute(False)
+
+        elif path == '/pan':
+            if args and len(args) >= 2:
+                self.player.pan(args[0], args[1])
+
+        elif path == '/flip':
+            self.player.flip(True)
+
+        elif path == '/unflip':
+            self.player.flip(False)
+
+        else:
+            self.player.trigger(path, args)
