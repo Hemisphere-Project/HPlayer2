@@ -1,9 +1,18 @@
 
 from pymitter import EventEmitter
 from termcolor import colored
-import sys
+import sys, threading
 
-class Module(EventEmitter):
+printlock = threading.Lock()
+
+class EventEmitterX(EventEmitter):
+    def emit(self, event, *args):
+        # prepend event to args
+        a = [event] + list(args)
+        super().emit(event, *a)
+
+
+class Module(EventEmitterX):
     def __init__(self, hplayer, name, color):
         super().__init__(wildcard=True, delimiter=".")
         self.name = name.replace(" ", "_")
@@ -12,12 +21,18 @@ class Module(EventEmitter):
         self.logEvents = True
 
     def log(self, *argv):
-        print(self.nameP, *argv)
-        sys.stdout.flush()
+        with printlock:
+            print(self.nameP, *argv)
+            sys.stdout.flush()
 
     # Emit extended
     def emit(self, event, *args):
+        
+        fullEvent = self.name.lower() + '.' + event
         if self.logEvents:
-            self.log('EVENT',  self.name.lower() + '.' + event, *args )
-        self.hplayer.emit( self.name.lower() + '.' + event, *args )
-        super().emit(event, *args)
+            self.log('EVENT', fullEvent, *args )
+
+        super().emit(event, *args)        
+        self.hplayer.emit(fullEvent, *args)
+
+        

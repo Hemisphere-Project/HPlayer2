@@ -1,5 +1,6 @@
 from __future__ import print_function
 from . import network
+from ..module import EventEmitterX
 import core.players as playerlib
 import core.interfaces as ifacelib
 from core.engine.filemanager import FileManager
@@ -24,7 +25,7 @@ def signal_handler(signal, frame):
 signal.signal(signal.SIGINT, signal_handler)
 
 
-class HPlayer2(EventEmitter):
+class HPlayer2(EventEmitterX):
 
     def __init__(self, basepath=None, settingspath=None):
         super().__init__(wildcard=True, delimiter=".")
@@ -55,6 +56,10 @@ class HPlayer2(EventEmitter):
     def name():
         return network.get_hostname()
 
+    #
+    # PLAYERS
+    #
+
     def addPlayer(self, ptype, name=None):
         if not name: name = ptype+str(len(self._players))
         if name and name in self._players:
@@ -63,7 +68,28 @@ class HPlayer2(EventEmitter):
             PlayerClass = playerlib.getPlayer(ptype)
             p = PlayerClass(self, name)
             self._players[name] = p
+
+            # Bind settings
+            @self.settings.on('do-*')
+            def bind(ev, value, settings):
+                if ev in ['do-volume', 'do-mute']: 
+                    p._applyVolume( settings['volume'] if not settings['mute'] else 0 )
+                if ev in ['do-pan', 'do-audiomode']:
+                    p._applyPan( settings['pan'] if settings['audiomode'] != 'mono' else 'mono' )
+                if ev == 'do-flip':
+                    p._applyFlip( settings['flip'] )
+
+            # Bind playlist
+            p.on('end',              lambda ev: self.playlist.onMediaEnd())    # Media end    -> Playlist next
+            self.playlist.on('end',  lambda ev: p.stop())                      # Playlist end -> Stop player
+
+            # Bind status (player update triggers hplayer emit)
+            @p.on('status')
+            def emitStatus(ev, *args):
+                self.emit('status', self.status())
+
             self.emit('player-added', p)
+
         return self._players[name]
 
 
@@ -80,6 +106,13 @@ class HPlayer2(EventEmitter):
     def activePlayer(self):
         return self.players()[self._lastUsedPlayer]
 
+    def status(self):
+        return [p.status() for p in self.players()]
+
+
+    #
+    # INTERFACES
+    #
 
     def addInterface(self, iface, *argv):
         InterfaceClass = ifacelib.getInterface(iface)
@@ -96,6 +129,10 @@ class HPlayer2(EventEmitter):
     def interfaces(self):
         return self._interfaces.values()
 
+
+    #
+    # RUN
+    #
 
     def running(self):
         run = True
@@ -151,12 +188,16 @@ class HPlayer2(EventEmitter):
         sys.exit(0)
 
 
+    #
+    # BINDINGS
+    #
+
     def autoBind(self, module):
         
         # SYSTEM
         #
         @module.on('hardreset')
-        def hardreset(*args):
+        def hardreset(ev, *args):
             os.system('systemctl restart NetworkManager')
             global runningFlag
             runningFlag = False
@@ -166,7 +207,7 @@ class HPlayer2(EventEmitter):
         #
 
         @module.on('play')
-        def play(*args):
+        def play(ev, *args):
             if len(args) > 1:
                 self.playlist.play(args[0], int(args[1]))
             elif len(args) > 0:
@@ -175,47 +216,47 @@ class HPlayer2(EventEmitter):
                 self.playlist.play()
 
         @module.on('playonce')
-        def playonce(*args):
+        def playonce(ev, *args):
             if len(args) > 0:
-                loop(0)
-                play(*args)
+                loop(ev, 0)
+                play(ev, *args)
 
         @module.on('playloop')
-        def playloop(*args):
+        def playloop(ev, *args):
             if len(args) > 0:
-                loop(2)
-                play(*args)
+                loop(ev, 2)
+                play(ev, *args)
 
         @module.on('load')
-        def load(*args):
+        def load(ev, *args):
             if len(args) > 0:
                 self.playlist.load(args[0])
         
         @module.on('playindex')
-        def playindex(*args):
+        def playindex(ev, *args):
             if len(args) > 0:
                 self.playlist.playindex(int(args[0]))
 
         @module.on('add')
-        def add(*args):
+        def add(ev, *args):
             if len(args) > 0:
                 self.playlist.add(args[0])
 
         @module.on('remove')   #index !
-        def remove(*args):
+        def remove(ev, *args):
             if len(args) > 0:
                 self.playlist.remove(args[0])
 
         @module.on('clear')
-        def clear(*args):
+        def clear(ev, *args):
             self.playlist.clear()
 
         @module.on('next')
-        def next(*args):
+        def next(ev, *args):
             self.playlist.next()
 
         @module.on('prev')
-        def prev(*args):
+        def prev(ev, *args):
             self.playlist.prev()
 
 
@@ -223,7 +264,7 @@ class HPlayer2(EventEmitter):
         #
 
         @module.on('do-play')
-        def doplay(*args):
+        def doplay(ev, *args):
             for i,p in enumerate(self.players()): 
                 if p.validExt(args[0]):
                     if i != self._lastUsedPlayer:
@@ -233,32 +274,32 @@ class HPlayer2(EventEmitter):
                     return
 
         @module.on('stop')
-        def stop(*args):
+        def stop(ev, *args):
             # TODO : double stop -> reset playlist index (-1)
             for p in self.players():
                 p.stop()
 
         @module.on('pause')
-        def pause(*args):
+        def pause(ev, *args):
             for p in self.players(): 
                 if p.isPlaying():
                     p.pause()
 
         @module.on('resume')
-        def resume(*args):
+        def resume(ev, *args):
             for p in self.players(): 
                 if p.isPlaying():
                     p.resume()
 
         @module.on('seek')
-        def seek(*args):
+        def seek(ev, *args):
             if len(args) > 0:
                 for p in self.players(): 
                     if p.isPlaying():
                         p.seekTo(int(args[0]))
 
         @module.on('skip')
-        def skip(*args):
+        def skip(ev, *args):
             if len(args) > 0:
                 for p in self.players(): 
                     if p.isPlaying():
@@ -269,18 +310,18 @@ class HPlayer2(EventEmitter):
         #
 
         @module.on('loop')
-        def loop(*args):
+        def loop(ev, *args):
             doLoop = 2
             if len(args) > 0:
                 doLoop = int(args[0])
             self.settings.set('loop', doLoop)
 
         @module.on('unloop')
-        def unloop(*args):
+        def unloop(ev, *args):
             self.settings.set('loop', 0)
 
         @module.on('volume')
-        def volume(*args):
+        def volume(ev, *args):
             if len(args) > 0:
                 vol = int(args[0])
                 if (vol < 0): vol = 0
@@ -288,50 +329,50 @@ class HPlayer2(EventEmitter):
                 self.settings.set('volume', vol)
 
         @module.on('mute')
-        def mute(*args):
+        def mute(ev, *args):
             doMute = True
             if len(args) > 0:
                 doMute = int(args[0]) > 0
             self.settings.set('mute', doMute)
 
         @module.on('unmute')
-        def unmute(*args):
+        def unmute(ev, *args):
             self.settings.set('mute', False)
 
         @module.on('pan')
-        def pan(*args):
+        def pan(ev, *args):
             if len(args) > 1:
                 self.settings.set('pan', [int(args[0]),int(args[1])])
         
         @module.on('flip')
-        def flip(*args):
+        def flip(ev, *args):
             doFlip = True
             if len(args) > 0:
                 doFlip = int(args[0]) > 0
             self.settings.set('flip', doFlip)
 
         @module.on('fade')
-        def fade(*args):
+        def fade(ev, *args):
             if len(args) > 3:
                 self.players()[0].getOverlay('rpifade').set(float(args[0]),float(args[1]), float(args[2]), float(args[3]))
             else:
                 self.players()[0].getOverlay('rpifade').set(0.0, 0.0, 0.0, 1.0)
 
         @module.on('unfade')
-        def unfade(*args):
+        def unfade(ev, *args):
             self.players()[0].getOverlay('rpifade').set(0.0, 0.0, 0.0, 0.0)
 
         @module.on('unflip')
-        def unflip(*args):
+        def unflip(ev, *args):
             self.settings.set('flip', False)
 
         @module.on('autoplay')
-        def autoplay(*args):
+        def autoplay(ev, *args):
             doAP = True
             if len(args) > 0:
                 doAP = int(args[0]) > 0
             self.settings.set('autoplay', doAP)
 
         @module.on('notautoplay')
-        def notautoplay(*args):
+        def notautoplay(ev, *args):
             self.settings.set('autoplay', False)

@@ -16,7 +16,10 @@ class BasePlayer(Module):
         self.name = "Player"
         self.settingspath = None
 
-        self.doLog = {'cmds': False}
+        self.doLog = {
+            'recv': False,
+            'cmds': False
+        }
 
         self._validExt = []
 
@@ -29,16 +32,6 @@ class BasePlayer(Module):
             'time':         0,
             'duration':     0
         }
-
-
-        hplayer.settings.on('do-volume',       self._applyVolume)
-        hplayer.settings.on('do-mute',         self._applyVolume)
-        hplayer.settings.on('do-pan',          self._applyPan)
-        hplayer.settings.on('do-audiomode',    self._applyPan)
-        hplayer.settings.on('do-flip',         self._applyFlip)
-
-        hplayer.playlist.on('end',          self.stop)                      # Playlist end -> stop
-        self.on('end',                      hplayer.playlist.onMediaEnd)    # Media end -> trig playlist
 
 
     def addOverlay(self, olay, args=[]):
@@ -68,6 +61,10 @@ class BasePlayer(Module):
     # Player STATUS
     #
 
+    # Status SET 
+    def update(self, key, value):
+        self._status[key] = value  
+
     # SET/GET is running
     def isRunning(self, state=None):
         # SET (optionnal)
@@ -79,7 +76,7 @@ class BasePlayer(Module):
                 return False
         return self._running.is_set()
 
-    # STATUS Get
+    # STATUS Set/Get
     def status(self, entry=None):
         s = self._status.copy()
         if entry:
@@ -114,36 +111,34 @@ class BasePlayer(Module):
     # Play Media
     def play(self, media):
         self._play(media)
-        self._status['media'] = media
-        self._status['time'] = 0
-        self.emit('playing', media)
+        self.update('isPaused', False)
+        self.update('media', media)
+        self.update('time', 0)
 
     # STOP Playback
     def stop(self):
         self._stop()
-        self._status['media'] = None
-        self._status['time'] = 0
-        self.emit('stopped')
+        self.update('isPaused', False)
+        self.update('media', None)
+        self.update('time', 0)
 
     # PAUSE Playback
     def pause(self):
+        self.update('isPaused', True)
         self._pause()
-        self.emit('paused')
 
     # RESUME Playback
     def resume(self):
+        self.update('isPaused', False)
         self._resume()
-        self.emit('resumed')
 
      # SEEK to position
     def seekTo(self, milli):
         self._seekTo(milli)
-        self.emit('seekedto', milli)
 
     # SKIP time
     def skip(self, milli):
         self._skip(milli)
-        self.emit('skipped', milli)
 
     #
     # Player INTERNAL actions: Methods to overwrite !
@@ -156,41 +151,34 @@ class BasePlayer(Module):
         self.log("quit")
 
     def _play(self, path):
-        self._status['isPlaying'] = True
         self.log("play", path)
+        self.emit('playing', path)
 
     def _stop(self):
-        self._status['isPlaying'] = False
         self.log("stop")
+        self.emit('stopped')
 
     def _pause(self):
-        self._status['isPaused'] = True
         self.log("pause")
+        self.emit('paused')
 
     def _resume(self):
-        self._status['isPaused'] = False
         self.log("resume")
+        self.emit('resumed')
 
     def _seekTo(self, milli):
         self.log("seek to", milli)
+        self.emit('seekedto', milli)
 
     def _skip(self, milli):
         self.log("skip", milli)
+        self.emit('skipped', milli)
 
-    def _applyVolume(self, volume, settings):
-        if not settings['mute']:
-            self.log("volume set to", volume)
-        else:
-            self.log("volume muted")
+    def _applyVolume(self, volume):
+        self.log("volume set to", volume)
 
-    def _applyPan(self, pan, settings):
-        if settings['audiomode'] == 'mono':
-            self.log("audio mode is mono")
-        else:
-            self.log("pan set to", pan)
+    def _applyPan(self, pan):
+        self.log("pan set to", pan)
 
-    def _applyFlip(self, flip, settings):
-        if flip:
-            self.log("screen flipped")
-        else:
-            self.log("screen not flipped")
+    def _applyFlip(self, flip):
+        self.log("screen flip", flip)

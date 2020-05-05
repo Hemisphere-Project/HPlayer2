@@ -40,8 +40,7 @@ if len(available_dir) == 0: available_dir.insert(0,'')
 set_activedir(0)
 
 
-def play_media(args):
-	target_dir = args[0]
+def play_media(target_dir):
 	if target_dir < len(available_dir):
 		target_path = os.path.join(base_path, available_dir[target_dir])
 		available_files = [f for f in next(os.walk(target_path))[2] if not f.startswith('.')]
@@ -86,16 +85,16 @@ def change_scene(dir):
 		active_dir = available_dir.index(dir)
 		# DO NOT RE-BROADCAST !!
 
-player.on(['/playmedia'], 		play_media)
+player.on(['/playmedia'], 		lambda ev, dir: play_media(dir))
 
 #
 # Bind Keypad
 #
-player.on(['keypad-down'], 		next_dir)
-player.on(['keypad-up'], 		prev_dir)
-player.on(['keypad-right'], 	player.next) 
-player.on(['keypad-left'], 		player.prev)
-player.on(['keypad-select'], 	player.stop)
+player.on(['keypad-down'], 		lambda ev: next_dir())
+player.on(['keypad-up'], 		lambda ev: prev_dir())
+player.on(['keypad-right'], 	lambda ev: player.next()) 
+player.on(['keypad-left'], 		lambda ev: player.prev())
+player.on(['keypad-select'], 	lambda ev: player.stop())
 
 #
 # Bind Keyboard
@@ -119,23 +118,23 @@ def vol_inc():
 def vol_dec():
 	broadcast('/volume', player.settings()['volume']-1)
 
-player.on(['KEY_TAB-down'], 	lambda: keyboard_tab(True))
-player.on(['KEY_TAB-up'], 		lambda: keyboard_tab(False))
+player.on(['KEY_TAB-down'], 	lambda ev: keyboard_tab(True))
+player.on(['KEY_TAB-up'], 		lambda ev: keyboard_tab(False))
 
-player.on(['KEY_KP0-down'], 	lambda: keyboard_numbers(0))
-player.on(['KEY_KP1-down'], 	lambda: keyboard_numbers(1))
-player.on(['KEY_KP2-down'], 	lambda: keyboard_numbers(2))
-player.on(['KEY_KP3-down'], 	lambda: keyboard_numbers(3))
-player.on(['KEY_KP4-down'], 	lambda: keyboard_numbers(4))
-player.on(['KEY_KP5-down'], 	lambda: keyboard_numbers(5))
-player.on(['KEY_KP6-down'], 	lambda: keyboard_numbers(6))
-player.on(['KEY_KP7-down'], 	lambda: keyboard_numbers(7))
-player.on(['KEY_KP8-down'], 	lambda: keyboard_numbers(8))
-player.on(['KEY_KP9-down'], 	lambda: keyboard_numbers(9))
-player.on(['KEY_KPDOT-down'], 	lambda: keyboard_dot())
-player.on(['KEY_KPENTER-down'], lambda: broadcast('/stop'))
-player.on(['KEY_KPPLUS-down', 'KEY_KPPLUS-hold'], 	vol_inc)
-player.on(['KEY_KPMINUS-down', 'KEY_KPMINUS-hold'], vol_dec)
+player.on(['KEY_KP0-down'], 	lambda ev: keyboard_numbers(0))
+player.on(['KEY_KP1-down'], 	lambda ev: keyboard_numbers(1))
+player.on(['KEY_KP2-down'], 	lambda ev: keyboard_numbers(2))
+player.on(['KEY_KP3-down'], 	lambda ev: keyboard_numbers(3))
+player.on(['KEY_KP4-down'], 	lambda ev: keyboard_numbers(4))
+player.on(['KEY_KP5-down'], 	lambda ev: keyboard_numbers(5))
+player.on(['KEY_KP6-down'], 	lambda ev: keyboard_numbers(6))
+player.on(['KEY_KP7-down'], 	lambda ev: keyboard_numbers(7))
+player.on(['KEY_KP8-down'], 	lambda ev: keyboard_numbers(8))
+player.on(['KEY_KP9-down'], 	lambda ev: keyboard_numbers(9))
+# player.on(['KEY_KPDOT-down'], 	lambda ev: keyboard_dot())
+player.on(['KEY_KPENTER-down'], lambda ev: broadcast('/stop'))
+player.on(['KEY_KPPLUS-down', 'KEY_KPPLUS-hold'], 	lambda ev: vol_inc())
+player.on(['KEY_KPMINUS-down', 'KEY_KPMINUS-hold'], lambda ev: vol_dec())
 
 
 
