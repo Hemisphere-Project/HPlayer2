@@ -78,7 +78,7 @@ class TimeClient():
         self.actor = Zactor(self._actor_fn, create_string_buffer(b"Sync request"))
         self.done = False
         
-        self._refresh = Timer(60, self.start)
+        self._refresh = Timer(120, self.start)
         self._refresh.start()
 
     def stop(self):

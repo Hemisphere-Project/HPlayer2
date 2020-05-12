@@ -69,15 +69,23 @@ class HPlayer2(EventEmitterX):
             p = PlayerClass(self, name)
             self._players[name] = p
 
-            # Bind settings
-            @self.settings.on('do-*')
-            def bind(ev, value, settings):
-                if ev in ['do-volume', 'do-mute']: 
-                    p._applyVolume( settings['volume'] if not settings['mute'] else 0 )
-                if ev in ['do-pan', 'do-audiomode']:
-                    p._applyPan( settings['pan'] if settings['audiomode'] != 'mono' else 'mono' )
-                if ev == 'do-flip':
-                    p._applyFlip( settings['flip'] )
+            # Bind Volume
+            @self.settings.on('do-volume')
+            @self.settings.on('do-mute')
+            def vol(ev, value, settings):
+                p._applyVolume( settings['volume'] if not settings['mute'] else 0 )
+
+            # Bind Pan
+            @self.settings.on('do-pan')
+            @self.settings.on('do-audiomode')
+            def pan(ev, value, settings):
+                p._applyPan( settings['pan'] if settings['audiomode'] != 'mono' else 'mono' )
+
+            # Bind Flip
+            @self.settings.on('do-flip')
+            def flip(ev, value, settings):
+                p._applyFlip( settings['flip'] )
+
 
             # Bind playlist
             p.on('end',              lambda ev: self.playlist.onMediaEnd())    # Media end    -> Playlist next
