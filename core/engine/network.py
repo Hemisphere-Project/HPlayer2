@@ -92,10 +92,10 @@ def get_ethmac():
 
 
 def get_essid(iface):
-    return subprocess.check_output("iw "+iface+" link | grep SSID: | awk '{print $2}'", shell=True)
+    return subprocess.check_output("iw "+iface+" link | grep SSID: | awk '{print $2}'", shell=True).decode('ascii').strip()
 
 def get_rssi(iface):
-    rssi = subprocess.check_output("iw "+iface+" link | grep SSID: | awk '{print $2}'", shell=True)
+    rssi = int(subprocess.check_output("iw "+iface+" link | grep signal: | awk '{print $2}'", shell=True))
     minVal = -85
     maxVal = -45
-    return max(0, (rssi-minVal)*100/(maxVal-minVal))
+    return round(max(0, (rssi-minVal)*100/(maxVal-minVal)))

@@ -158,7 +158,7 @@ class TelecoInterface (BaseInterface):
         elif self.activePage == PAGE_STATUS:
 
             net = network.get_essid('wlan0')
-            if net: net += ' '+network.get_rssi('wlan0')+'%'
+            if net: net += ' '+str(network.get_rssi('wlan0'))+'%'
             else:   net = 'NO-WIFI !'
             net = '  ^2P '+net
 
