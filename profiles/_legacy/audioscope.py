@@ -13,8 +13,8 @@ player.addInterface('http', 8080)
 player.addInterface('nfc', 4, 5)
 
 # HTTP + GPIO events
-player.on(['nfc-card'], lambda args: player.play(args[0]['uid']+"-*.*"))
-player.on(['nfc-nocard'], player.stop)
+player.on(['nfc-card'],     lambda ev, data: player.play(data['uid']+"-*.*"))
+player.on(['nfc-nocard'],   lambda ev: player.stop)
 
 
 # RUN

@@ -39,15 +39,15 @@ def restartEth0():
 # Remote modes
 remote_mode = True
 
-def switch_mode():
+def switch_mode(**kwargs):
 	global remote_mode
 	remote_mode = not remote_mode
 
-def remote_inc():
+def remote_inc(**kwargs):
 	if remote_mode: next_dir()
 	else: vol_inc()
 
-def remote_dec():
+def remote_dec(**kwargs):
 	if remote_mode: prev_dir()
 	else: vol_dec()
 
@@ -158,33 +158,33 @@ refresh_filelist()
 player.on(['/scene'], change_scene)
 
 # Bind Keypad
-player.on(['keypad-left'], 		lambda: play_firstdir(0))
-player.on(['keypad-up'], 		lambda: play_firstdir(1))
-player.on(['keypad-down'], 		lambda: play_firstdir(2))
-player.on(['keypad-right'], 	lambda: play_firstdir(3))
-player.on(['keypad-select'], 	lambda: broadcast('/stop'))
+player.on(['keypad-left'], 		lambda ev: play_firstdir(0))
+player.on(['keypad-up'], 		lambda ev: play_firstdir(1))
+player.on(['keypad-down'], 		lambda ev: play_firstdir(2))
+player.on(['keypad-right'], 	lambda ev: play_firstdir(3))
+player.on(['keypad-select'], 	lambda ev: broadcast('/stop'))
 
 # Bind Keyboard
-player.on(['KEY_KP0-down'], 	lambda: set_activedir(0))
-player.on(['KEY_KP1-down'], 	lambda: set_activedir(1))
-player.on(['KEY_KP2-down'], 	lambda: set_activedir(2))
-player.on(['KEY_KP3-down'], 	lambda: set_activedir(3))
-player.on(['KEY_KP4-down'], 	lambda: set_activedir(4))
-player.on(['KEY_KP5-down'], 	lambda: set_activedir(5))
-player.on(['KEY_KP6-down'], 	lambda: set_activedir(6))
-player.on(['KEY_KP7-down'], 	lambda: set_activedir(7))
-player.on(['KEY_KP8-down'], 	lambda: set_activedir(8))
-player.on(['KEY_KP9-down'], 	lambda: set_activedir(9))
-player.on(['KEY_KPDOT-down'], 	lambda: sel_lastdir())
-player.on(['KEY_KPENTER-down'], lambda: broadcast('/stop'))
+player.on(['KEY_KP0-down'], 	lambda ev: set_activedir(0))
+player.on(['KEY_KP1-down'], 	lambda ev: set_activedir(1))
+player.on(['KEY_KP2-down'], 	lambda ev: set_activedir(2))
+player.on(['KEY_KP3-down'], 	lambda ev: set_activedir(3))
+player.on(['KEY_KP4-down'], 	lambda ev: set_activedir(4))
+player.on(['KEY_KP5-down'], 	lambda ev: set_activedir(5))
+player.on(['KEY_KP6-down'], 	lambda ev: set_activedir(6))
+player.on(['KEY_KP7-down'], 	lambda ev: set_activedir(7))
+player.on(['KEY_KP8-down'], 	lambda ev: set_activedir(8))
+player.on(['KEY_KP9-down'], 	lambda ev: set_activedir(9))
+player.on(['KEY_KPDOT-down'], 	lambda ev: sel_lastdir())
+player.on(['KEY_KPENTER-down'], lambda ev: broadcast('/stop'))
 player.on(['KEY_KPPLUS-down', 'KEY_KPPLUS-hold'], 	vol_inc)
 player.on(['KEY_KPMINUS-down', 'KEY_KPMINUS-hold'], vol_dec)
 
 # Bind HTTP remotes + Keyboard
-player.on(['btn1', 'KEY_NUMLOCK-down'], 		lambda: play_activedir(0))
-player.on(['btn2', 'KEY_KPSLASH-down'], 		lambda: play_activedir(1))
-player.on(['btn3', 'KEY_KPASTERISK-down'], 		lambda: play_activedir(2))
-player.on(['btn4', 'KEY_BACKSPACE-down'], 		lambda: play_activedir(3))
+player.on(['btn1', 'KEY_NUMLOCK-down'], 		lambda ev: play_activedir(0))
+player.on(['btn2', 'KEY_KPSLASH-down'], 		lambda ev: play_activedir(1))
+player.on(['btn3', 'KEY_KPASTERISK-down'], 		lambda ev: play_activedir(2))
+player.on(['btn4', 'KEY_BACKSPACE-down'], 		lambda ev: play_activedir(3))
 player.on(['inc'], 			remote_inc)
 player.on(['dec'], 			remote_dec)
 player.on(['push'], 		switch_mode)
@@ -192,7 +192,7 @@ player.on(['push'], 		switch_mode)
 
 
 # OSC synctest request from ESP remotes
-def syncTest(arg):
+def syncTest(arg, **kwargs):
 	if remote_mode:
 		#SCENE
 		display = available_dir[active_dir].replace("scene ", "S.")[:5].ljust(5) + " "

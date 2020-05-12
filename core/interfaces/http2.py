@@ -146,11 +146,11 @@ class ThreadedHTTPServer(object):
                 socketio.sleep(0.1)
 
         @self.http2interface.hplayer.on('settings.updated')
-        def settings_send(*args):
+        def settings_send(ev, *args):
             self.sendSettings = args[0]
 
         @self.http2interface.hplayer.on('playlist.updated')
-        def playlist_send(*args):
+        def playlist_send(ev, *args):
             self.sendPlaylist = args[0]
 
 

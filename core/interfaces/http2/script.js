@@ -156,11 +156,11 @@ $(document).ready(function() {
         trigger('stop');
     });
     $('#loopAll_btn').click(function(event) {
-      if(settings['loop'] != 2) trigger('loop', 'all');
+      if(settings['loop'] != 2) trigger('loop', 2);
       else trigger('unloop');
     });
     $('#loopOne_btn').click(function(event) {
-      if(settings['loop'] != 1) trigger('loop', 'one');
+      if(settings['loop'] != 1) trigger('loop', 1);
       else trigger('unloop');
     });
     $('#mute_btn').click(function(event) {
