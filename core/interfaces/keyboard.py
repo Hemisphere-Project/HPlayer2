@@ -77,7 +77,7 @@ class KeyboardInterface (BaseInterface):
                     elif event.value == 0:
                         keymode = 'up'
 
-                    self.emit('key-'+keymode, event.code)
+                    # self.emit('key-'+keymode, event.code)
                     self.emit(keycode+'-'+keymode)
 
                     # self.log("keyboard event:", categorize(event), event.code, event.value)

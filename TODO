@@ -1,19 +1,13 @@
+
+
+
 BUG
-- check if RPi overlay is broken ?
-- Looper Profile doesn't gracefully exit..
+- close zyre: problem !
 
 NEXT
-- File Sync -> rsync + zyre + version ?
-- Move Scene / Media play in player logic
-- Service Bonjour/ZeroConf/Zyre
-- KEYPAD: Multiple page -> manual mode !
-- WebCTRL: Control multiple Pi with matrix view
-- Clean up log in player and overlays like in interfaces
-- Clean up overlay like interfaces
+- iface/Regie: bonjour!
 
 FUTURE
-- Replacing custom trigger / event player system with pyee or equivalent.
-Check if '*' is supported.
 - command line arguments alongside profiles for direct start
 
 LONG SHOT
