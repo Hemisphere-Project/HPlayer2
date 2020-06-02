@@ -69,6 +69,7 @@ def endSequence(ev, *args):
 # Teleco
 #
 @hplayer.on('teleco.play')
+@hplayer.on('http2.playindex')
 def telecoplay(ev, *args):
     broadcast('playdir', hplayer.files.currentIndex())
 
