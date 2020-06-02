@@ -178,15 +178,17 @@ class TelecoInterface (BaseInterface):
             status = player.status()
 
             # Time & Media
-            timestate = ''
             playstate = '                          '
             if player.isPlaying():
                 if status['media']:
                     playstate = ' '+status['media'].split('/')[-1]      # leading space : prevent digit display error
-                timestate = ( str( round(status['time']) )+'/'+str( round(status['duration']) )+'"')
+            
 
-            # MUTE
-            mutestate =  ' ^9JMUTE-VIDEO ' if self.isFaded else ''
+            # MUTE & Time
+            mutestate =  ' ^9JMUTE-VID  ' if self.isFaded else '             '
+            if player.isPlaying():
+                mutestate += ( str( round(status['time']) )+'/'+str( round(status['duration']) )+'"').rjust(8)
+
 
             # PLAY
             cmdline = '^5K'
@@ -199,20 +201,20 @@ class TelecoInterface (BaseInterface):
             elif self.hplayer.settings('loop') == 2:    cmdline += '^6X'
             else:                                       cmdline += '^3@'
 
-            # PREV/NEXT
-            cmdline += "     ^5G    ^5H"
+            # VOLUME -/+
+            cmdline += "     ^5P"+str(self.hplayer.settings('volume')).rjust(3)+" ^5O"
 
             # HEAD
             ind = min(self.hplayer.playlist.index()+1, self.hplayer.playlist.size())
             headline  = '^5M^1 ' + ( str(ind)+'/'+str(self.hplayer.playlist.size()) )
             headline += ' '+self.dirPlayback
             headline = headline[:18].ljust(18)
-            headline += '^0 ^5O'+str(self.hplayer.settings('volume')).rjust(3)
+            # headline += '^0 ^5O'+str(self.hplayer.settings('volume')).rjust(3)
 
             self.line(0, headline)
             self.line(1, mutestate)
             self.line(2, playstate)
-            self.line(3, timestate.rjust(21))
+            self.line(3, ' ')
             self.line(4, cmdline)
 
         elif self.activePage == PAGE_MEDIA:
@@ -356,7 +358,7 @@ class TelecoInterface (BaseInterface):
         @self.on('DOWN-hold')
         def downh(ev):
             if self.activePage == PAGE_PLAYBACK:
-                self.emit('skip', 1000)         
+                self.emit('skip', 100)         
         #
         # BUTTON A
         #  

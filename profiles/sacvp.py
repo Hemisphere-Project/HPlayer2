@@ -26,8 +26,11 @@ hplayer.addInterface('regie', 9111)
 if hplayer.isRPi():
     video.addOverlay('rpifade')
 
-
+# default volume
+@video.on('player-ready')
+def init(ev):
+    hplayer.settings.set('volume', 50)
+    hplayer.settings.set('loop', -1)
 
 # RUN
-hplayer.settings.set('volume', 50)
 hplayer.run()                               						# TODO: non blocking
