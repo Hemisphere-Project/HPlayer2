@@ -35,7 +35,9 @@ else
     rm -rf mpv-build
     git clone https://github.com/mpv-player/mpv-build.git
     cd mpv-build
-    #echo --enable-libmpv-shared > mpv_options
+    
+    echo --disable-vulkan > mpv_options
+    #echo --enable-libmpv-shared >> mpv_options
 
     # RPi: enable MMAL
     if [[ $(uname -m) = armv* ]]; then
@@ -43,7 +45,7 @@ else
         echo --enable-omx-rpi >> ffmpeg_options
         echo --enable-libv4l2 >> ffmpeg_options
 
-        echo --enable-rpi > mpv_options
+        echo --enable-rpi >> mpv_options
         echo --enable-rpi-mmal >> mpv_options
         # echo --disable-vaapi >> mpv_options
     fi

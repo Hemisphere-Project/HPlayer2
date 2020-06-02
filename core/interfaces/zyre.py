@@ -88,7 +88,6 @@ class TimeClient():
                 sleep(0.1)
         if self._refresh:
             self._refresh.cancel()
-        self.done = True
 
 
     # CLIENT TimeSync REQ Zactor
@@ -105,13 +104,12 @@ class TimeClient():
         sampler = []
         sample = TimeSample(req_sock)
 
-        terminated = False
-        while not terminated and retry < 10:
+        while retry < 10:
             sock = poller.wait(500)
 
             # NOBODY responded ...
             if not sock:
-                sample = TimeSample(req_sock)
+                sample = TimeSample(req_sock)   # next Sample
                 retry += 1
 
             # REP received
@@ -122,19 +120,18 @@ class TimeClient():
                 # print("Pong", sample.RTT, sample.CS)
                 if len(sampler) >= SAMPLER_SIZE:
                     break
-                sample = TimeSample(req_sock)
+                sample = TimeSample(req_sock)   # next Sample
 
             # INTERNAL commands
             elif sock == internal_pipe:
                 msg = Zmsg.recv(internal_pipe)
-
                 if not msg or msg.popstr() == b"$TERM":
-                    req_sock.__del__()
                     print("Timeclient terminated")
-                    return
+                    break
 
         # print("TimeClient: Sampling done", self.client_ip)
         self.compute(sampler)
+        req_sock.__del__()
         self.done = True
 
 
@@ -194,9 +191,9 @@ class Subscriber():
         
     def stop(self):
         self.actor.sock().send(b"s", b"$TERM")
-        self.sub.__del__()
         while not self.done:
             sleep(0.1)
+        self.sub.__del__()
 
     def subscribe(self, topic):
         Zsock.set_unsubscribe(self.sub, topic.encode())
@@ -207,8 +204,8 @@ class Subscriber():
         internal_pipe = Zsock(pipe, False) # We don't own the pipe, so False.
         poller = Zpoller(internal_pipe, self.sub, None)
         internal_pipe.signal(0)
-        terminated = False
-        while not terminated:
+
+        while True:
             sock = poller.wait(500)
 
             # NOBODY responded ...
@@ -266,7 +263,7 @@ class Peer():
         self.linker(3)
 
         self.timeclient = None
-        self.subscribers = None
+        self.subscriber = None
 
     def stop(self):
         print('stopping peer')
@@ -279,14 +276,10 @@ class Peer():
         if self.timeclient: 
             print(' - stop timeclient')
             self.timeclient.stop()
-            while not self.timeclient.done:
-                sleep(0.1)
 
-        if self.subscribers: 
+        if self.subscriber: 
             print(' - stop subscriptions')
-            self.subscribers.stop()
-            while not self.subscribers.done:
-                sleep(0.1)
+            self.subscriber.stop()
             
 
     def linker(self, l):
@@ -318,10 +311,10 @@ class Peer():
         if not isinstance(topics, list): topics = [topics]
         for t in topics:
             top = 'peer.'+t
-            if not self.subscribers:
-                self.subscribers = Subscriber(self.node, self.ip, self.pub_port, top)
+            if not self.subscriber:
+                self.subscriber = Subscriber(self.node, self.ip, self.pub_port, top)
             else:
-                self.subscribers.subscribe(top)
+                self.subscriber.subscribe(top)
     
 
 
@@ -393,8 +386,8 @@ class ZyreNode ():
         # RUN
         self.interface.log('Node started')
         internal_pipe.signal(0)
-        terminated = False
-        while not terminated:
+
+        while True:
             sock = poller.wait(500)
             if not sock:
                 continue
@@ -509,28 +502,26 @@ class ZyreNode ():
             #
             elif sock == internal_pipe:
                 msg = Zmsg.recv(internal_pipe)
-                if not msg: break
-
-                if msg.popstr() == b"$TERM":
+                if not msg or msg.popstr() == b"$TERM":
                     print('ZYRE Node TERM')
                     break
                     
-
-        # self.zyre.stop()  # HANGS !
-        
-        # internal_pipe.__del__()
+        internal_pipe.__del__()
         self.interface.log(' - node stopped')   # WEIRD: print helps the closing going smoothly..
         self.done = True
 
     def stop(self):
-        self.actor.sock().send(b"ss", b"$TERM", "gone")
+        for peer in self.book.values():
+            peer.stop()
+
+        self.actor.sock().send(b"ss", b"$TERM")
+        while not self.done:
+            sleep(0.1)
+
+        self.zyre.stop()        # HANGS !
         self.zyre.__del__()
         self.publisher.__del__()
         self.timereply.__del__()
-        for peer in self.book.values():
-            peer.stop()
-        while not self.done:
-            sleep(0.1)
             
 
     def peer(self, uuid):
@@ -655,7 +646,7 @@ class ZyreInterface (BaseInterface):
         @self.hplayer.on('player.playing')
         @self.hplayer.on('player.paused')
         @self.hplayer.on('player.stopped')
-        def st(*args):
+        def st(ev, *args):
             # print('peer.status', self.hplayer.status())
             self.node.publish('peer.status', self.hplayer.status())
 
@@ -698,9 +689,6 @@ class ZyreInterface (BaseInterface):
         self.stopped.wait()
         self.log( "closing sockets...") # CLOSING is messy !
         self.node.stop()
-        while not self.node.done:
-            sleep(0.1)
-        # sleep(1)
         self.log( "done.")
 
     def activeCount(self):

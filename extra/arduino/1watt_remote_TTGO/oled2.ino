@@ -43,6 +43,8 @@ void oled2_status(String stat) {
 }
 void oled2_status(String stat, String stat2) {
 
+  stat2.replace("Dispositifs     ", "Dispo");
+
   oled_stat1 = stat;
   oled_stat2 = stat2;
   
