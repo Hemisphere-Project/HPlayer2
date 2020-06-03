@@ -71,7 +71,7 @@ class FileManager(Module):
             else:
                 self.log("Adding "+p+" as root paths")
             self.root_paths.append(p)
-            handler = PatternMatchingEventHandler("*", "", False, True)
+            handler = PatternMatchingEventHandler("*", None, False, True)
             handler.on_any_event = onChange
             my_observer = Observer()
             my_observer.schedule(handler, p, recursive=True)

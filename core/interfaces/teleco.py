@@ -257,9 +257,11 @@ class TelecoInterface (BaseInterface):
         @self.on('ready')
         @self.hplayer.files.on('filelist-updated')
         def updatelist(ev, *args):
-            self.microOffset = 0
-            self.microIndex = 0
-            self.microList = self.hplayer.files.currentList(True)[self.microOffset:][:4]
+            microL = self.hplayer.files.currentList(True)[self.microOffset:][:4]
+            if self.microList != microL:
+                self.microOffset = 0
+                self.microIndex = 0
+                self.microList = microL
 
 
         @self.hplayer.on('app-closing')
