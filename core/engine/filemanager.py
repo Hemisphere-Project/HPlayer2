@@ -64,9 +64,10 @@ class FileManager(Module):
 
         for p in path:
             if not os.path.isdir(p):
-                p = '/tmp'+os.path.abspath(p)
-                pathlib.Path(p).mkdir(parents=True, exist_ok=True)
-                self.log("Basepath not found, using "+p+" instead")
+                self.log("Basepath "+p+" not found... ignoring")
+                continue
+                # p = '/tmp'+os.path.abspath(p)
+                # pathlib.Path(p).mkdir(parents=True, exist_ok=True)
             else:
                 self.log("Adding "+p+" as root paths")
             self.root_paths.append(p)
@@ -279,7 +280,6 @@ class FileManager(Module):
                             for e in globlist:
                                 if os.path.isfile(e) and self.validExt(e):
                                     liste.append(e)
-                            break
 
         liste.sort()
         return liste
