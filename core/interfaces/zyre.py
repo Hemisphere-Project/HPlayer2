@@ -78,7 +78,7 @@ class TimeClient():
         self.actor = Zactor(self._actor_fn, create_string_buffer(b"Sync request"))
         self.done = False
         
-        self._refresh = Timer(120, self.start)
+        self._refresh = Timer(240, self.start)
         self._refresh.start()
 
     def stop(self):
@@ -126,7 +126,7 @@ class TimeClient():
             elif sock == internal_pipe:
                 msg = Zmsg.recv(internal_pipe)
                 if not msg or msg.popstr() == b"$TERM":
-                    print("Timeclient terminated")
+                    # print("Timeclient terminated")
                     break
 
         # print("TimeClient: Sampling done", self.client_ip)
@@ -160,7 +160,7 @@ class TimeClient():
             self.status = 1
         else:
             self.status = 0
-            print("ERROR: sampler not full.. something might be broken")
+            print(self.client_ip, "ERROR: sampler not full.. something might be broken")
 
 
 
@@ -266,19 +266,19 @@ class Peer():
         self.subscriber = None
 
     def stop(self):
-        print('stopping peer')
+        # print('stopping peer')
         self.active = False
 
         if self.timerLink:
-            print(' - cancel timelink')
+            # print(' - cancel timelink')
             self.timerLink.cancel()
 
         if self.timeclient: 
-            print(' - stop timeclient')
+            # print(' - stop timeclient')
             self.timeclient.stop()
 
         if self.subscriber: 
-            print(' - stop subscriptions')
+            # print(' - stop subscriptions')
             self.subscriber.stop()
             
 
@@ -341,7 +341,7 @@ class ZyreNode ():
         self.zyre = Zyre(None)
         if netiface:
             self.zyre.set_interface( string_at(netiface) )
-            print("ZYRE Node forced netiface: ", string_at(netiface) )
+            self.interface.log("ZYRE Node forced netiface: ", string_at(netiface) )
 
         self.zyre.set_name(str(self.interface.hplayer.name()).encode())
         self.zyre.set_header(b"TS-PORT",  str(get_port(self.timereply)).encode())
@@ -503,7 +503,7 @@ class ZyreNode ():
             elif sock == internal_pipe:
                 msg = Zmsg.recv(internal_pipe)
                 if not msg or msg.popstr() == b"$TERM":
-                    print('ZYRE Node TERM')
+                    # print('ZYRE Node TERM')
                     break
                     
         internal_pipe.__del__()
