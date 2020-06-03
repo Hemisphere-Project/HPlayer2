@@ -50,6 +50,8 @@ class TelecoInterface (BaseInterface):
     # SERIAL receiver THREAD
     def listen(self):
 
+        firstTry = True
+
         while self.isRunning():
 
             # find port
@@ -58,7 +60,9 @@ class TelecoInterface (BaseInterface):
                     self.port = dev.device
                     break
                 if not self.port:
-                    self.log("no device found.. retrying")
+                    if firstTry:
+                        self.log("no device found.. retrying")
+                        firstTry = False
                     # for p in list_ports.comports():
                     #     self.log(p)
                     time.sleep(3)
