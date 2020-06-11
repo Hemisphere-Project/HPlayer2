@@ -150,13 +150,13 @@ class TimeBook():
             for peer in self.peers.values():
                 peer.stop()
 
-    def newpeer(self, uuid, addr):
+    def newpeer(self, uuid, addr, port):
         self.gone(uuid)
         with self._lock:
             self.phonebook[uuid] = {}
             self.phonebook[uuid]['uuid'] = uuid
             self.phonebook[uuid]['ip'] = extract_ip(addr)
-            # self.phonebook[uuid]['port'] = port.decode()
+            self.phonebook[uuid]['port'] = port.decode()
             self.phonebook[uuid]['active'] = True
             self.activePeers += 1
             print("New Peer detected", self.phonebook[uuid])
@@ -166,7 +166,7 @@ class TimeBook():
             if uuid in self.phonebook:
                 ip = self.phonebook[uuid]['ip']
                 # if not ip in self.peers:
-                # self.peers[ip] = TimeClient(self.phonebook[uuid])
+                self.peers[ip] = TimeClient(self.phonebook[uuid])
 
     def gone(self, uuid):
         with self._lock:
@@ -251,7 +251,7 @@ class ZyreNode ():
         self.zyre = zyre
 
         self.timebook = TimeBook()
-        # self.timeserver = TimeServer()
+        self.timeserver = TimeServer()
 
         self._actor_fn = zactor_fn(self.actor_fn) # ctypes function reference must live as long as the actor.
 
@@ -263,7 +263,7 @@ class ZyreNode ():
         self.deltadelay = 0
 
     def stop(self):
-        # self.timeserver.stop()
+        self.timeserver.stop()
         self.timebook.stop()
         if not self.done:
             self.actor.sock().send(b"ss", b"$TERM", "gone")
@@ -332,7 +332,7 @@ class ZyreNode ():
         if iface:
             zyre_node.set_interface( string_at(iface) )
             print("ZYRE Node forced iface: ", string_at(iface) )
-        # zyre_node.set_header (b"TS-PORT", str(self.timeserver.port).encode());
+        zyre_node.set_header (b"TS-PORT", str(self.timeserver.port).encode());
         zyre_node.start()
         zyre_node.join(b"broadcast")
         zyre_node.join(b"sync")
@@ -362,8 +362,7 @@ class ZyreNode ():
 
                 # ENTER: add to phonebook for external contact (i.e. TimeSync)
                 if e.type() == b"ENTER":
-                    # self.timebook.newpeer(e.peer_uuid(), e.peer_addr(), e.header(b"TS-PORT"))
-                    self.timebook.newpeer(e.peer_uuid(), e.peer_addr())
+                    self.timebook.newpeer(e.peer_uuid(), e.peer_addr(), e.header(b"TS-PORT"))
 
                 # EXIT
                 elif e.type() == b"EXIT":
@@ -430,8 +429,8 @@ class ZyreNode ():
 
 
         # zyre_node.stop()  # HANGS !
-        # internal_pipe.__del__()
-        # zyre_node.__del__()
+        internal_pipe.__del__()
+        zyre_node.__del__()
         print('ZYRE Node stopped')   # WEIRD: print helps the closing going smoothly..
         self.done = True
 
