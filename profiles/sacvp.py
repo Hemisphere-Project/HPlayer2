@@ -20,9 +20,9 @@ video = hplayer.addPlayer('mpv', 'video')
 # hplayer.addInterface('osc', 1222, 3737)
 
 hplayer.addInterface('zyre')
-hplayer.addInterface('http2', 8080)
-hplayer.addInterface('teleco')
-hplayer.addInterface('regie', 9111)
+# hplayer.addInterface('http2', 8080)
+# hplayer.addInterface('teleco')
+hplayer.addInterface('regie', 9111, '/data/sync/'+profilename)
 
 # Overlay
 if hplayer.isRPi():

@@ -5,7 +5,7 @@ from flask import Flask, render_template, session, request, send_from_directory
 from flask_socketio import SocketIO, emit, join_room, leave_room, close_room, rooms, disconnect
 from werkzeug.utils import secure_filename
 import threading, os, time, queue
-import logging
+import logging, sys, json
 
 from ..engine.network import get_allip, get_hostname
 import socket
@@ -15,12 +15,15 @@ from zeroconf import ServiceInfo, Zeroconf
 thread = None
 thread_lock = threading.Lock()
 
+REGIE_PATH = '/opt/RPi-Regie'
+
 
 class RegieInterface (BaseInterface):
 
-    def  __init__(self, hplayer, port):
+    def  __init__(self, hplayer, port, datapath):
         super(RegieInterface, self).__init__(hplayer, "Regie")
         self._port = port
+        self._datapath = datapath
 
     # HTTP receiver THREAD
     def listen(self):
@@ -56,7 +59,13 @@ class ThreadedHTTPServer(object):
         self.regieinterface = regieinterface
 
         interface_path = os.path.dirname(os.path.realpath(__file__))
-        www_path = os.path.join(interface_path, 'regie')
+
+        localRegie = os.path.isdir(REGIE_PATH)
+
+        if localRegie:
+            www_path = os.path.join(REGIE_PATH, 'web')
+        else:
+            www_path = os.path.join(interface_path, 'regie')
 
         app = Flask(__name__, template_folder=www_path)
         app.config['SECRET_KEY'] = 'secret!'
@@ -68,11 +77,12 @@ class ThreadedHTTPServer(object):
         #
         @app.route('/')
         def index():
-            # return render_template('index.html', async_mode=socketio.async_mode)
+            # self.regieinterface.log('requesting index')
             return send_from_directory(www_path, 'index.html')
             
         @app.route('/<path:path>')
         def send_static(path):
+            # self.regieinterface.log('requesting '+path)
             return send_from_directory(www_path, path)
 
 
@@ -109,10 +119,38 @@ class ThreadedHTTPServer(object):
         def client_connect():
             self.regieinterface.log('New Remote Regie connected')
 
+
+        @socketio.on('save')
+        def save(data):
+            try:
+                json.loads(data)
+                with open( os.path.join(self.regieinterface._datapath, 'project.json'), 'w') as file:
+                    file.write(data)
+            except:
+                e = str(sys.exc_info()[0])
+                self.regieinterface.log('fail to save project: '+e+' '+data)
+
+
+        @socketio.on('load')
+        def load(datatype=None):
+            data={}
+            
+            if not datatype or datatype == 'project':
+                fpath = os.path.join(self.regieinterface._datapath, 'project.json')
+                if os.path.isfile(fpath):
+                    with open( fpath, 'r') as file:
+                        data['fullproject'] = file.read()
+                else:
+                    data['fullproject'] = '{"pool":[], "project":[[]]}'
+
+            if not datatype or datatype == 'fileTree':
+                data['fileTree'] = self.regieinterface.hplayer.files()
+
+            emit('data', data)
+
+
         @socketio.on('init')
         def init(data):
-            emit('fileTree', self.regieinterface.hplayer.files())
-                        
             # Start update broadcaster
             global thread
             with thread_lock:
@@ -122,6 +160,7 @@ class ThreadedHTTPServer(object):
             # enable peer monitoring
             self.regieinterface.emit('peers.getlink')
             self.regieinterface.emit('peers.subscribe', ['status', 'settings'])
+
 
         @socketio.on('event')
         def event(data):
