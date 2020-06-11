@@ -251,7 +251,7 @@ class Peer():
                 'ip':           extract_ip( conf.peer_addr() ),
                 'name':         conf.peer_name().decode(),
                 'ts_port':      conf.header(b"TS-PORT").decode(),
-                'pub_port':     conf.header(b"PUB-PORT").decode(),
+                # 'pub_port':     conf.header(b"PUB-PORT").decode(),
             }
         for key in conf:
             setattr(self, key, conf[key])
