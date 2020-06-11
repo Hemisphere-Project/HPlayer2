@@ -25,7 +25,7 @@ def zlist_strlist(zlist):
 
 PRECISION = 1000000
 SAMPLER_SIZE = 500
-KEEP_SAMPLE = [0.01, 0.3]
+KEEP_SAMPLE = [0.05, 0.5]
 
 
 #
@@ -57,27 +57,40 @@ class TimeClient():
         self.peer = peer
         self.url = ("tcp://"+peer['ip']+":"+peer['port']).encode()
         self.clockshift = 0
-        self._actor_fn = zactor_fn(self.actor_fn) # ctypes function reference must live as long as the actor.
-        self.done = True
-        self.start()
 
-    def start(self):
-        if not self.done:
-            self.stop()
-        self.done = False
-        
+        self._actor_fn = zactor_fn(self.actor_fn) # ctypes function reference must live as long as the actor.
         self.actor = Zactor(self._actor_fn, create_string_buffer(b"Sync request"))
-        
-        self._refresh = Timer(60*5, self.start)
-        self._refresh.start()
+        self.done = False
 
     def stop(self):
         if not self.done:
             self.actor.sock().send(b"s", b"$TERM")
-        if self._refresh:
-            self._refresh.cancel()
-        self.done = True
 
+
+    #  COMPUTE average Clock Shift
+    #  - remove firsts samples / keep 70% lower RTT / ponderate lower RTT -
+    def compute(self, sampler):
+        if len(sampler) >= SAMPLER_SIZE:
+            RTTs = sorted(sampler, key=lambda x: x.RTT)
+            RTTs = RTTs[int(len(RTTs) * KEEP_SAMPLE[0]) : int(len(RTTs) * KEEP_SAMPLE[1])]
+            sampler = RTTs
+            sampler.reverse()
+
+            cs = 0
+            cs_count = 0
+            for k, s in enumerate(sampler):
+                p = 10*k/len(sampler)   # higher index are lower RTT -> more value
+                cs += s.CS * p
+                cs_count += p
+            if cs_count > 0:
+                cs = int(cs/cs_count)
+
+            print(self.peer['ip'], "clock shift", str(cs)+"ns", "using", len(sampler), "samples")
+            self.clockshift = cs
+            self.status = 1
+        else:
+            self.status = 0
+            print("ERROR: sampler not full.. something might be broken")
 
     # CLIENT TimeSync REQ Zactor
     def actor_fn(self, pipe, args):
@@ -121,36 +134,6 @@ class TimeClient():
         # print("TimeClient: Sampling done", self.peer['ip'])
         self.compute(sampler)
         self.done = True
-
-
-    #  COMPUTE average Clock Shift
-    #  - remove firsts samples / keep 70% lower RTT / ponderate lower RTT -
-    def compute(self, sampler):
-        if len(sampler) >= SAMPLER_SIZE:
-            RTTs = sorted(sampler, key=lambda x: x.RTT)
-            RTTs = RTTs[int(len(RTTs) * KEEP_SAMPLE[0]) : int(len(RTTs) * KEEP_SAMPLE[1])]
-            sampler = RTTs
-            sampler.reverse()
-
-            cs = 0
-            cs_count = 0
-            for k, s in enumerate(sampler):
-                p = 10*k/len(sampler)   # higher index are lower RTT -> more value
-                cs += s.CS * p
-                cs_count += p
-            if cs_count > 0:
-                cs = int(cs/cs_count)
-
-            print(self.peer['ip'], "clock shift", str(cs)+"ns", "using", len(sampler), "samples")
-            if self.clockshift:
-                print('\t correction =', str(self.clockshift-cs)+"ns" )
-            self.clockshift = cs
-            self.status = 1
-        else:
-            self.status = 0
-            print("ERROR: sampler not full.. something might be broken")
-
-
 
 #
 #  BOOK to perform and record sync with others
