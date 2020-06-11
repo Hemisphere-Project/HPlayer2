@@ -193,7 +193,8 @@ class HPlayer2(EventEmitterX):
         # os.system('ps faux | pgrep mpv | xargs kill')
         self.emit('app-quit')
         self.log("stopped. Goodbye !\n");
-        sys.exit(0)
+        # sys.exit(0)
+        os._exit(0)
 
 
     #
