@@ -29,6 +29,7 @@ class BaseInterface(ABC, Module):
 
     # Stop
     def quit(self):
+        self.log("stopping...")
         self.stopped.set()
         self.recvThread.join()
         self.log("stopped")
