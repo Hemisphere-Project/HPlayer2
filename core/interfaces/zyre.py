@@ -429,8 +429,8 @@ class ZyreNode ():
 
 
         # zyre_node.stop()  # HANGS !
-        internal_pipe.__del__()
-        zyre_node.__del__()
+        # internal_pipe.__del__()
+        # zyre_node.__del__()
         print('ZYRE Node stopped')   # WEIRD: print helps the closing going smoothly..
         self.done = True
 
