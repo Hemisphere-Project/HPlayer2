@@ -84,6 +84,8 @@ class TimeClient():
     def stop(self):
         if not self.done:
             self.actor.sock().send(b"s", b"$TERM")
+            while not self.done:
+                sleep(0.1)
         if self._refresh:
             self._refresh.cancel()
         self.done = True
@@ -125,7 +127,10 @@ class TimeClient():
             # INTERNAL commands
             elif sock == internal_pipe:
                 msg = Zmsg.recv(internal_pipe)
+
                 if not msg or msg.popstr() == b"$TERM":
+                    req_sock.__del__()
+                    print("Timeclient terminated")
                     return
 
         # print("TimeClient: Sampling done", self.client_ip)
@@ -188,10 +193,10 @@ class Subscriber():
         self.done = False
         
     def stop(self):
-        if not self.done:
-            self.actor.sock().send(b"s", b"$TERM")
+        self.actor.sock().send(b"s", b"$TERM")
         self.sub.__del__()
-        self.done = True
+        while not self.done:
+            sleep(0.1)
 
     def subscribe(self, topic):
         Zsock.set_unsubscribe(self.sub, topic.encode())
@@ -232,8 +237,7 @@ class Subscriber():
                     print('INVALID message received: Unknown Publisher !')
                 
 
-
-        internal_pipe.__del__()
+        print("Subscriber terminated")
         self.done = True
 
 
@@ -265,13 +269,25 @@ class Peer():
         self.subscribers = None
 
     def stop(self):
+        print('stopping peer')
         self.active = False
+
         if self.timerLink:
+            print(' - cancel timelink')
             self.timerLink.cancel()
+
         if self.timeclient: 
+            print(' - stop timeclient')
             self.timeclient.stop()
+            while not self.timeclient.done:
+                sleep(0.1)
+
         if self.subscribers: 
+            print(' - stop subscriptions')
             self.subscribers.stop()
+            while not self.subscribers.done:
+                sleep(0.1)
+            
 
     def linker(self, l):
         if not self.active: return
@@ -395,7 +411,6 @@ class ZyreNode ():
                 # ENTER: add to book for external contact (i.e. TimeSync)
                 if e.type() == b"ENTER":
                     newpeer = Peer(self, e) 
-
                     existing = None
 
                     if uuid in self.book:
@@ -502,18 +517,21 @@ class ZyreNode ():
                     
 
         # self.zyre.stop()  # HANGS !
-        internal_pipe.__del__()
-        self.interface.log('Node stopped')   # WEIRD: print helps the closing going smoothly..
+        
+        # internal_pipe.__del__()
+        self.interface.log(' - node stopped')   # WEIRD: print helps the closing going smoothly..
         self.done = True
 
     def stop(self):
-        for peer in self.book.values():
-            peer.stop()
-        if not self.done:
-            self.actor.sock().send(b"ss", b"$TERM", "gone")
+        self.actor.sock().send(b"ss", b"$TERM", "gone")
         self.zyre.__del__()
         self.publisher.__del__()
         self.timereply.__del__()
+        for peer in self.book.values():
+            peer.stop()
+        while not self.done:
+            sleep(0.1)
+            
 
     def peer(self, uuid):
         if uuid in self.book and self.book[uuid].active:
@@ -678,9 +696,12 @@ class ZyreInterface (BaseInterface):
     def listen(self):
         self.log( "interface ready")
         self.stopped.wait()
-        self.node.stop()
         self.log( "closing sockets...") # CLOSING is messy !
-        sleep(0.2)
+        self.node.stop()
+        while not self.node.done:
+            sleep(0.1)
+        # sleep(1)
+        self.log( "done.")
 
     def activeCount(self):
         return len(self.node.book)
