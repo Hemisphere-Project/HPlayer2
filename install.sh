@@ -5,6 +5,7 @@ BASEPATH="$(dirname "$(readlink -f "$0")")"
 
 ln -sf "$BASEPATH/hplayer2@.service" /etc/systemd/system/
 ln -sf "$BASEPATH/hplayer2" /usr/local/bin/
+ln -sf "$BASEPATH/bin/mpv" /usr/local/bin/
 
 FILE=/boot/starter.txt
 if test -f "$FILE"; then
