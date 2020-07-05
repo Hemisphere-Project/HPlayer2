@@ -190,7 +190,7 @@ class HPlayer2(EventEmitterX):
         for iface in self.interfaces():
             iface.quit()
 
-        os.system('ps faux | pgrep mpv | xargs kill')
+        # os.system('ps faux | pgrep mpv | xargs kill')
         self.emit('app-quit')
         self.log("stopped. Goodbye !\n");
         sys.exit(0)
