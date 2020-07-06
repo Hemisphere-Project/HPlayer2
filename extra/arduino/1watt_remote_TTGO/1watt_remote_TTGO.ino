@@ -36,7 +36,7 @@ int *pins;
 int pinout[4][7] = {  {},                           // ciconia
                       {},//{SDA, D3, D7, SCL, D6, RX, TX},    // remote v1 (square)                        
                       {},//{D3, D7, D6, SCL, SDA, RX, TX}     // remote v2 (inline)
-                      {27, 0, 2, 17, 25, 32, 4}         // remote v3 (woodstock)
+                      {27, 0, 2, 16, 25, 32, 4}         // remote v3 (woodstock)
                     };
 
 void ICACHE_RAM_ATTR pin0() {
@@ -87,9 +87,9 @@ void setup(void) {
 
   // Wifi
   myIP += String(settings_get("id")+100);
-  //wifi_static(myIP);
-  //wifi_connect("24watt");
-  wifi_connect("interweb", "superspeed37");
+  wifi_static(myIP);
+  wifi_connect("24watt");
+  //wifi_connect("interweb", "superspeed37");
   wifi_ota( "watt-remote v" + String(CR_VERSION, 2) );
   wifi_onConnect(doOnConnect);
   wifi_onDisconnect(doOnDisconnect);

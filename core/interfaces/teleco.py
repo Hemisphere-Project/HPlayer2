@@ -169,7 +169,7 @@ class TelecoInterface (BaseInterface):
             self.line(0, '^1 STATUS')
             self.line(1, net)
             self.line(2, people)
-            self.line(3, '               ')
+            self.line(3, 'name: '+network.get_hostname())
             self.line(4, 'ip: '+network.get_ip('wlan0'))
         
         elif self.activePage == PAGE_PLAYBACK:
