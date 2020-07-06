@@ -9,7 +9,9 @@ class EventEmitterX(EventEmitter):
     def emit(self, event, *args):
         # prepend event to args
         a = [event] + list(args)
+        # self.log('HPLAYER', event, *a )
         super().emit(event, *a)
+        # self.log('DONE.')
 
 
 class Module(EventEmitterX):
@@ -32,7 +34,7 @@ class Module(EventEmitterX):
         if self.logEvents:
             self.log('EVENT', fullEvent, *args )
 
-        super().emit(event, *args)        
+        super().emit(event, *args) 
         self.hplayer.emit(fullEvent, *args)
 
         

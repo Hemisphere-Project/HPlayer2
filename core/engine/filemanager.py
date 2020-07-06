@@ -53,7 +53,15 @@ class FileManager(Module):
         """
         Set root directories with attached watchdogs 
         """
-        if not isinstance(path, list): path = [path]
+
+        # filter .tmp changes
+        def onChange(e):
+            if not e.src_path.endswith('.tmp'):
+                self.emit('file-changed', e)
+
+        if not isinstance(path, list): 
+            path = [path]
+
         for p in path:
             if not os.path.isdir(p):
                 p = '/tmp'+os.path.abspath(p)
@@ -63,7 +71,7 @@ class FileManager(Module):
                 self.log("Adding "+p+" as root paths")
             self.root_paths.append(p)
             handler = PatternMatchingEventHandler("*", "", False, True)
-            handler.on_any_event = lambda e: self.emit('file-changed', e)
+            handler.on_any_event = onChange
             my_observer = Observer()
             my_observer.schedule(handler, p, recursive=True)
             my_observer.start()
@@ -154,11 +162,11 @@ class FileManager(Module):
         return self.active_dir
 
 
-    def maxIndex(self):
+    def lastIndex(self):
         """
         Get number of directories
         """
-        return len(self.unified_dir)
+        return len(self.unified_dir)-1
 
 
     def nextIndex(self):
