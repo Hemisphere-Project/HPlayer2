@@ -1,6 +1,8 @@
 from .base import BaseInterface
 import socketio
 import eventlet
+from watchdog.observers import Observer
+from watchdog.events import PatternMatchingEventHandler
 from flask import Flask, render_template, session, request, send_from_directory
 from flask_socketio import SocketIO, emit, join_room, leave_room, close_room, rooms, disconnect
 from werkzeug.utils import secure_filename
@@ -105,7 +107,7 @@ class ThreadedHTTPServer(object):
 
         @self.regieinterface.hplayer.on('files.dirlist-updated')
         def filetree_send(ev, *args):
-            self.sendBuffer.put( ('fileTree', args[0]) )
+            self.sendBuffer.put( ('data', {'fileTree': self.regieinterface.hplayer.files()}) )
 
         @self.regieinterface.hplayer.on('*.peer.*')
         def peer_send(ev, *args):
@@ -131,32 +133,20 @@ class ThreadedHTTPServer(object):
                 self.regieinterface.log('fail to save project: '+e+' '+data)
 
 
-        @socketio.on('load')
-        def load(datatype=None):
-            data={}
-            
-            if not datatype or datatype == 'project':
-                fpath = os.path.join(self.regieinterface._datapath, 'project.json')
-                if os.path.isfile(fpath):
-                    with open( fpath, 'r') as file:
-                        data['fullproject'] = file.read()
-                else:
-                    data['fullproject'] = '{"pool":[], "project":[[]]}'
-
-            if not datatype or datatype == 'fileTree':
-                data['fileTree'] = self.regieinterface.hplayer.files()
-
-            emit('data', data)
-
-
         @socketio.on('init')
         def init(data):
+
+            # send project
+            emit('data', self.projectData())
+
             # Start update broadcaster
             global thread
             with thread_lock:
                 if thread is None:
                     thread = socketio.start_background_task(target=background_thread)
-            
+
+        @socketio.on('register')
+        def register(data):
             # enable peer monitoring
             self.regieinterface.emit('peers.getlink')
             self.regieinterface.emit('peers.subscribe', ['status', 'settings'])
@@ -164,7 +154,6 @@ class ThreadedHTTPServer(object):
 
         @socketio.on('event')
         def event(data):
-            print('event', data)
             self.regieinterface.emit('peers.triggers', data, 250)
 
 
@@ -172,16 +161,53 @@ class ThreadedHTTPServer(object):
         self.server_thread = threading.Thread(target=lambda:socketio.run(app, host='0.0.0.0', port=port))
         self.server_thread.daemon = True
 
+        # watchdog project.json
+        self.watcher()
+
+
     def start(self):
         self.server_thread.start()
+
 
     def stop(self):
         #self.server.stop()
         pass
 
+
     def __enter__(self):
         self.start()
         return self
 
+
     def __exit__(self, type, value, traceback):
         self.stop()
+
+
+    def projectPath(self):
+        return os.path.join(self.regieinterface._datapath, 'project.json')
+
+
+    def projectData(self):
+        data={
+            'fullproject':  '{"pool":[], "project":[[]]}',
+            'fileTree':     self.regieinterface.hplayer.files()
+        }
+            
+        if os.path.isfile(self.projectPath()):
+            with open( self.projectPath(), 'r') as file:
+                data['fullproject'] = file.read()
+
+        return data
+
+
+    def watcher(self):
+
+        def onchange(e):
+            self.regieinterface.log('project updated ! pushing it...')
+            self.sendBuffer.put( ('data', self.projectData()) )
+
+        handler = PatternMatchingEventHandler("*/project.json", None, False, True)
+        handler.on_any_event = onchange
+        self.projectObserver = Observer()
+        self.projectObserver.schedule(handler, os.path.dirname(self.projectPath()))
+        self.projectObserver.start()

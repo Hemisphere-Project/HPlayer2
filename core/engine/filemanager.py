@@ -57,7 +57,8 @@ class FileManager(Module):
         # filter .tmp changes
         def onChange(e):
             if not e.src_path.endswith('.tmp'):
-                self.emit('file-changed', e)
+                if not e.src_path.endswith('project.json'):
+                    self.emit('file-changed', e)
 
         if not isinstance(path, list): 
             path = [path]
