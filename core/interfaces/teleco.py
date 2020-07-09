@@ -320,8 +320,8 @@ class TelecoInterface (BaseInterface):
         def func_hold(ev):
             self.activePage = PAGE_STATUS
             if self._muteHolded:
-                self.activePage = PAGE_EXIT
-                time.sleep(0.1)
+                self.page(PAGE_EXIT)
+                self.refresh()
                 self.emit('hardreset')
 
         #
