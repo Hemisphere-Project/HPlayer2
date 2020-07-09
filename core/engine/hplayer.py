@@ -213,6 +213,7 @@ class HPlayer2(EventEmitterX):
             # global runningFlag
             # runningFlag = False
             # sleep(5.0)
+            sleep(1.0)
             print('HARD KILL')
             os._exit(0)
 
