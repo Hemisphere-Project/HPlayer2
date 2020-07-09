@@ -177,6 +177,10 @@ class ThreadedHTTPServer(object):
         def reboot_message():
             os.system('reboot')
 
+        @socketio.on('restart')
+        def restart_message():
+            self.http2interface.emit('hardreset')
+
         @socketio.on('ping')
         def ping_message():
             socketio.send('pong')

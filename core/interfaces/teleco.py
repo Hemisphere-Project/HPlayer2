@@ -380,6 +380,8 @@ class TelecoInterface (BaseInterface):
             elif self.activePage == PAGE_MEDIA:
                 self.emit('play', self.hplayer.files.currentList(), self.microOffset+self.microIndex)
                 self.dirPlayback = self.hplayer.files.currentDir()
+                self.emit('unfade')
+                self.isFaded = 0
                 self.page(PAGE_PLAYBACK)
 
 

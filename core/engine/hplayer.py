@@ -8,6 +8,7 @@ from core.engine.playlist import Playlist
 from core.engine.settings import Settings
 
 from collections import OrderedDict
+from threading import Timer
 from termcolor import colored
 from time import sleep
 import signal
@@ -210,6 +211,9 @@ class HPlayer2(EventEmitterX):
             os.system('systemctl restart NetworkManager')
             global runningFlag
             runningFlag = False
+            sleep(5.0)
+            print('HARD KILL')
+            os._exit(0)
 
 
         # PLAYLIST

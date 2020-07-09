@@ -84,8 +84,10 @@ class TimeClient():
     def stop(self):
         if not self.done:
             self.actor.sock().send(b"s", b"$TERM")
-            while not self.done:
+            retry = 0
+            while not self.done and retry < 10:
                 sleep(0.1)
+                retry += 1
         if self._refresh:
             self._refresh.cancel()
 
@@ -191,8 +193,10 @@ class Subscriber():
         
     def stop(self):
         self.actor.sock().send(b"s", b"$TERM")
-        while not self.done:
+        retry = 0
+        while not self.done and retry < 10:
             sleep(0.1)
+            retry += 1
         self.sub.__del__()
 
     def subscribe(self, topic):
@@ -250,9 +254,20 @@ class Peer():
                 'uuid':         conf.peer_uuid(),
                 'ip':           extract_ip( conf.peer_addr() ),
                 'name':         conf.peer_name().decode(),
-                'ts_port':      conf.header(b"TS-PORT").decode(),
-                'pub_port':     conf.header(b"PUB-PORT").decode(),
             }
+
+            try:
+                conf['ts_port'] = conf.header(b"TS-PORT").decode()
+            except:
+                self.node.interface.log(conf['name']+' missing TS-PORT !')
+                conf['ts_port'] = None
+
+            try:
+                conf['pub_port'] = conf.header(b"PUB-PORT").decode()
+            except:
+                self.node.interface.log(conf['name']+' missing PUB-PORT !')
+                conf['pub_port'] = None
+
         for key in conf:
             setattr(self, key, conf[key])
 
@@ -298,6 +313,7 @@ class Peer():
 
     def sync(self):
         if not self.active: return
+        if not self.ts_port: return
         self.timeclient = TimeClient(self.ip, self.ts_port)
 
     def clockshift(self):
@@ -308,6 +324,7 @@ class Peer():
 
     def subscribe(self, topics):
         if not self.active: return
+        if not self.pub_port: return
         if not isinstance(topics, list): topics = [topics]
         for t in topics:
             top = 'peer.'+t
@@ -515,10 +532,12 @@ class ZyreNode ():
             peer.stop()
 
         self.actor.sock().send(b"ss", b"$TERM")
-        while not self.done:
+        retry = 0
+        while not self.done and retry < 10:
             sleep(0.1)
+            retry += 1
 
-        self.zyre.stop()        # HANGS !
+        # self.zyre.stop()        # HANGS !
         self.zyre.__del__()
         self.publisher.__del__()
         self.timereply.__del__()

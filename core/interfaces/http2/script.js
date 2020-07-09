@@ -175,6 +175,10 @@ $(document).ready(function() {
       var r = confirm("Reboot the device ?");
       if (r == true) socket.emit('reboot');
     });
+    $('#restart_btn').click(function(event) {
+      var r = confirm("Restart HPlayer2 ?");
+      if (r == true) socket.emit('restart');
+    });
 
     $('#volume_range').on('input', function(event) {
       trigger('volume', this.value);
