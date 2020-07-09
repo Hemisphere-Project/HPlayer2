@@ -208,7 +208,7 @@ class HPlayer2(EventEmitterX):
         #
         @module.on('hardreset')
         def hardreset(ev, *args): 
-            os.system('systemctl restart NetworkManager')
+            # os.system('systemctl restart NetworkManager')
             # global runningFlag
             # runningFlag = False
             # sleep(5.0)

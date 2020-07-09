@@ -322,7 +322,7 @@ class TelecoInterface (BaseInterface):
             if self._muteHolded:
                 self.page(PAGE_EXIT)
                 self.refresh()
-                self.emit('hardreset')
+                Timer(.3, lambda: self.emit('hardreset')).start()
 
         #
         # BUTTON UP
