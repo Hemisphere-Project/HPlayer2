@@ -208,10 +208,11 @@ class HPlayer2(EventEmitterX):
         #
         @module.on('hardreset')
         def hardreset(ev, *args):
+            self.emit('app-closing')
             os.system('systemctl restart NetworkManager')
-            global runningFlag
-            runningFlag = False
-            sleep(5.0)
+            # global runningFlag
+            # runningFlag = False
+            # sleep(5.0)
             print('HARD KILL')
             os._exit(0)
 
