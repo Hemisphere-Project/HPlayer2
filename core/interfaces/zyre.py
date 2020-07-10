@@ -259,15 +259,15 @@ class Peer():
             try:
                 conf2['ts_port'] = conf.header(b"TS-PORT").decode()
             except:
-                self.node.interface.log(conf['name']+' missing TS-PORT !')
+                self.node.interface.log(conf2['name']+' missing TS-PORT !')
                 conf2['ts_port'] = None
 
             try:
                 conf2['pub_port'] = conf.header(b"PUB-PORT").decode()
             except:
-                self.node.interface.log(conf['name']+' missing PUB-PORT !')
+                self.node.interface.log(conf2['name']+' missing PUB-PORT !')
                 conf2['pub_port'] = None
-                
+
             conf = conf2
 
         for key in conf:
