@@ -705,6 +705,8 @@ class ZyreInterface (BaseInterface):
             delay = args[1] if len(args) > 1 else 0
             at = int(time.time()*PRECISION + delay * PRECISION / 1000)
             for ev in args[0]:
+                if not 'synchro' in ev:
+                    ev['synchro'] = False
                 data = None
                 if 'data' in ev: 
                     data = ev['data']
