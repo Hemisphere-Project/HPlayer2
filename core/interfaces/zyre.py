@@ -250,23 +250,25 @@ class Peer():
         self.node = node
 
         if isinstance(conf, ZyreEvent):
-            conf = {
+            conf2 = {
                 'uuid':         conf.peer_uuid(),
                 'ip':           extract_ip( conf.peer_addr() ),
                 'name':         conf.peer_name().decode(),
             }
 
             try:
-                conf['ts_port'] = conf.header(b"TS-PORT").decode()
+                conf2['ts_port'] = conf.header(b"TS-PORT").decode()
             except:
                 self.node.interface.log(conf['name']+' missing TS-PORT !')
-                conf['ts_port'] = None
+                conf2['ts_port'] = None
 
             try:
-                conf['pub_port'] = conf.header(b"PUB-PORT").decode()
+                conf2['pub_port'] = conf.header(b"PUB-PORT").decode()
             except:
                 self.node.interface.log(conf['name']+' missing PUB-PORT !')
-                conf['pub_port'] = None
+                conf2['pub_port'] = None
+                
+            conf = conf2
 
         for key in conf:
             setattr(self, key, conf[key])
@@ -642,7 +644,7 @@ class ZyreNode ():
                 data['at'] -= self.peer(data['from']).clockshift()
             delay =  (data['at']) / PRECISION - time.time()
 
-            if delay <= -3000:
+            if delay <= -10000:
                 self.interface.log('WARNING event already passed by', delay, 's, its too late !! discarding... ')
             elif delay <= 0:
                 self.interface.log('WARNING event already passed by', delay, 's, playing late... ')
