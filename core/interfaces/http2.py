@@ -8,6 +8,16 @@ import threading, os, time
 import logging
 from PIL import Image
 
+from ..engine.network import get_allip
+import socket
+
+try:
+    from zeroconf import ServiceInfo, Zeroconf 
+    zero_enable = True
+except:
+    print("import error: zeroconf is missing")
+    zero_enable = False
+
 thread = None
 thread_lock = threading.Lock()
 
@@ -21,11 +31,28 @@ class Http2Interface (BaseInterface):
 
     # HTTP receiver THREAD
     def listen(self):
+        # Advertize on ZeroConf
+        if zero_enable:
+            zeroconf = Zeroconf()
+            info = ServiceInfo(
+                "_http._tcp.local.",
+                "HPlayer2._http._tcp.local.",
+                addresses=[socket.inet_aton(ip) for ip in get_allip()],
+                port=self._port,
+                properties={},
+                server=socket.gethostname()+".local.",
+            )
+            zeroconf.register_service(info)
 
         # Start server
         self.log( "web interface on port", self._port)
         with ThreadedHTTPServer(self._port, self.player) as server:
             self.stopped.wait()
+
+        # Unregister ZeroConf
+        if zero_enable:
+            zeroconf.unregister_service(info)
+            zeroconf.close()
 
 
 #
@@ -98,17 +125,29 @@ class ThreadedHTTPServer(object):
         #
         # SOCKETIO Routing
         #
+        
+        self.sendSettings = None
+        self.sendPlaylist = None
 
         def background_thread():
             while True:
                 socketio.emit('status', self.player.status())  # {'msg': 'yo', 'timestamp': time.gmtime()}
+                
+                if self.sendSettings:
+                    socketio.emit('settings', self.sendSettings)
+                    self.sendSettings = None
+                    
+                if self.sendPlaylist:
+                    socketio.emit('playlist', self.sendPlaylist)
+                    self.sendPlaylist = None
+                    
                 socketio.sleep(0.1)
 
-        def settings_send(arg):
-            socketio.emit('settings', arg)
+        def settings_send(arg=None):
+            self.sendSettings = arg
 
         def playlist_send(arg=None):
-            socketio.emit('playlist', arg)
+            self.sendPlaylist = arg
 
         self.player.on(['settings-update'], settings_send)
         self.player.on(['playlist-update'], playlist_send)
@@ -208,6 +247,10 @@ class ThreadedHTTPServer(object):
         def pan_message(message=None):
             if message and len(message) == 2:
                 self.player.pan([int(message[0]), int(message[1])])
+
+        @socketio.on('audiomode')
+        def audiomode_message(message=None):
+            self.player.audiomode(message)
 
         @socketio.on('flip')
         def flip_message():

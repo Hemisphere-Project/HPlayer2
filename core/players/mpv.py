@@ -25,7 +25,9 @@ class MpvPlayer(BasePlayer):
         self._mpv_recvThread = None
 
         self._mpv_socketpath = '/tmp/hplayer-' + name
-        self._mpv_scale = 1
+        
+        self._mpv_scale = 1                 # % image scale
+        self._mpv_imagetime = 5             # diaporama transition time   
 
 
     ############
@@ -35,6 +37,9 @@ class MpvPlayer(BasePlayer):
     # Window scale (must be called before starting process)
     def scale(self, sc):
         self._mpv_scale = sc
+
+    def imagetime(self, it):
+        self._mpv_imagetime = it
 
     ############
     ## private METHODS
@@ -53,7 +58,7 @@ class MpvPlayer(BasePlayer):
             if poll_result:
                 out = self._mpv_subproc.stdout.readline()
                 if out.strip():
-                    # print(self.nameP, "subproc says", out.strip())
+                    # print(self.nameP, "su   bproc says", out.strip())
                     pass
             else:
                 sleep(0.1)          ## TODO turn into ASYNC !!
@@ -134,7 +139,7 @@ class MpvPlayer(BasePlayer):
                                     self._status['time'] = round(float(mpvsays['data']),2)
                             else:
                                 pass
-                            #    print(self.nameP, "IPC event:", mpvsays)
+                                # print(self.nameP, "IPC event:", mpvsays)
 
 
                 # Timeout: retry
@@ -185,7 +190,7 @@ class MpvPlayer(BasePlayer):
                             [script_path+'/../../bin/mpv', '--input-ipc-server=' + self._mpv_socketpath + '',
                                 '--idle=yes', '--no-osc', '--msg-level=ipc=v', '--quiet', '--fs','--keep-open'
                                 ,'--window-scale=' + str(self._mpv_scale)
-                                ,'--image-display-duration=3'
+                                ,'--image-display-duration=' + str(self._mpv_imagetime)
                                 #,'--force-window=yes'
                                 ],
                             stdout=subprocess.PIPE, stdin=subprocess.PIPE, stderr = subprocess.STDOUT,
@@ -250,11 +255,14 @@ class MpvPlayer(BasePlayer):
         print(self.nameP, "VOLUME to", vol)
 
     def _applyPan(self):
-        left = self._settings['pan'][0]/100.0
-        right = self._settings['pan'][1]/100.0
-        self._mpv_send('{"command": ["set_property", "af", "lavfi=[pan=stereo|c0='+str(left)+'*c0|c1='+str(right)+'*c1]"]}')
-        print(self.nameP, "PAN to", left, right, '{"command": ["set_property", "af", "lavfi=[pan=stereo|c0='+str(left)+'*c0|c1='+str(right)+'*c1]"]}')
-
+        if self._settings['audiomode'] == 'mono':
+            self._mpv_send('{"command": ["set_property", "af", "lavfi=[pan=stereo|c0=.5*c0+.5*c1|c1=.5*c0+.5*c1]"]}')            
+        else:
+            left = self._settings['pan'][0]/100.0
+            right = self._settings['pan'][1]/100.0
+            self._mpv_send('{"command": ["set_property", "af", "lavfi=[pan=stereo|c0='+str(left)+'*c0|c1='+str(right)+'*c1]"]}')
+            print(self.nameP, "PAN to", left, right, '{"command": ["set_property", "af", "lavfi=[pan=stereo|c0='+str(left)+'*c0|c1='+str(right)+'*c1]"]}')
+    
     def _applyFlip(self):
         if not self._settings['flip']:
             # self._mpv_send('{ "command": ["vf", "add", "mirror"] }')
