@@ -13,7 +13,9 @@ player.doLog['cmds'] = True
 player.addInterface('http', 8080)
 player.addInterface('http2', 80)
 if hplayer.isRPi():
-    player.addInterface('gpio', [20,21,16,14,15], 310)
+    player.addInterface('gpio', [20,21,16,14,15,26], 310)
+    player.getInterface('gpio').disableGhost(26)
+    player.getInterface('gpio').debouncePin(26, 0)
 
 # Remove default stop at "end-playlist" (or it prevent the next play !)
 player.unbind('end-playlist', player.stop)
@@ -31,6 +33,21 @@ def togglePlay():
 	if player.isPlaying(): player.stop()
 	else: player.play("0_*.*")
 player.on(['remote', 'gpio14-on', 'gpio15-on'], togglePlay)
+
+# Hearphone plug
+headPhonePlugged = False
+def playHearphone():
+	global headPhonePlugged
+	if not headPhonePlugged: 
+		player.play("1_*.*")
+		headPhonePlugged = True
+def stopHearphone():
+	global headPhonePlugged
+	if headPhonePlugged: 
+		player.play("0_*.*")
+		headPhonePlugged = False
+player.on(['gpio26-off'], playHearphone )
+player.on(['gpio26-on'], stopHearphone )
 
 # PATH
 hplayer.setBasePath("/data/media")
