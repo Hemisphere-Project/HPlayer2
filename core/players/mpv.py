@@ -182,6 +182,8 @@ class MpvPlayer(BasePlayer):
                         if self._mpv_lockedout > 1:
                             print("CRASH STOP")
                             self._mpv_send('{ "command": ["stop"] }')
+                            os.system('pkill mpv')
+                            self.emit('hardreset')
                     pass
 
                 # Socket error: exit

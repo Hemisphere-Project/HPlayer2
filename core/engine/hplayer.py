@@ -97,6 +97,12 @@ class HPlayer2(EventEmitterX):
             def emitStatus(ev, *args):
                 self.emit('status', self.status())
 
+            # Bind hardreset
+            @p.on('hardreset')
+            def reset(ev, *args):
+                print('HARD KILL FROM PLAYER')
+                os._exit(0)
+
             self.emit('player-added', p)
 
         return self._players[name]

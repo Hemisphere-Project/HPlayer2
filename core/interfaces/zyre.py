@@ -577,7 +577,7 @@ class ZyreNode ():
     # ZYRE send messages
     #
 
-    def makeMsg(self, event, args=None, delay_ms=0):
+    def makeMsg(self, event, args=None, delay_ms=0, at=0):
         data = {}
         data['event'] = event
         data['args'] = []
@@ -587,14 +587,20 @@ class ZyreNode ():
                 args = [args]
             data['args'] = args
 
+        # at time
+        if at > 0:
+            data['at'] = at
+
         # add delay
         if delay_ms > 0:
-            data['at'] = int(time.time()*PRECISION + delay_ms * PRECISION / 1000)
+            if not 'at' in data: 
+                data['at'] = 0
+            data['at'] += int(time.time()*PRECISION + delay_ms * PRECISION / 1000)
 
         return json.dumps(data).encode()
 
-    def whisper(self, uuid, event, args=None, delay_ms=0):
-        data = self.makeMsg(event, args, delay_ms)
+    def whisper(self, uuid, event, args=None, delay_ms=0, at=0):
+        data = self.makeMsg(event, args, delay_ms, at)
         if uuid == self.zyre.uuid():
             data = json.loads(data.decode())
             data['from'] = 'self'
@@ -603,8 +609,8 @@ class ZyreNode ():
         else:
             self.zyre.whispers(uuid, data)
 
-    def shout(self, group, event, args=None, delay_ms=0):
-        data = self.makeMsg(event, args, delay_ms)
+    def shout(self, group, event, args=None, delay_ms=0, at=0):
+        data = self.makeMsg(event, args, delay_ms, at)
         self.zyre.shouts(group.encode(), data)
 
         # if own group -> send to self too !
@@ -615,8 +621,8 @@ class ZyreNode ():
             data['group'] = group
             self.preProcessor1(data)
 
-    def broadcast(self, event, args=None, delay_ms=0):
-        self.shout('broadcast', event, args, delay_ms)
+    def broadcast(self, event, args=None, delay_ms=0, at=0):
+        self.shout('broadcast', event, args, delay_ms, at)
 
     def join(self, group):
         self.zyre.join(group.encode())
@@ -636,10 +642,16 @@ class ZyreNode ():
                 data['at'] -= self.peer(data['from']).clockshift()
             delay =  (data['at']) / PRECISION - time.time()
 
-            if delay <= 0:
+            if delay <= -3000:
+                self.interface.log('WARNING event already passed by', delay, 's, its too late !! discarding... ')
+            elif delay <= 0:
+                self.interface.log('WARNING event already passed by', delay, 's, playing late... ')
+                self.preProcessor2(data)
+            elif delay > 3000:
+                self.interface.log('WARNING event in', delay, 's, thats weird, playing now... ')
                 self.preProcessor2(data)
             else:
-                # self.interface.log('programmed event in', delay, 'seconds')
+                self.interface.log('programmed event in', delay, 's')
                 t = Timer( delay, self.preProcessor2, args=[data])
                 t.start()
                 self.interface.emit('planned', data)
@@ -689,6 +701,7 @@ class ZyreInterface (BaseInterface):
         @self.hplayer.on('*.peers.triggers')
         def trig(ev, *args):
             delay = args[1] if len(args) > 1 else 0
+            at = int(time.time()*PRECISION + delay * PRECISION / 1000)
             for ev in args[0]:
                 data = None
                 if 'data' in ev: 
@@ -697,11 +710,11 @@ class ZyreInterface (BaseInterface):
                     peer = self.node.peerByName(ev['peer'])
                     if peer:
                         self.log('whisper', ev['peer'], ev['event'], data)
-                        self.node.whisper( peer.uuid, ev['event'], data, delay)
+                        self.node.whisper( peer.uuid, ev['event'], data, 0, at if ev['synchro'] else 0)
                     else:
                         self.log('peer is missing', ev['peer'])
                 else:
-                    self.node.broadcast(ev['event'], data, delay)
+                    self.node.broadcast(ev['event'], data, 0, at if ev['synchro'] else 0)
 
     def listen(self):
         self.log( "interface ready")
