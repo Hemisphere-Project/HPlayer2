@@ -27,7 +27,10 @@ class SerialInterface (BaseInterface):
                     break
                 if not self.port:
                     self.log("no device found.. retrying")
-                    time.sleep(5)
+                    for i in range(10):
+                        sleep(0.5)
+                        if not self.isRunning(): 
+                            return
             
             # connect to serial
             elif not self.serial:

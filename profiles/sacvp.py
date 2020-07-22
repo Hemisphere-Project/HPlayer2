@@ -49,11 +49,25 @@ if hplayer.isRPi():
     video.addOverlay('rpifade')
 
 
-# Zyre ESP -> MQTT 
-@hplayer.on('zyre.esp')
+# ESP -> MQTT / BT
+@hplayer.on('*.esp')
 def espRelay(ev, *args):
     if myESP:
         hplayer.interface('mqtt').send('k32/e'+str(myESP)+'/'+args[0]['topic'], args[0]['data'])
+        hplayer.interface('btserial').send(args[0]['topic'], args[0]['data'])
+
+
+# File name -> Trigger ESP
+@hplayer.on('*.do-play')
+def espPlay(ev, *args):
+    last = args[0].split('.')[0].split('_')[-1]
+    if last[0] == 'L' and len(last) > 1:
+        mem = last[1:]
+        if mem == 'x':             # STOP leds
+            hplayer.emit('sacvp.esp', {'topic': 'leds/stop', 'data': ''})
+        elif mem.isnumeric():      # MEM leds
+            hplayer.emit('sacvp.esp', {'topic': 'leds/mem', 'data': mem})
+
 
 
 # default volume

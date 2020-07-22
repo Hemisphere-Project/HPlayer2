@@ -181,7 +181,7 @@ class MpvPlayer(BasePlayer):
                         self.log('PLAYBACK LOCKED OUT', self._mpv_lockedout)
                         self._mpv_send('{ "command": ["set_property", "pause", false] }')
                         self._mpv_lockedout += 1
-                        if self._mpv_lockedout > 2:
+                        if self._mpv_lockedout > 3:
                             print("CRASH STOP")
                             self._mpv_send('{ "command": ["stop"] }')
                             os.system('pkill mpv')

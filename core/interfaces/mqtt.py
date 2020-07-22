@@ -46,13 +46,16 @@ class MqttInterface (BaseInterface):
         self.client.on_disconnect = self.on_disconnect
         self.client.on_message = self.on_message
 
-        while self.isRunning():
+        while True:
             try:
                 self.client.connect(self.broker, port=1883, keepalive=30)
                 break
             except:
                 self.log("Can't connect to broker at ", self.broker, ", retrying...")
-                sleep(5)    
+                for i in range(10):
+                    sleep(0.5)
+                    if not self.isRunning(): 
+                        return
 
         self.client.loop_start()        
         self.stopped.wait()
