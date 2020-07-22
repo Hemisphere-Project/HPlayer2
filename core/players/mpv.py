@@ -117,7 +117,7 @@ class MpvPlayer(BasePlayer):
                     self.doLog['recv'] = False
                     self.doLog['cmds'] = False
 
-                    self.log("IPC says:", msg.rstrip())
+                    # self.log("IPC says:", msg.rstrip())
                     
                     # Message received
                     for event in msg.rstrip().split( b"\n" ):
