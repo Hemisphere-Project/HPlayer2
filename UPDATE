@@ -1,0 +1,23 @@
+
+# BLUETOOTH
+# https://roughlea.wordpress.com/raspberry-pi-experiences/experiences-with-bluetooth-on-arch-linux-arm/
+
+pacman -S bluez bluez-utils bluez-hid2hci bluez-libs 
+modprobe bcm203x
+modprobe -v btusb
+systemctl start bluetooth
+systemctl enable bluetooth
+echo "AutoEnable=true" >> /etc/bluetooth/main.conf
+
+cd
+pip install pyalpm
+git clone https://github.com/actionless/pikaur.git
+cd pikaur
+python3 ./pikaur.py -S bluez-utils-compat
+
+# BLOCKED WLAN 
+# https://forum.manjaro.org/t/solved-bluetooth-dont-discovers-device-bluetoothctl-no-default-controller/90699/18
+sudo rfkill unblock wlan && sudo systemctl restart NetworkManager
+
+libical
+
