@@ -117,7 +117,7 @@ class MpvPlayer(BasePlayer):
                     self.doLog['recv'] = False
                     self.doLog['cmds'] = False
 
-                    # self.log("IPC says:", msg.rstrip())
+                    self.log("IPC says:", msg.rstrip())
                     
                     # Message received
                     for event in msg.rstrip().split( b"\n" ):
@@ -146,6 +146,8 @@ class MpvPlayer(BasePlayer):
                                 else: 
                                     self.emit('stopped')
                                     # self.log('stop')
+                                    
+                                self._mpv_lockedout = 0
 
                             elif mpvsays['name'] == 'time-pos':
                                 if mpvsays['data']:
@@ -179,7 +181,7 @@ class MpvPlayer(BasePlayer):
                         self.log('PLAYBACK LOCKED OUT', self._mpv_lockedout)
                         self._mpv_send('{ "command": ["set_property", "pause", false] }')
                         self._mpv_lockedout += 1
-                        if self._mpv_lockedout > 1:
+                        if self._mpv_lockedout > 2:
                             print("CRASH STOP")
                             self._mpv_send('{ "command": ["stop"] }')
                             os.system('pkill mpv')
