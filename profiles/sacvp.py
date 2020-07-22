@@ -23,23 +23,22 @@ hplayer = HPlayer2(base_path)
 video = hplayer.addPlayer('mpv', 'video')
 # audio = hplayer.addPlayer('mpv', 'audio')
 
-# ATTACHED ESP
+# ATTACHED ESP 
 myESP = 0
-# try:
-with open(os.path.join(projectfolder, 'esp.json')) as json_file:
-    data = json.load(json_file)
-    if devicename in data:
-        myESP = data[devicename]
-        hplayer.log('attached to ESP', myESP)
-# except: pass
+try:
+    with open(os.path.join(projectfolder, 'esp.json')) as json_file:
+        data = json.load(json_file)
+        if devicename in data:
+            myESP = data[devicename]
+            hplayer.log('attached to ESP', myESP)
+except: pass
 
-# Interfaces
-# hplayer.addInterface('pyre')
+# INTERFACES
 # hplayer.addInterface('keyboard')
 # hplayer.addInterface('osc', 1222, 3737)
-
 hplayer.addInterface('zyre')
 hplayer.addInterface('mqtt', '10.0.0.1')
+hplayer.addInterface('btserial', 'k32-'+str(myESP))
 hplayer.addInterface('http2', 8080)
 hplayer.addInterface('teleco')
 hplayer.addInterface('regie', 9111, projectfolder)
@@ -50,7 +49,7 @@ if hplayer.isRPi():
     video.addOverlay('rpifade')
 
 
-# Zyre ESP -> MQTT
+# Zyre ESP -> MQTT 
 @hplayer.on('zyre.esp')
 def espRelay(ev, *args):
     if myESP:
