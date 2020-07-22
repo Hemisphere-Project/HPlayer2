@@ -1,0 +1,5 @@
+#!/bin/bash
+/usr/bin/kill -9 $(ps -faux | grep hplayer2 | grep -v grep | awk  '{print $2}')
+/usr/bin/kill -9 $(ps -faux | grep HPlayer2 | grep -v grep | awk  '{print $2}')
+/usr/bin/kill -9 $(ps -faux | grep mpv | grep -v grep | awk  '{print $2}')
+sleep 1

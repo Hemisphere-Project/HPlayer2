@@ -3,8 +3,9 @@ Description=HPlayer
            
 [Service]
 Type=simple
-ExecStart=/opt/HPlayer2/hplayer2 %i
-ExecStop=/bin/pkill hplayer2
+ExecStartPre=hplayer2-kill
+ExecStart=hplayer2 %i
+ExecStop=hplayer2-kill
 Restart=always
            
 [Install]

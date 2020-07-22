@@ -99,3 +99,4 @@ def get_rssi(iface):
     minVal = -85
     maxVal = -45
     return round(max(0, (rssi-minVal)*100/(maxVal-minVal)))
+

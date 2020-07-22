@@ -30,7 +30,7 @@ class HPlayer2(EventEmitterX):
 
     def __init__(self, basepath=None, settingspath=None):
         super().__init__(wildcard=True, delimiter=".")
-        self.nameP = colored('HPlayer2', 'green')
+        self.nameP = colored(('[HPlayer2]').ljust(10, ' ')+' ', 'green')
 
         self._lastUsedPlayer = 0
 
