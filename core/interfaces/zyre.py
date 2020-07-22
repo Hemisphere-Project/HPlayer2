@@ -35,7 +35,7 @@ PING_PEER = 1000
 
 PRECISION = 1000000
 SAMPLER_SIZE = 500
-KEEP_SAMPLE = [0.01, 0.3]
+KEEP_SAMPLE = [0.001, 0.3]
 
 
 #
@@ -78,7 +78,7 @@ class TimeClient():
         self.actor = Zactor(self._actor_fn, create_string_buffer(b"Sync request"))
         self.done = False
         
-        self._refresh = Timer(240, self.start)
+        self._refresh = Timer(120, self.start)
         self._refresh.start()
 
     def stop(self):
@@ -713,7 +713,7 @@ class ZyreInterface (BaseInterface):
                 if 'peer' in ev:
                     peer = self.node.peerByName(ev['peer'])
                     if peer:
-                        self.log('whisper', ev['peer'], ev['event'], data)
+                        self.log('whisper', ev['peer'], ev['event'], data, at if ev['synchro'] else 0)
                         self.node.whisper( peer.uuid, ev['event'], data, 0, at if ev['synchro'] else 0)
                     else:
                         self.log('peer is missing', ev['peer'])

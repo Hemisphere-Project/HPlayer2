@@ -81,7 +81,7 @@ class MpvPlayer(BasePlayer):
         for retry in range(10, 0, -1):
             try:
                 self._mpv_sock.connect(self._mpv_socketpath)
-                self._mpv_sock.settimeout(0.1)
+                self._mpv_sock.settimeout(0.5)
                 self.log("connected to player backend")
                 self._mpv_sock_connected = True
                 self.emit('player-ready')
