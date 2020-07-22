@@ -3,7 +3,7 @@ Description=HPlayer
            
 [Service]
 Type=simple
-ExecStartPre=hplayer2-kill
+ExecStartPre=-hplayer2-kill
 ExecStart=hplayer2 %i
 ExecStop=hplayer2-kill
 Restart=always
