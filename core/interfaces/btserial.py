@@ -47,17 +47,24 @@ class BtserialInterface (BaseInterface):
         # SCAN devices to find ADDR
         self.log("looking for ", self.device_name)
         while True:
-            nearby_devices = bluetooth.discover_devices()
-            for bdaddr in nearby_devices:
-                if bluetooth.lookup_name( bdaddr ) == self.device_name:
-                    self.device_addr = bdaddr
+            try:
+                nearby_devices = bluetooth.discover_devices()
+                for bdaddr in nearby_devices:
+                    if bluetooth.lookup_name( bdaddr ) == self.device_name:
+                        self.device_addr = bdaddr
+                        break
+                if self.device_addr: 
+                    self.log("found ", self.device_name, "at", self.device_addr)
                     break
-            if self.device_addr: 
-                self.log("found ", self.device_name, "at", self.device_addr)
-                break
-            else:
-                self.log("can't find ", self.device_name, ", retrying...")
-                sleep(0.5)
+                else:
+                    self.log("can't find ", self.device_name, ", retrying...")
+                    sleep(0.5)
+            except:
+                self.log("BT error...")
+                for i in range(10):
+                    sleep(0.5)
+                    if not self.isRunning(): 
+                        return
                 
 
         # LOOP
