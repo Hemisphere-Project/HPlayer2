@@ -136,7 +136,7 @@ class MpvPlayer(BasePlayer):
                                 self.update('isPlaying', not mpvsays['data'])
 
                                 if self.status('isPlaying'): 
-                                    self.emit('playing')
+                                    self.emit('playing', self.status('media'))
                                     # self.log('play')
 
                                 elif self.status('isPaused'): 

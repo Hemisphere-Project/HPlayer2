@@ -51,15 +51,18 @@ if hplayer.isRPi():
 
 
 # ESP -> MQTT / BT
+lastEspEvent = 'sacvp.esp'  # save last event
 @hplayer.on('*.esp')
 def espRelay(ev, *args):
     if myESP:
+        global lastEspEvent
+        lastEspEvent = ev
         hplayer.interface('mqtt').send('k32/e'+str(myESP)+'/'+args[0]['topic'], args[0]['data'])
         hplayer.interface('btserial').send(args[0]['topic'], args[0]['data'])
 
 
 # File name -> Trigger ESP
-@hplayer.on('*.do-play')
+@hplayer.on('*.playing')
 def espPlay(ev, *args):
     last = args[0].split('.')[0].split('_')[-1]
     if last[0] == 'L' and len(last) > 1:
@@ -71,9 +74,12 @@ def espPlay(ev, *args):
 
 
 # Stop -> Blackout ESP
-@hplayer.on('*.stop')
+@hplayer.on('*.stopped')
+@hplayer.on('*.paused')
 def espStop(ev, *args):
-    hplayer.emit('sacvp.esp', {'topic': 'leds/stop', 'data': ''})
+    global lastEspEvent
+    if lastEspEvent == 'sacvp.esp':
+        hplayer.emit('sacvp.esp', {'topic': 'leds/stop', 'data': ''})
 
 
 # default volume
