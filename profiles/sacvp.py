@@ -38,10 +38,11 @@ except: pass
 # hplayer.addInterface('osc', 1222, 3737)
 hplayer.addInterface('zyre')
 hplayer.addInterface('mqtt', '10.0.0.1')
-hplayer.addInterface('btserial', 'k32-'+str(myESP))
 hplayer.addInterface('http2', 8080)
 hplayer.addInterface('teleco')
 hplayer.addInterface('regie', 9111, projectfolder)
+if myESP:
+    hplayer.addInterface('btserial', 'k32-'+str(myESP))
 
 
 # Overlay

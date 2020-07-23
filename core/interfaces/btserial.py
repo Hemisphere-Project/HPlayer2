@@ -57,7 +57,7 @@ class BtserialInterface (BaseInterface):
                 break
             else:
                 self.log("can't find ", self.device_name, ", retrying...")
-                time.sleep(0.5)
+                sleep(0.5)
                 
 
         # LOOP
