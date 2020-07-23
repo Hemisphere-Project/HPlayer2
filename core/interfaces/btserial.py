@@ -61,7 +61,7 @@ class BtserialInterface (BaseInterface):
                     sleep(0.5)
             except:
                 self.log("BT error...")
-                for i in range(10):
+                for i in range(2):
                     sleep(0.5)
                     if not self.isRunning(): 
                         return
