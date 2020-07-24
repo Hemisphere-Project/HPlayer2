@@ -29,8 +29,8 @@ class MqttInterface (BaseInterface):
         self.log(msg.topic+" "+str(msg.payload.decode()))
     
     
-    def send(self, topic, data=None):
-        self.client.publish(topic, payload=data, qos=1, retain=False)
+    def send(self, topic, data=None, QOS=1):
+        self.client.publish(topic, payload=data, qos=QOS, retain=False)
         if self.isConnected:
             self.log("send", topic, data)
         else:

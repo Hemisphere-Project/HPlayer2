@@ -210,4 +210,7 @@ class ThreadedHTTPServer(object):
         handler.on_any_event = onchange
         self.projectObserver = Observer()
         self.projectObserver.schedule(handler, os.path.dirname(self.projectPath()))
-        self.projectObserver.start()
+        try:
+            self.projectObserver.start()
+        except:
+            self.regieinterface.log('project.json not found')

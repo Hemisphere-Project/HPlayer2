@@ -2,8 +2,10 @@ from .base import BaseInterface
 from evdev import InputDevice, categorize, ecodes
 from watchdog.observers import Observer                 # python3-watchdog ?
 from watchdog.events import FileSystemEventHandler
-from time import sleep
 import sys, subprocess
+import time
+
+millis = lambda: int(round(time.time() * 1000))
 
 class KeyboardInterface (BaseInterface):
 
@@ -21,8 +23,10 @@ class KeyboardInterface (BaseInterface):
         self.observer.start()
         self.remote = None
 
-        self.bind(self.detect())
+        self.holdDebounce = 5
 
+        self.bind(self.detect())
+        
 
     # Find Keyboard
     def detect(self):
@@ -37,13 +41,15 @@ class KeyboardInterface (BaseInterface):
         if iface and not isinstance(iface, str):
             iface = iface.src_path
         if iface != self.detect(): return
+
         try:
             self.remote = InputDevice(iface)
             self.remote.grab()
             self.log("Keyboard connected ...")
         except:
+            e = sys.exc_info()[0]
             self.remote = None
-            self.log("Keyboard not found ...")
+            self.log("Keyboard not found ...", e)
 
     def unbind(self, iface):
         if not isinstance(iface, str):
@@ -56,10 +62,11 @@ class KeyboardInterface (BaseInterface):
     def listen(self):
 
         self.log("starting Keyboard listener")
+        self.lastHold = 0
 
         while self.isRunning():
             if not self.remote:
-                sleep(0.5)
+                time.sleep(0.5)
                 continue
 
             try:
@@ -73,21 +80,24 @@ class KeyboardInterface (BaseInterface):
                     if event.value == 1:
                         keymode = 'down'
                     elif event.value == 2:
-                        keymode = 'hold'
+                        if millis() - self.lastHold > self.holdDebounce:
+                            keymode = 'hold'
+                            self.lastHold = millis()
                     elif event.value == 0:
                         keymode = 'up'
 
                     # self.emit('key-'+keymode, event.code)
-                    self.emit(keycode+'-'+keymode)
+                    if keymode:
+                        self.emit(keycode+'-'+keymode)
 
                     # self.log("keyboard event:", categorize(event), event.code, event.value)
                     # self.log("keyboard event:", keycode+'-'+keymode)
 
                 elif not event:
-                	sleep(0.05)
+                	time.sleep(0.05)
 
             except:
-                sleep(0.5)
+                time.sleep(0.5)
 
         if self.remote:
             self.remote.ungrab()

@@ -71,6 +71,7 @@ fi
 /usr/bin/yes | pip3 install --upgrade pymitter
 /usr/bin/yes | pip3 install --upgrade mido
 /usr/bin/yes | pip3 install --upgrade python-rtmidi
+/usr/bin/yes | pip3 install --upgrade paho-mqtt
 
 # RPi
 if [[ $(uname -m) = armv* ]]; then
