@@ -83,7 +83,7 @@ def espStop(ev, *args):
 
 
 # default volume
-@video.on('player-ready')
+@video.on('ready')
 def init(ev, *args):
     hplayer.settings.set('volume', 50)
     hplayer.settings.set('loop', -1)

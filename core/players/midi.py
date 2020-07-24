@@ -35,7 +35,7 @@ class MidiPlayer(BasePlayer):
                self.log('connecting to', iface)	
                break	
 
-      self.emit('player-ready')	
+      self.emit('ready')	
       self.emit('status', self.status())
 
       while self.isRunning():	

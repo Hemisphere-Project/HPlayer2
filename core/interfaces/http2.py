@@ -88,13 +88,14 @@ class ThreadedHTTPServer(object):
                 return 'No file provided', 404
 
             file = request.files['file']
+            # path = request.
 
             if file.filename == '':
                 return 'No filename provided', 404
 
-            if file and self.http2interface.hplayer.validExt(file.filename):
+            if file and self.http2interface.hplayer.files.validExt(file.filename):
                 filename = secure_filename(file.filename)
-                filepath = os.path.join(self.http2interface.hplayer.basepath[0], filename)
+                filepath = os.path.join(self.http2interface.hplayer.files.root_paths[0], filename)
                 if os.path.exists(filepath):
                     prefix, ext = os.path.splitext(filepath)
                     filepath = prefix + '-' + ext
@@ -113,7 +114,7 @@ class ThreadedHTTPServer(object):
                     pass
 
                 fileslist_message()
-                self.http2interface.hplayer.add(filepath)
+                # self.http2interface.hplayer.add(filepath)
                 return 'ok'
 
             return 'No valid file provided', 404
