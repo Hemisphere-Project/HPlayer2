@@ -680,8 +680,8 @@ class ZyreInterface (BaseInterface):
         @self.hplayer.on('player.paused')
         @self.hplayer.on('player.stopped')
         def st(ev, *args):
-            # print('peer.status', self.hplayer.status())
-            self.node.publish('peer.status', self.hplayer.status())
+            # print('peer.status', self.hplayer.statusPlayers())
+            self.node.publish('peer.status', self.hplayer.statusPlayers())
 
         # Publish self settings
         @self.hplayer.on('settings.updated')

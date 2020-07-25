@@ -28,7 +28,7 @@ class SerialInterface (BaseInterface):
                 if not self.port:
                     self.log("no device found.. retrying")
                     for i in range(10):
-                        sleep(0.5)
+                        time.sleep(0.5)
                         if not self.isRunning(): 
                             return
             
@@ -47,7 +47,11 @@ class SerialInterface (BaseInterface):
                 try:
                     data = self.serial.readline()[:-2] #the last bit gets rid of the new-line chars
                     if data: 
-                        self.emit(data.decode("utf-8"))
+                        data = data.decode("utf-8").split(' ')
+                        data[0] = data[0].lower()
+                        if data[0][0] == '/': data[0] = data[0][1:]
+                        data[0].replace('/','.')
+                        self.emit(data[0], *data[1:])
                 except:
                     self.log("broken link..")
                     self.serial = None

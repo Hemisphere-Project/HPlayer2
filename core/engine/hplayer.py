@@ -3,6 +3,7 @@ from . import network
 from ..module import EventEmitterX
 import core.players as playerlib
 import core.interfaces as ifacelib
+from core.engine.sampler import Sampler
 from core.engine.filemanager import FileManager
 from core.engine.playlist import Playlist
 from core.engine.settings import Settings
@@ -35,6 +36,7 @@ class HPlayer2(EventEmitterX):
         self._lastUsedPlayer = 0
 
         self._players       = OrderedDict()
+        self._samplers      = OrderedDict()
         self._interfaces    = OrderedDict()
 
         self.settings       = Settings(self, settingspath)
@@ -61,10 +63,10 @@ class HPlayer2(EventEmitterX):
     # PLAYERS
     #
 
-    def addPlayer(self, ptype, name=None):
-        if not name: name = ptype+str(len(self._players))
+    def addPlayer(self, ptype, name):
+        # if not name: name = ptype+str(len(self._players))
         if name and name in self._players:
-            print("player", name, "already exists")
+            self.log("player", name, "already exists")
         else:
             PlayerClass = playerlib.getPlayer(ptype)
             p = PlayerClass(self, name)
@@ -95,12 +97,12 @@ class HPlayer2(EventEmitterX):
             # Bind status (player update triggers hplayer emit)
             @p.on('status')
             def emitStatus(ev, *args):
-                self.emit('status', self.status())
+                self.emit('status', self.statusPlayers())
 
             # Bind hardreset
             @p.on('hardreset')
             def reset(ev, *args):
-                print('HARD KILL FROM PLAYER')
+                self.log('HARD KILL FROM PLAYER')
                 os._exit(0)
 
             self.emit('player-added', p)
@@ -110,19 +112,73 @@ class HPlayer2(EventEmitterX):
 
     def player(self, name):
         if name not in self._players:
-            print("player", name, "not found")
+            self.log("player", name, "not found")
         return self._players[name]
-
 
     def players(self):
         return list(self._players.values())
 
-
     def activePlayer(self):
         return self.players()[self._lastUsedPlayer]
 
-    def status(self):
+    def statusPlayers(self):
         return [p.status() for p in self.players()]
+
+
+    #
+    # SAMPLER
+    #
+
+    def addSampler(self, ptype, name, poly=4):
+        if name and name in self._samplers:
+            self.log("sampler", name, "already exists")
+        else:
+            s = Sampler(self, ptype, poly)
+            self._samplers[name] = s
+
+            # # Bind Volume
+            # @self.settings.on('do-volume')
+            # @self.settings.on('do-mute')
+            # def vol(ev, value, settings):
+            #     s.volume( settings['volume'] if not settings['mute'] else 0 )
+
+            # # Bind Pan
+            # @self.settings.on('do-pan')
+            # @self.settings.on('do-audiomode')
+            # def pan(ev, value, settings):
+            #     s.pan( settings['pan'] if settings['audiomode'] != 'mono' else 'mono' )
+
+            # # Bind Flip
+            # @self.settings.on('do-flip')
+            # def flip(ev, value, settings):
+            #     s.flip( settings['flip'] )
+
+            # Bind status (player update triggers hplayer emit)
+            @s.on('status')
+            def emitStatus(ev, *args):
+                self.emit('status', self.statusSamplers())
+
+            # Bind hardreset
+            @s.on('hardreset')
+            def reset(ev, *args):
+                self.log('HARD KILL FROM PLAYER')
+                os._exit(0)
+
+            self.emit('sampler-added', s)
+
+        return self._samplers[name]
+
+
+    def sampler(self, name):
+        if name not in self._samplers:
+            self.log("sampler", name, "not found")
+        return self._samplers[name]
+
+    def samplers(self):
+        return list(self._samplers.values())
+
+    def statusSamplers(self):
+        return [p.status() for p in self.samplers()]
 
 
     #
@@ -178,6 +234,10 @@ class HPlayer2(EventEmitterX):
         for p in self.players():
             p.start()
 
+        # START samplers
+        for s in self.samplers():
+            s.start()
+
         # START interfaces
         for iface in self.interfaces():
             iface.start()
@@ -194,6 +254,8 @@ class HPlayer2(EventEmitterX):
         self.emit('app-closing')
         for p in self.players():
             p.quit()
+        for s in self.samplers():
+            s.quit()
         for iface in self.interfaces():
             iface.quit()
 
@@ -219,7 +281,7 @@ class HPlayer2(EventEmitterX):
             # runningFlag = False
             # sleep(5.0)
             # sleep(1.0)
-            print('HARD KILL')
+            self.log('HARD KILL')
             os._exit(0)
 
 

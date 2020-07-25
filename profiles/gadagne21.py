@@ -8,14 +8,16 @@ tempfile.tempdir = '/data/var/tmp'
 
 
 # INIT HPLAYER
-hplayer = HPlayer2('/data/media', '/data/hplayer2-gadagne19.cfg')
+hplayer = HPlayer2('/data/media', '/data/hplayer2-gadagne21.cfg')
 
 
-# PLAYERS
-player1 = hplayer.addPlayer('mpv', 'player1')
-player1.doLog['events'] = True
-player1.doLog['cmds'] = True
-# audio = hplayer.addPlayer('mpv', 'audio')
+# PLAYER
+player = hplayer.addPlayer('mpv', 'player')
+player.doLog['events'] = True
+# player.doLog['cmds'] = True
+
+# SAMPLER
+# sampler = hplayer.addSampler('mpv', 'sampler', 4)
 
 
 # Interfaces
@@ -42,7 +44,7 @@ def doPlay(media):
 
 
 # DEFAULT File
-@hplayer.on('player1.ready')
+@hplayer.on('player.ready')
 @hplayer.on('playlist.end')
 def play0(ev, *args):
     doPlay("0_*.*")
@@ -72,7 +74,7 @@ def play1(ev, *args):
 
 
 # SETTINGS (pre-start)
-player1.imagetime(15)
+player.imagetime(15)
 
 
 # RUN

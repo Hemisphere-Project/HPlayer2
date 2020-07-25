@@ -34,7 +34,8 @@ class MidiPlayer(BasePlayer):
                self._output = mido.open_output(iface)	
                self.log('connecting to', iface)	
                break	
-
+      
+      self.update('isReady', True)
       self.emit('ready')	
       self.emit('status', self.status())
 

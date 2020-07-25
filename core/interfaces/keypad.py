@@ -27,14 +27,14 @@ class KeypadInterface (BaseInterface):
         lines = ["", ""]
 
         # Line 1 : MEDIA
-        if not self.hplayer.status()['media']: lines[0] = '-stop-'
-        else: lines[0] = os.path.basename(self.hplayer.status()['media'])[:-4]
+        if not self.hplayer.statusPlayers()[0]['media']: lines[0] = '-stop-'
+        else: lines[0] = os.path.basename(self.hplayer.statusPlayers()[0]['media'])[:-4]
         lines[0] = lines[0].ljust(16, ' ')[:16]
 
         # Line 2 : VOLUME / TIME
         lines[1] = 'VOLUME: '+str(self.hplayer.settings()['volume'])
-        if self.hplayer.status()['time'] is not None:
-            lines[1] += "  \"" + str(int(self.hplayer.status()['time']))
+        if self.hplayer.statusPlayers()[0]['time'] is not None:
+            lines[1] += "  \"" + str(int(self.hplayer.statusPlayers()[0]['time']))
         lines[1] = lines[1].ljust(16, ' ')[:16]
 
         return lines

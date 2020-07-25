@@ -3,38 +3,39 @@ from pymitter import EventEmitter
 from termcolor import colored
 import sys, threading
 
-printlock = threading.Lock()
+
+def safe_print(*args, sep=" ", end="", **kwargs):
+    joined_string = sep.join([ str(arg) for arg in args ])
+    print(joined_string  + "\n", sep=sep, end=end, **kwargs)
+
 
 class EventEmitterX(EventEmitter):
     def emit(self, event, *args):
         # prepend event to args
         a = [event] + list(args)
-        # self.log('HPLAYER', event, *a )
         super().emit(event, *a)
-        # self.log('DONE.')
 
 
 class Module(EventEmitterX):
-    def __init__(self, hplayer, name, color):
+    def __init__(self, parent, name, color):
         super().__init__(wildcard=True, delimiter=".")
         self.name = name.replace(" ", "_")
         self.nameP = colored(('['+self.name+']').ljust(10, ' ')+' ', color)
-        self.hplayer = hplayer
+        self.parent = parent
         self.logEvents = True
 
     def log(self, *argv):
-        with printlock:
-            print(self.nameP, *argv)
-            sys.stdout.flush()
+        safe_print(self.nameP, *argv)
+        sys.stdout.flush()
 
     # Emit extended
     def emit(self, event, *args):
         
         fullEvent = self.name.lower() + '.' + event
         if self.logEvents:
-            self.log('EVENT', fullEvent, *args )
+            self.log('-', event, *args )
 
         super().emit(event, *args) 
-        self.hplayer.emit(fullEvent, *args)
+        self.parent.emit(fullEvent, *args)
 
         

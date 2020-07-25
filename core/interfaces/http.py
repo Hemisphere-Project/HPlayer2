@@ -115,7 +115,7 @@ def BasicHTTPServerHandler(httpinterface):
             # Inner commands
             #
             if command == 'status':
-                statusTree = self.httpinterface.hplayer.status()
+                statusTree = self.httpinterface.hplayer.statusPlayers()
                 status = pprint.pformat(statusTree, indent=4)
                 self.wfile.write( status.encode() )
                 return

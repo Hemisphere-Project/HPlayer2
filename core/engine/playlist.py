@@ -10,6 +10,7 @@ class Playlist(Module):
     
     def __init__(self, hplayer):
         super().__init__(hplayer, 'Playlist', 'yellow')
+        self.hplayer = hplayer
 
     def __call__(self):
         return self.export()

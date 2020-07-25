@@ -29,11 +29,13 @@ class Settings(Module):
             except:
                 self.log('ERROR loading settings file', self._settingspath)       
 
+
     def __call__(self, entry=None):
         if entry:
             return self.export()[entry]
         else:
             return self.export()
+
 
     def export(self):
         return self._settings.copy()
@@ -44,12 +46,14 @@ class Settings(Module):
             return self._settings[key]
         return None
 
+
     def set(self, key, val):
         if self._settings[key] != val:
             self._settings[key] = val
             self.emit('updated', self.export())
             self.emit('do-'+key, val, self.export())
             self.save()
+
 
     def save(self):
         if self._settingspath:

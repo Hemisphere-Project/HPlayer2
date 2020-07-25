@@ -7,6 +7,7 @@ class BaseInterface(ABC, Module):
 
     def  __init__(self, hplayer, name="INTERFACE", color="blue"):
         super().__init__(hplayer, name, color)
+        self.hplayer = hplayer
 
         # stopping flag
         self.stopped = threading.Event()

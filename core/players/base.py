@@ -13,9 +13,6 @@ class BasePlayer(Module):
         self._running = threading.Event()
         self._running.set()
 
-        self.name = "Player"
-        self.settingspath = None
-
         self.doLog = {
             'recv': False,
             'cmds': False
@@ -25,7 +22,9 @@ class BasePlayer(Module):
 
         self._events = {} 
         self._overlays = {}
+        
         self._status = {
+            'isReady':      False,
             'isPlaying':    False,
             'isPaused':     False,
             'media':        None,

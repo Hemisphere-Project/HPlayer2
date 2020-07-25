@@ -10,6 +10,7 @@ from ..module import Module
 class FileManager(Module):
     def __init__(self, hplayer, roots=None):
         super().__init__(hplayer, 'Files', 'yellow')
+        self.hplayer = hplayer
 
         self.root_paths = []
         self.unified_dir = []
@@ -19,7 +20,8 @@ class FileManager(Module):
         self.pathObservers = []
         
         @self.on('file-changed')                # file changed on disk -> trigger full refresh
-        @self.hplayer.on('player-added')        # new player means new authorized extension -> trigger list refresh
+        @self.parent.on('player-added')        # new player means new authorized extension -> trigger list refresh
+        @self.parent.on('sampler-added')        # new player means new authorized extension -> trigger list refresh
         def deferredUpdate(ev, *args):
             if self.refreshTimer:
                 self.refreshTimer.cancel()
@@ -212,6 +214,9 @@ class FileManager(Module):
         """
         for p in self.hplayer.players():
             if p.validExt(filename):
+                return True
+        for s in self.hplayer.samplers():
+            if s.validExt(filename):
                 return True
         return False
 

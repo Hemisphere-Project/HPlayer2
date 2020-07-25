@@ -26,7 +26,7 @@ class OmxPlayer(BasePlayer):
     # MPV THREAD
     def _mpv_thread(self):
         
-
+        self.update('isReady', True)
         self.emit('ready')	
         self.emit('status', self.status())
 
