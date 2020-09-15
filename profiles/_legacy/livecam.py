@@ -6,7 +6,7 @@ import os, sys, types, platform
 profilename = os.path.basename(__file__).split('.')[0]
 
 # DIRECTORY / FILE
-base_path = '/data/sync/'
+base_path = '/data/media/'
 
 # INIT HPLAYER
 hplayer = HPlayer2(base_path)
