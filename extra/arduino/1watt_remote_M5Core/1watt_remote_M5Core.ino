@@ -1,6 +1,8 @@
 /*
    SETTINGS
 */
+//#define DEV_ID 13
+
 #define CR_VERSION  0.01  // Init
 #define CR_VERSION  0.02  // 1watt teleco
 #define CR_VERSION  0.03  // 1watt teleco
@@ -20,6 +22,7 @@
 #define KEYBOARD_INT          5
 
 bool shuttingDown = false;
+bool DEBUG_BTNS = true;
 
 //UDP
 WiFiUDP udp_in;
@@ -32,6 +35,7 @@ long lastBat = 0;
 
 // IP
 String myIP = "10.0.0.";
+String myName = "Remote ";
 
 String hostIP = "10.0.0.1";
 int hostPORT_http = 8037;
@@ -58,13 +62,22 @@ void setup(void) {
   settings_load( keys );
 
   // Settings SET EEPROM !
-  settings_set("id", 9);
+  #ifdef DEV_ID
+    settings_set("id", DEV_ID);
+    LOGF("ID: %d\n", DEV_ID);
+  #endif
 
+  myName += String(settings_get("id")); 
+  
   // M5 FACES
   Wire.begin();
   pinMode(KEYBOARD_INT, INPUT_PULLUP);
 
   // EXT BTNS
+  pinMode(2, INPUT_PULLUP);
+  pinMode(19, INPUT_PULLUP);
+  pinMode(16, INPUT_PULLUP);
+  pinMode(3, INPUT_PULLUP);
   digitalWrite(2, HIGH);
   digitalWrite(19, HIGH);
   digitalWrite(16, HIGH);
@@ -91,6 +104,7 @@ void setup(void) {
 
 void loop(void)
 {
+  //LOGF4("btn: %d %d %d %d\n",  digitalRead(2),  digitalRead(19), digitalRead(16), digitalRead(3));
   M5.update();
 
   // A/B/C Buttons
@@ -98,16 +112,19 @@ void loop(void)
   if (M5.BtnA.wasPressed() || M5.BtnA.isPressed())
     event_trigger(0, []() {
     http_get("/event/dec");
+    if (DEBUG_BTNS) tft_btns("down");
   });
 
   if (M5.BtnC.wasPressed() || M5.BtnC.isPressed())
     event_trigger(1, []() {
     http_get("/event/inc");
+    if (DEBUG_BTNS) tft_btns("up");
   });
 
   if (M5.BtnB.wasPressed())
     event_trigger(2, []() {
     http_get("/event/push");
+    if (DEBUG_BTNS) tft_btns("ok");
   });
 
   //Serial.printf("%d %d %d %d\n", digitalRead(2), digitalRead(19), digitalRead(16), digitalRead(3));
@@ -117,24 +134,28 @@ void loop(void)
   if (Btn1.wasPressed())
     event_trigger(3, []() {
     http_get("/event/btn1");
+    if (DEBUG_BTNS) tft_btns("btn1");
   });
 
   Btn2.read();
   if (Btn2.wasPressed())
     event_trigger(4, []() {
     http_get("/event/btn2");
+    if (DEBUG_BTNS) tft_btns("btn2");
   });
 
   Btn3.read();
   if (Btn3.wasPressed())
     event_trigger(5, []() {
     http_get("/event/btn3");
+    if (DEBUG_BTNS) tft_btns("btn3");
   });
 
   Btn4.read();
   if (Btn4.wasPressed())
     event_trigger(6, []() {
     http_get("/event/btn4");
+    if (DEBUG_BTNS) tft_btns("btn4");
   });
 
   // FACE
@@ -166,7 +187,7 @@ void loop(void)
         case '%': http_get("/event/btn3"); break;
         case '/': http_get("/event/btn4"); break;
       }
-
+      tft_btns(String(key_val));
     }
   }
 
@@ -175,6 +196,11 @@ void loop(void)
 
   if (wifi_isok()) {
     wifi_otaCheck();
+
+    if (DEBUG_BTNS) {
+      DEBUG_BTNS = false;   // once connected, disable DEBUG_BTNS
+      tft_btns("");
+    }
 
     if (udp_in.parsePacket()) {
       int len = udp_in.read(udpPacket, 1470);
@@ -201,11 +227,11 @@ void loop(void)
     }
 
     if (millis() - lastNews > 1500) {
-      tft_status("-no rpi");
+      tft_status(myName, "-no rpi");
     }
   }
   else {
-    tft_status("+no wifi");
+    tft_status(myName, "+no wifi");
   }
   delay(50);
 

@@ -307,13 +307,13 @@ class TelecoInterface (BaseInterface):
                 self.activePage = 0
             
             # When switching back to PAGE_MEDIA : go to current dir / file
-            if self.activePage == PAGE_MEDIA :
-                if self.dirPlayback:
-                    self.hplayer.files.selectDir(self.dirPlayback)
-                    self.microOffset = max(0, self.hplayer.playlist.index()-3)
-                    self.microIndex = self.hplayer.playlist.index() - self.microOffset 
-                    self.microList = self.hplayer.files.currentList(True)[self.microOffset:][:4]
-                    # listchanged()
+            # if self.activePage == PAGE_MEDIA :
+            #     if self.dirPlayback:
+            #         self.hplayer.files.selectDir(self.dirPlayback)
+            #         self.microOffset = max(0, self.hplayer.playlist.index()-3)
+            #         self.microIndex = self.hplayer.playlist.index() - self.microOffset 
+            #         self.microList = self.hplayer.files.currentList(True)[self.microOffset:][:4]
+            #         # listchanged()
 
 
         @self.on('FUNC-hold')
