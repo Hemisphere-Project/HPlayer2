@@ -2,6 +2,7 @@
 
 String last_s1 = "";
 String last_s2 = "";
+String last_sb = "";
 int last_bat = 0;
 int last_wifi = 0;
 
@@ -38,6 +39,13 @@ void tft_status(String stat1, String stat2) {
   }
 }
 
+void tft_btns(String statbtns) {
+  if (last_sb != statbtns) {
+    last_sb = statbtns;
+    tft_draw();
+  }
+}
+
 void tft_mon() {
 
   int rssi = WiFi.RSSI();
@@ -65,12 +73,16 @@ void tft_draw() {
   M5.Lcd.setCursor(30, 100);
   M5.Lcd.printf(last_s2.c_str());
 
+
+  String btns = "";
+  if (last_sb != "") btns = "Press: "+last_sb;
+  M5.Lcd.setCursor(30, 160);
+  M5.Lcd.printf(btns.c_str());
   
   String mon = "Wifi:";
   if (last_wifi == 0) mon += " NO!";
   else mon += String(map(last_wifi, -90, -20, 0, 100));
   mon += "   Battery:"+String(last_bat);
-  
   M5.Lcd.setCursor(30, 210);
   M5.Lcd.printf(mon.c_str());
 }
