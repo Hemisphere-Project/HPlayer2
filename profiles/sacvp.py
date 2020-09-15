@@ -70,10 +70,15 @@ def espPlay(ev, *args):
             hplayer.emit('sacvp.esp', {'topic': 'leds/mem', 'data': mem})
 
 
+# Stop -> Blackout ESP
+@hplayer.on('*.stop')
+def espStop(ev, *args):
+    hplayer.emit('sacvp.esp', {'topic': 'leds/stop', 'data': ''})
+
 
 # default volume
 @video.on('player-ready')
-def init(ev):
+def init(ev, *args):
     hplayer.settings.set('volume', 50)
     hplayer.settings.set('loop', -1)
 
