@@ -37,13 +37,15 @@ class KeyboardInterface (BaseInterface):
         if iface and not isinstance(iface, str):
             iface = iface.src_path
         if iface != self.detect(): return
+
         try:
             self.remote = InputDevice(iface)
             self.remote.grab()
             self.log("Keyboard connected ...")
         except:
+            e = sys.exc_info()[0]
             self.remote = None
-            self.log("Keyboard not found ...")
+            self.log("Keyboard not found ...", e)
 
     def unbind(self, iface):
         if not isinstance(iface, str):
