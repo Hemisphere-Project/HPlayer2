@@ -4,7 +4,7 @@ tabHold = False
 memDirectory = 0
 
 # INIT HPLAYER
-hplayer = HPlayer2('/data')
+hplayer = HPlayer2('/data/sync')
 
 
 # INTERFACES
@@ -35,19 +35,19 @@ def keyboard2MQTT(ev, *args):
 
     # + Master
     elif ev == 'KEY_BACKSPACE-down' or ev == 'KEY_BACKSPACE-hold':
-        hplayer.interface('mqtt').send('k32/all/leds/modi/0/faster')
+        hplayer.interface('mqtt').send('k32/all/leds/modi/0/faster', None, 0)
 
     # - Master
     elif ev == 'KEY_KPASTERISK-down' or ev == 'KEY_KPASTERISK-hold':
-        hplayer.interface('mqtt').send('k32/all/leds/modi/0/slower')
+        hplayer.interface('mqtt').send('k32/all/leds/modi/0/slower', None, 0)
 
     # + modulators
     elif ev == 'KEY_KPPLUS-down' or ev == 'KEY_KPPLUS-hold':
-        hplayer.interface('mqtt').send('k32/all/leds/master/more')
+        hplayer.interface('mqtt').send('k32/all/leds/master/more', None, 0)
 
     # - modulators
     elif ev == 'KEY_KPMINUS-down' or ev == 'KEY_KPMINUS-hold':
-        hplayer.interface('mqtt').send('k32/all/leds/master/less')
+        hplayer.interface('mqtt').send('k32/all/leds/master/less', None, 0)
 
 
 # RUN
