@@ -2,203 +2,201 @@
 <html>
 
 <head>
-  <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
-  <link rel="shortcut icon" href="/res/hemi.ico" />
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+    <link rel="shortcut icon" href="/res/hemi.ico" />
 
-  <title>HPlayer2</title>
+    <title>HPlayer2</title>
 
-  <script type="text/javascript" src="/res/jquery-3.3.1.min.js"></script>
-  <script type="text/javascript" src="/res/socket.io.slim.js"></script>
+    <script type="text/javascript" src="/res/jquery-3.3.1.min.js"></script>
+    <script type="text/javascript" src="/res/socket.io.slim.js"></script>
 
-  <link href="/res/css/fontawesome.min.css" rel="stylesheet">
-  <link href="/res/css/solid.min.css" rel="stylesheet">
-  <link href="/res/css/regular.min.css" rel="stylesheet">
+    <link href="/res/css/fontawesome.min.css" rel="stylesheet">
+    <link href="/res/css/solid.min.css" rel="stylesheet">
+    <link href="/res/css/regular.min.css" rel="stylesheet">
 
-  <link rel="stylesheet" href="/res/bootstrap.min.css">
-  <script type="text/javascript" src="/res/bootstrap.bundle.min.js"></script>
+    <link rel="stylesheet" href="/res/bootstrap.min.css">
+    <script type="text/javascript" src="/res/bootstrap.bundle.min.js"></script>
 
-  <link rel="stylesheet" href="/res/bootstrap-treeview.min.css">
-  <script type="text/javascript" src="/res/bootstrap-treeview-custom.js"></script>
+    <link rel="stylesheet" href="/res/bootstrap-treeview.min.css">
+    <script type="text/javascript" src="/res/bootstrap-treeview-custom.js"></script>
 
-  <link rel="stylesheet" href="/res/jquery.dm-uploader.min.css">
-  <script type="text/javascript" src="/res/jquery.dm-uploader.min.js"></script>
-  <script type="text/javascript" src="/res/uploader-profile.js"></script>
+    <link rel="stylesheet" href="/res/jquery.dm-uploader.min.css">
+    <script type="text/javascript" src="/res/jquery.dm-uploader.min.js"></script>
+    <script type="text/javascript" src="/res/uploader-profile.js"></script>
 
-  <link rel="stylesheet" href="/style.css?6">
-  <script type="text/javascript" src="/script.js"></script>
+    <link rel="stylesheet" href="/style.css?6">
+    <script type="text/javascript" src="/script.js"></script>
 </head>
 
 <body>
-  <nav class="navbar navbar-dark bg-dark mb-3">
-    <span class="navbar-brand mb-0 mr-0 h1">HPlayer2</span>
-    <span id="playerName"></span>
-    <span id="link-connected">connected</span>
-    <span id="link-disconnected">disconnected</span>
-  </nav>
+    <nav class="navbar navbar-dark bg-dark mb-3">
+        <span class="navbar-brand mb-0 mr-0 h1">HPlayer2</span>
+        <span id="playerName"></span>
+        <span id="link-connected">connected</span>
+        <span id="link-disconnected">disconnected</span>
+    </nav>
 
-  <div class="row panel">
-    <div class="col-sm-0 col-md-0 col-lg-0 col-xl-1"></div>
-    <div class="col-sm-12 col-md-12 col-lg-12 col-xl-10">
+    <div class="row panel">
+        <div class="col-sm-0 col-md-0 col-lg-0 col-xl-1"></div>
+        <div class="col-sm-12 col-md-12 col-lg-12 col-xl-10">
 
-      <div class="row">
+            <div class="row">
 
-        <div class="col-12 col-sm-6">
-          <div class="form-group">
-            <button type="button" class="btn btn-outlined-success" id="play_btn"><i class="fas fa-play"></i></button>
-            <button type="button" class="btn btn-outlined-warning" id="pause_btn"><i class="fas fa-pause"></i></button>
-            <button type="button" class="btn btn-outlined-secondary" id="prev_btn"><i class="fas fa-step-backward"></i></button>
-            <button type="button" class="btn btn-outlined-secondary" id="next_btn"><i class="fas fa-step-forward"></i></button>
-            <button type="button" class="btn btn-outlined-danger" id="stop_btn"><i class="fas fa-stop"></i></button>
-          </div>
-        </div>
-
-        <div class="col-12 col-sm-6 text-sm-right">
-          <div class="form-group">
-            <button type="button" class="btn btn-outlined-info" id="loopOne_btn"><i class="fas fa-undo"></i> One</button>
-            <button type="button" class="btn btn-outlined-info" id="loopAll_btn"><i class="fas fa-undo"></i> All</button>
-            <button type="button" class="btn btn-outlined-warning" id="mute_btn"><i class="fas fa-volume-mute"></i></button>
-            <button type="button" class="btn btn-outlined-secondary" id="auto_btn">autoplay</button>
-            <button type="button" class="btn btn-outlined-danger" id="restart_btn">restart</button>
-            <button type="button" class="btn btn-outlined-danger" id="reboot_btn">reboot</button>
-          </div>
-        </div>
-
-        <div class="col-12">
-          <div class="media-info">
-            <span class="badge badge-secondary mr-2">media</span> <span id="media_name"></span>
-          </div>
-        </div>
-
-        <div class="col-12">
-          <div class="media-info">
-            <span class="badge badge-secondary mr-2">time</span> <span id="time_ellapsed"></span>
-          </div>
-        </div>
-
-        <div class="col-12 col-lg-12 col-xl-4">
-          <div class="">
-            <span class="badge badge-secondary mr-2 vol-main">volume</span><span id="volumeMain"></span>
-            <input type="range" class="" id="volume_range" min="0" max="100">
-          </div>
-        </div>
-
-        <div class="col-12 col-md-6 col-xl-4">
-          <div class="vol-more">
-            <span class="badge badge-secondary mr-2">left</span><span id="volumeLeft"></span>
-            <input type="range" class="" id="left_range" min="0" max="100">
-          </div>
-        </div>
-
-        <div class="col-12 col-md-6 col-xl-4">
-          <div class="vol-more">
-            <span class="badge badge-secondary mr-2">right</span><span id="volumeRight"></span>
-            <input type="range" class="" id="right_range" min="0" max="100">
-          </div>
-        </div>
-
-        <div class="col-12 col-md-6 col-xl-4">
-          <div class="vol-more">
-            <span class="badge badge-secondary mr-2">mono</span>
-            <input type="checkbox" class="" id="audiomode_mono">
-          </div>
-        </div>
-
-      </div>
-
-      <div class="row mt-2">
-
-
-        <div class="col-12 col-md-6 col-xl-6 mb-4">
-          <div class="card-header text-white bg-dark">
-            Playlist
-            <button type="button" class="btn btn-warning btn-sm float-right" id="clear_btn">clear</button>
-          </div>
-          <div id="playlist" class=""></div>
-        </div>
-
-        <div class="col-12 col-md-6 col-xl-6">
-          <div class="card-header text-white bg-dark">
-            Files
-            <div class=" float-right">
-              <!-- <span class="badge badge-secondary mr-2">selection</span> -->
-              <button type="button" class="btn btn-sm btn-outline-secondary" id="selall_btn"><i class="fas fa-check"></i> all</button>
-              <button type="button" class="btn btn-sm btn-outline-secondary" id="selnone_btn"><i class="fas fa-ban"></i> none</button>
-              <button type="button" class="btn btn-sm btn-outline-success" id="playsel_btn"><i class="fas fa-plus"></i> to playlist</button>
-              <button type="button" class="btn btn-sm btn-outline-danger" id="delsel_btn"><i class="far fa-trash-alt"></i> delete</button>
-            </div>
-          </div>
-          <div id="trees" class="row mt-2"></div>
-        </div>
-      </div>
-
-      <hr />
-
-
-      <!-- Modal -->
-      <div class="modal fade" id="uploadModal" tabindex="-1" role="dialog">
-        <div class="modal-dialog modal-dialog-centered" role="document">
-          <div class="modal-content text-white bg-dark">
-            <div class="modal-header">Upload
-              <button type="button" class="close" data-dismiss="modal">&times;</button>
-            </div>
-            <div class="modal-body">
-
-              <div id="drag-and-drop-zone" class="dm-uploader p-2 text-center">
-                <h3 class="mb-5 mt-5 text-muted d-none d-xl-block">Drag &amp; drop Files here</h3>
-                <div class="btn btn-primary btn-block mb-5">
-                  <span>Select files</span>
-                  <input type="file" title='Click to add Files' />
-                </div><!-- /uploader -->
-              </div>
-
-              <div class="card" style="height:300px;" id="upload-list">
-                <ul class="list-unstyled p-2 d-flex flex-column col" id="files">
-                  <li class="text-muted text-center empty"></li>
-                </ul>
-              </div>
-
-            </div>
-          </div>
-        </div>
-      </div>
-
-
-      <!-- File item template -->
-      <script type="text/html" id="files-template">
-        <li class="media">
-            <div class="media-body mb-1">
-              <p class="mb-2">
-                <strong>%%filename%%</strong> - Status: <span class="text-muted">Waiting</span>
-              </p>
-              <div class="progress mb-2">
-                <div class="progress-bar progress-bar-striped progress-bar-animated bg-primary"
-                  role="progressbar"
-                  style="width: 0%"
-                  aria-valuenow="0" aria-valuemin="0" aria-valuemax="100">
+                <div class="col-12 col-sm-6">
+                    <div class="form-group">
+                        <button type="button" class="btn btn-outlined-success" id="play_btn"><i class="fas fa-play"></i></button>
+                        <button type="button" class="btn btn-outlined-warning" id="pause_btn"><i class="fas fa-pause"></i></button>
+                        <button type="button" class="btn btn-outlined-secondary" id="prev_btn"><i class="fas fa-step-backward"></i></button>
+                        <button type="button" class="btn btn-outlined-secondary" id="next_btn"><i class="fas fa-step-forward"></i></button>
+                        <button type="button" class="btn btn-outlined-danger" id="stop_btn"><i class="fas fa-stop"></i></button>
+                    </div>
                 </div>
-              </div>
-              <hr class="mt-1 mb-1" />
+
+                <div class="col-12 col-sm-6 text-sm-right">
+                    <div class="form-group">
+                        <button type="button" class="btn btn-outlined-info" id="loopOne_btn"><i class="fas fa-undo"></i> One</button>
+                        <button type="button" class="btn btn-outlined-info" id="loopAll_btn"><i class="fas fa-undo"></i> All</button>
+                        <button type="button" class="btn btn-outlined-warning" id="mute_btn"><i class="fas fa-volume-mute"></i></button>
+                        <button type="button" class="btn btn-outlined-secondary" id="auto_btn">autoplay</button>
+                        <button type="button" class="btn btn-outlined-danger" id="restart_btn">restart</button>
+                        <button type="button" class="btn btn-outlined-danger" id="reboot_btn">reboot</button>
+                    </div>
+                </div>
+
+                <div class="col-12">
+                    <div class="media-info">
+                        <span class="badge badge-secondary mr-2">media</span> <span id="media_name"></span>
+                    </div>
+                </div>
+
+                <div class="col-12">
+                    <div class="media-info">
+                        <span class="badge badge-secondary mr-2">time</span> <span id="time_ellapsed"></span>
+                    </div>
+                </div>
+
+                <div class="col-12 col-lg-12 col-xl-4">
+                    <div class="">
+                        <span class="badge badge-secondary mr-2 vol-main">volume</span><span id="volumeMain"></span>
+                        <input type="range" class="" id="volume_range" min="0" max="100">
+                    </div>
+                </div>
+
+                <div class="col-12 col-md-6 col-xl-4">
+                    <div class="vol-more">
+                        <span class="badge badge-secondary mr-2">left</span><span id="volumeLeft"></span>
+                        <input type="range" class="" id="left_range" min="0" max="100">
+                    </div>
+                </div>
+
+                <div class="col-12 col-md-6 col-xl-4">
+                    <div class="vol-more">
+                        <span class="badge badge-secondary mr-2">right</span><span id="volumeRight"></span>
+                        <input type="range" class="" id="right_range" min="0" max="100">
+                    </div>
+                </div>
+
+                <div class="col-12 col-md-6 col-xl-4">
+                    <div class="vol-more">
+                        <span class="badge badge-secondary mr-2">mono</span>
+                        <input type="checkbox" class="" id="audiomode_mono">
+                    </div>
+                </div>
+
             </div>
-          </li>
-        </script>
 
-      <hr />
+            <div class="row mt-2">
 
-      <div class="row">
-        <div class="col-12">
-          <h4>Logs</h4>
-          <div id="log1" class="log-data"></div>
-          <div id="log2" class="log-data"></div>
-        </div><!-- /logs -->
-      </div>
 
-      <hr />
-      sources<br /><a href="https://github.com/Hemisphere-Project/HPlayer2" target="_blank">https://github.com/Hemisphere-Project/HPlayer2</a><br />
-      <br /><a href="/simple">simple interface</a><br />
+                <div class="col-12 col-md-6 col-xl-6 mb-4 playlist-element">
+                    <div class="card-header text-white bg-dark">
+                        Playlist
+                        <button type="button" class="btn btn-warning btn-sm float-right" id="clear_btn">clear</button>
+                    </div>
+                    <div id="playlist" class=""></div>
+                </div>
+
+                <div class="col-12 col-md-6 col-xl-6">
+                    <div class="card-header text-white bg-dark">
+                        Files
+                        <div class=" float-right">
+                            <!-- <span class="badge badge-secondary mr-2">selection</span> -->
+                            <button type="button" class="btn btn-sm btn-outline-secondary" id="selall_btn"><i class="fas fa-check"></i> all</button>
+                            <button type="button" class="btn btn-sm btn-outline-secondary" id="selnone_btn"><i class="fas fa-ban"></i> none</button>
+                            <button type="button" class="btn btn-sm btn-outline-success playlist-element" id="playsel_btn"><i class="fas fa-plus"></i> to playlist</button>
+                            <button type="button" class="btn btn-sm btn-outline-danger" id="delsel_btn"><i class="far fa-trash-alt"></i> delete</button>
+                        </div>
+                    </div>
+                    <div id="trees" class="row mt-2"></div>
+                </div>
+            </div>
+
+            <hr />
+
+
+            <!-- Modal -->
+            <div class="modal fade" id="uploadModal" tabindex="-1" role="dialog">
+                <div class="modal-dialog modal-dialog-centered" role="document">
+                    <div class="modal-content text-white bg-dark">
+                        <div class="modal-header">Upload
+                            <button type="button" class="close" data-dismiss="modal">&times;</button>
+                        </div>
+                        <div class="modal-body">
+
+                            <div id="drag-and-drop-zone" class="dm-uploader p-2 text-center">
+                                <h3 class="mb-5 mt-5 text-muted d-none d-xl-block">Drag &amp; drop Files here</h3>
+                                <div class="btn btn-primary btn-block mb-5">
+                                    <span>Select files</span>
+                                    <input type="file" title='Click to add Files' />
+                                </div>
+                                <!-- /uploader -->
+                            </div>
+
+                            <div class="card" style="height:300px;" id="upload-list">
+                                <ul class="list-unstyled p-2 d-flex flex-column col" id="files">
+                                    <li class="text-muted text-center empty"></li>
+                                </ul>
+                            </div>
+
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+
+            <!-- File item template -->
+            <script type="text/html" id="files-template">
+                <li class="media">
+                    <div class="media-body mb-1">
+                        <p class="mb-2">
+                            <strong>%%filename%%</strong> - Status: <span class="text-muted">Waiting</span>
+                        </p>
+                        <div class="progress mb-2">
+                            <div class="progress-bar progress-bar-striped progress-bar-animated bg-primary" role="progressbar" style="width: 0%" aria-valuenow="0" aria-valuemin="0" aria-valuemax="100">
+                            </div>
+                        </div>
+                        <hr class="mt-1 mb-1" />
+                    </div>
+                </li>
+            </script>
+
+            <hr />
+
+            <div class="row">
+                <div class="col-12">
+                    <h4>Logs</h4>
+                    <div id="log1" class="log-data"></div>
+                    <div id="log2" class="log-data"></div>
+                </div>
+                <!-- /logs -->
+            </div>
+
+            <hr /> sources
+            <br /><a href="https://github.com/Hemisphere-Project/HPlayer2" target="_blank">https://github.com/Hemisphere-Project/HPlayer2</a><br />
+            <br /><a href="/simple">simple interface</a><br />
+        </div>
     </div>
-  </div>
 </body>
 
 </html>
-

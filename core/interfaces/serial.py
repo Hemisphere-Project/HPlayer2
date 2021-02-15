@@ -8,29 +8,33 @@ from serial.tools import list_ports
 
 class SerialInterface (BaseInterface):
 
-    def  __init__(self, hplayer, filter=""):
+    def  __init__(self, hplayer, filter="", maxRetry=0):
         super(SerialInterface, self).__init__(hplayer, "Serial")
         self.port = None
         self.serial = None
         self.filter = filter
+        self.maxRetry = maxRetry
         
 
     # SERIAL receiver THREAD
     def listen(self):
 
+        retryCount = 0
         while self.isRunning():
 
             # find port
             if not self.port:
-                for dev in list_ports.grep(self.filter):
-                    self.port = dev.device
-                    break
-                if not self.port:
+                retryCount += 1 
+                if self.maxRetry == 0 or retryCount <= self.maxRetry:
+                    for dev in list_ports.grep(self.filter):
+                        self.port = dev.device
+                        break
+                    if self.port: continue
                     self.log("no device found.. retrying")
-                    for i in range(10):
-                        time.sleep(0.5)
-                        if not self.isRunning(): 
-                            return
+                for i in range(10):
+                    time.sleep(0.5)
+                    if not self.isRunning(): 
+                        return
             
             # connect to serial
             elif not self.serial:

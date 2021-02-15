@@ -25,6 +25,7 @@ class Settings(Module):
                 for key, value in self._settings:
                     self.emit('do-'+key, value, self.export())
                 self.emit('updated', self.export())
+                self.emit('loaded', self.export())
                 self.log('settings loaded:', self._settings)
             except:
                 self.log('ERROR loading settings file', self._settingspath)       
@@ -50,8 +51,8 @@ class Settings(Module):
     def set(self, key, val):
         if self._settings[key] != val:
             self._settings[key] = val
-            self.emit('updated', self.export())
             self.emit('do-'+key, val, self.export())
+            self.emit('updated', self.export())
             self.save()
 
 

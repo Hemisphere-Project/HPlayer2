@@ -13,8 +13,7 @@ player.doLog['cmds'] = True
 # Interfaces
 player.addInterface('http', 8080)
 player.addInterface('http2', 80)
-if hplayer.isRPi():
-    player.addInterface('gpio', [20,21,16,14,15,26], 310)
+player.addInterface('gpio', [20,21,16,14,15,26], 310)
 if "-sync" in network.get_hostname():
 	player.addInterface('zyre', 'wlan0')
 

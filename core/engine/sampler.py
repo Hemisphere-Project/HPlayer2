@@ -84,9 +84,12 @@ class Sampler(Module):
     # Play Media
     def play(self, media):
         freeP = None
+        _media = self.parent.files.listFiles(media)[0]  # find first matching media
+        if not _media:
+            self.log('media not found: ', media)
 
         for p in self.players():   # media already played somewhere
-            if p.status('media') == media:
+            if p.status('media') == _media:
                 freeP = p.name
                 break
 
@@ -102,7 +105,7 @@ class Sampler(Module):
         if not freeP:
             freeP = self.players()[0].name   # default: take 0
 
-        self._players[freeP].play(media)
+        self._players[freeP].play(_media)
 
         self._usedHistory = [x for x in self._usedHistory if x != freeP]
         self._usedHistory.append(freeP)

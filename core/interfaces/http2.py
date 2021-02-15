@@ -178,13 +178,16 @@ class ThreadedHTTPServer(object):
         def reboot_message():
             os.system('reboot')
 
+
         @socketio.on('restart')
         def restart_message():
             self.http2interface.emit('hardreset')
 
+
         @socketio.on('ping')
         def ping_message():
             socketio.send('pong')
+
 
         @socketio.on('event')
         def event_message(message=None):
@@ -193,6 +196,7 @@ class ThreadedHTTPServer(object):
                     self.http2interface.emit(message['event'], message['data'])
                 else:
                     self.http2interface.emit(message['event'])
+
 
         @socketio.on('fileslist')
         def fileslist_message():
@@ -208,9 +212,10 @@ class ThreadedHTTPServer(object):
                     d['selectable'] = False
                 else:
                     d['selectable'] = True
-                    d['text'] += ' <div class="media-edit float-right">';
-                    d['text'] += '  <span class="badge badge-success" onClick="playlistAdd(\''+path+'\'); event.stopPropagation();"> <i class="fas fa-plus"></i> </span>';
-                    # d['text'] += '  <span class="badge badge-danger ml-2"><i class="far fa-trash-alt"></i> </span>';
+                    d['text'] += ' <div class="media-edit float-right">'
+                    # d['text'] += '  <span class="badge badge-success playlist-element" onClick="playlistAddSelected(); /*playlistAdd(\''+path+'\');*/ event.stopPropagation();"> <i class="fas fa-plus"></i> </span>';
+                    # d['text'] += '  <span class="badge badge-danger ml-2"  onClick="mediaRemoveSelected(); event.stopPropagation();" ><i class="far fa-trash-alt"></i> </span>';
+                    d['text'] += '  <span class="badge badge-info ml-2"  onClick="mediaEdit(\''+path+'\'); event.stopPropagation();" ><i class="far fa-edit"></i> </span>'
                     d['text'] += ' </div>';
                 return d
 
@@ -226,6 +231,7 @@ class ThreadedHTTPServer(object):
             else:
                 socketio.emit('files', None )
 
+
         @socketio.on('filesdelete')
         def filesdelete_message(message=None):
             # print ('delete', message)
@@ -236,6 +242,31 @@ class ThreadedHTTPServer(object):
                         if e.startswith(basepath):
                             os.remove(e)
                 fileslist_message()
+
+
+        @socketio.on('filerename')
+        def filerename_message(old, new):
+            old = old.replace('/..', '')
+            new = new.replace('/..', '')
+            self.http2interface.log('file rename', old, new)
+
+            check = False
+            for basepath in self.http2interface.hplayer.files.root_paths:
+                if old.startswith(basepath):
+                    check = True
+            if not check: return
+
+            check = True
+            for basepath in self.http2interface.hplayer.files.root_paths:
+                if new.startswith(basepath):
+                    check = True
+            if not check: return
+
+            if not os.path.exists(old): return
+            
+            os.rename(old, new) 
+            fileslist_message()
+
 
         @socketio.on('connect', namespace='/test')
         def test_connect():
