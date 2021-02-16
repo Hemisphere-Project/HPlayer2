@@ -108,6 +108,7 @@ class ThreadedHTTPServer(object):
                 return 'No file provided', 404
 
             file = request.files['file']
+
             # path = request.
 
             if file.filename == '':

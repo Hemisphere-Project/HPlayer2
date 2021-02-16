@@ -301,7 +301,8 @@ class MpvPlayer(BasePlayer):
 
     def _applyPan(self, pan):
         if pan == 'mono':
-            self._mpv_send('{"command": ["set_property", "af", "lavfi=[pan=stereo|c0=.5*c0+.5*c1|c1=.5*c0+.5*c1]"]}')            
+            self._mpv_send('{"command": ["set_property", "af", "lavfi=[pan=stereo|c0=.5*c0+.5*c1|c1=.5*c0+.5*c1]"]}')        
+            self.log("MONO")    
         else:
             left = pan[0]/100.0
             right = pan[1]/100.0
