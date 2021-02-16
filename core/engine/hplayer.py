@@ -39,13 +39,16 @@ class HPlayer2(EventEmitterX):
         self._samplers      = OrderedDict()
         self._interfaces    = OrderedDict()
 
-        self.settings       = Settings(self, settingspath)
-        self.files          = FileManager(self, basepath)
+        self.settings       = Settings(self)
+        self.files          = FileManager(self)
         self.playlist       = Playlist(self)
 
         self.autoBind(self.settings)
         self.autoBind(self.files)
         self.autoBind(self.playlist)
+
+        self.settings.load(settingspath)
+        self.files.add(basepath)
 
 
     def log(self, *argv):
@@ -284,6 +287,13 @@ class HPlayer2(EventEmitterX):
             self.log('HARD KILL')
             os._exit(0)
 
+        @module.on('do-audioout')
+        def doaudioout(ev, *args):
+            if len(args) > 0:
+                if args[0] == 'hdmi':
+                    os.system('amixer cset numid=3 2')
+                elif args[0] == 'jack':
+                    os.system('amixer cset numid=3 1')
 
         # PLAYLIST
         #
@@ -423,8 +433,20 @@ class HPlayer2(EventEmitterX):
 
         @module.on('pan')
         def pan(ev, *args):
-            if len(args) > 1:
+            if len(args) == 1:
+                self.settings.set('pan', [int(args[0][0]),int(args[0][1])])
+            elif len(args) > 1:
                 self.settings.set('pan', [int(args[0]),int(args[1])])
+
+        @module.on('audiomode')
+        def audiomode(ev, *args):
+            if len(args) > 0:
+                self.settings.set('audiomode', args[0])
+
+        @module.on('audioout')
+        def audiomode(ev, *args):
+            if len(args) > 0:
+                self.settings.set('audioout', args[0])
         
         @module.on('flip')
         def flip(ev, *args):
@@ -459,7 +481,3 @@ class HPlayer2(EventEmitterX):
             if len(args) > 0:
                 doAP = int(args[0]) > 0
             self.settings.set('autoplay', doAP)
-
-        @module.on('notautoplay')
-        def notautoplay(ev, *args):
-            self.settings.set('autoplay', False)

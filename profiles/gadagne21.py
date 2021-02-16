@@ -15,7 +15,7 @@ hplayer = HPlayer2('/data/media', '/data/hplayer2-gadagne21.cfg')
 player = hplayer.addPlayer('mpv', 'player')
 player.imagetime(15)
 
-player.doLog['events'] = True
+player.doLog['events'] = False
 # player.doLog['cmds'] = True
 
 
@@ -25,12 +25,13 @@ sampler = hplayer.addSampler('mpv', 'sampler', 6)
 
 # Interfaces
 hplayer.addInterface('http', 8080)
-hplayer.addInterface('http2', 80)
+hplayer.addInterface('http2', 80, {'playlist': False, 'loop': False, 'mute': False})
 hplayer.addInterface('serial', "^CP2102", 20)
 if hplayer.isRPi():
     hplayer.addInterface('gpio', [21,20,16,26,14,15], 310)
 if "-sync" in network.get_hostname():
-	hplayer.addInterface('zyre', 'eth0')
+    	hplayer.addInterface('zyre', 'eth0')
+
 
 
 # PLAY action
@@ -123,6 +124,15 @@ def disableAuto(ev, *args):
 	hplayer.settings.set('autoplay', False)
 	hplayer.playlist.clear()
 
+
+# HTTP2 Logs
+@hplayer.on('player.*')
+@hplayer.on('sampler.*')
+@hplayer.on('gpio.*')
+@hplayer.on('serial.*')
+def http2_logs(ev, *args):
+	if ev.startswith('gpio') and ev.find('-') == -1: return 
+	hplayer.interface('http2').send('logs', [ev]+list(args))
 
 # RUN
 hplayer.run()

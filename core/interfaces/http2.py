@@ -1,11 +1,11 @@
 from .base import BaseInterface
 import socketio
 import eventlet
-from flask import Flask, render_template, session, request, send_from_directory
+from flask import Flask, render_template, session, request, send_from_directory, send_file
 from flask_socketio import SocketIO, emit, join_room, leave_room, close_room, rooms, disconnect
 from werkzeug.utils import secure_filename
 import threading, os, time
-import logging
+import queue
 from PIL import Image
 
 from ..engine.network import get_allip, get_hostname
@@ -24,9 +24,19 @@ thread_lock = threading.Lock()
 
 class Http2Interface (BaseInterface):
 
-    def  __init__(self, hplayer, port):
+    def  __init__(self, hplayer, port, confe):
         super(Http2Interface, self).__init__(hplayer, "HTTP2")
         self._port = port
+
+        self.conf = {
+            'name'      : hplayer.name(),
+            'isRPi'     : hplayer.isRPi(),
+            'playlist'  : True,
+            'loop'      : True,
+            'mute'      : True
+        }
+        self.conf.update(confe)
+
 
     # HTTP receiver THREAD
     def listen(self):
@@ -54,6 +64,11 @@ class Http2Interface (BaseInterface):
             zeroconf.close()
 
 
+    # SEND socketio message to clients
+    def send(self, event, message):
+        self.emit('do-socketio', event, message)
+
+
 #
 # Threaded HTTP Server
 #
@@ -69,7 +84,6 @@ class ThreadedHTTPServer(object):
         app.config['SECRET_KEY'] = 'secret!'
         socketio = SocketIO(app)
 
-
         #
         # FLASK Routing
         #
@@ -81,6 +95,12 @@ class ThreadedHTTPServer(object):
         @app.route('/simple')
         def simple():
             return send_from_directory(www_path, 'simple.html')
+
+        @app.route('/filedownload', methods=['GET'])
+        def filedownload():
+            path = request.args.get('path')
+            print(path)
+            return send_file(path, as_attachment=True)
 
         @app.route('/upload', methods=['POST'])
         def files_upload():
@@ -129,50 +149,38 @@ class ThreadedHTTPServer(object):
         # SOCKETIO Routing
         #
         
-        self.sendSettings = None
-        self.sendPlaylist = None
+        self.sendQueue = queue.SimpleQueue()
 
         def background_thread():
             while True:
                 socketio.emit('status', self.http2interface.hplayer.players()[0].status())  # {'msg': 'yo', 'timestamp': time.gmtime()}
                 
-                if self.sendSettings is not None:
-                    socketio.emit('settings', self.sendSettings)
-                    self.sendSettings = None
-                    
-                if self.sendPlaylist is not None:
-                    socketio.emit('playlist', self.sendPlaylist)
-                    self.sendPlaylist = None
-                    
+                while not self.sendQueue.empty():
+                    cmd = self.sendQueue.get_nowait()
+                    socketio.emit(cmd[0], cmd[1])
+
                 socketio.sleep(0.1)
 
         @self.http2interface.hplayer.on('settings.updated')
-        def settings_send(ev, *args):
-            self.sendSettings = args[0]
-
         @self.http2interface.hplayer.on('playlist.updated')
-        def playlist_send(ev, *args):
-            self.sendPlaylist = args[0]
+        def settings_send(ev, *args):
+            self.sendQueue.put([ev] + list(args))
+
+        @self.http2interface.on('do-socketio')
+        def remote_send(ev, *args):
+            self.sendQueue.put(args)
 
 
         @socketio.on('connect')
         def client_connect():
-            socketio.emit('settings', self.http2interface.hplayer.settings())
-            socketio.emit('playlist', self.http2interface.hplayer.playlist())
-            socketio.emit('name', self.http2interface.hplayer.name())
+            socketio.emit('config',             self.http2interface.conf)
+            socketio.emit('settings.updated',   self.http2interface.hplayer.settings())
+            socketio.emit('playlist.updated',   self.http2interface.hplayer.playlist())
             global thread
             with thread_lock:
                 if thread is None:
                     thread = socketio.start_background_task(target=background_thread)
 
-
-        # @socketio.on('autoplay')
-        # def mute_message():
-        #     self.player.autoplay(True)
-
-        # @socketio.on('audiomode')
-        # def audiomode_message(message=None):
-        #     self.player.audiomode(message)
 
         @socketio.on('reboot')
         def reboot_message():
@@ -213,9 +221,9 @@ class ThreadedHTTPServer(object):
                 else:
                     d['selectable'] = True
                     d['text'] += ' <div class="media-edit float-right">'
-                    # d['text'] += '  <span class="badge badge-success playlist-element" onClick="playlistAddSelected(); /*playlistAdd(\''+path+'\');*/ event.stopPropagation();"> <i class="fas fa-plus"></i> </span>';
-                    # d['text'] += '  <span class="badge badge-danger ml-2"  onClick="mediaRemoveSelected(); event.stopPropagation();" ><i class="far fa-trash-alt"></i> </span>';
-                    d['text'] += '  <span class="badge badge-info ml-2"  onClick="mediaEdit(\''+path+'\'); event.stopPropagation();" ><i class="far fa-edit"></i> </span>'
+                    d['text'] += '  <span class="badge badge-success ml-2"  onClick="mediaDownload(\''+path+'\'); event.stopPropagation();"> <i class="fas fa-download"></i> </span>';
+                    d['text'] += '  <span class="badge badge-warning ml-2"  onClick="mediaEdit(\''+path+'\'); event.stopPropagation();" ><i class="far fa-edit"></i> </span>'
+                    d['text'] += '  <span class="badge badge-danger ml-2"  onClick="mediaRemove(\''+path+'\'); event.stopPropagation();" ><i class="far fa-trash-alt"></i> </span>';
                     d['text'] += ' </div>';
                 return d
 

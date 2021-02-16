@@ -43,24 +43,29 @@
 
             <div class="row">
 
-                <div class="col-12 col-sm-6">
+                <div class="col-lg-4 col-12">
                     <div class="form-group">
-                        <button type="button" class="btn btn-outlined-success" id="play_btn"><i class="fas fa-play"></i></button>
-                        <button type="button" class="btn btn-outlined-warning" id="pause_btn"><i class="fas fa-pause"></i></button>
-                        <button type="button" class="btn btn-outlined-secondary" id="prev_btn"><i class="fas fa-step-backward"></i></button>
-                        <button type="button" class="btn btn-outlined-secondary" id="next_btn"><i class="fas fa-step-forward"></i></button>
-                        <button type="button" class="btn btn-outlined-danger" id="stop_btn"><i class="fas fa-stop"></i></button>
+                        <button type="button" class="btn" id="play_btn"><i class="fas fa-play"></i></button>
+                        <button type="button" class="btn" id="pause_btn"><i class="fas fa-pause"></i></button>
+                        <button type="button" class="btn" id="prev_btn"><i class="fas fa-step-backward"></i></button>
+                        <button type="button" class="btn" id="next_btn"><i class="fas fa-step-forward"></i></button>
+                        <button type="button" class="btn" id="stop_btn"><i class="fas fa-stop"></i></button>
+                    </div>
+                </div>
+                <div class="col-lg-4 col-12 text-lg-center">
+                    <div class="form-group">
+                        <button type="button" class="btn loop-element" id="loopOne_btn"><i class="fas fa-undo"></i> One</button>
+                        <button type="button" class="btn loop-element" id="loopAll_btn"><i class="fas fa-undo"></i> All</button>
+                        <button type="button" class="btn playlist-element" id="auto_btn"><i class="fas fa-play-circle"></i> Autoplay</button>
                     </div>
                 </div>
 
-                <div class="col-12 col-sm-6 text-sm-right">
+                <div class="col-lg-4 col-12 text-lg-right">
                     <div class="form-group">
-                        <button type="button" class="btn btn-outlined-info" id="loopOne_btn"><i class="fas fa-undo"></i> One</button>
-                        <button type="button" class="btn btn-outlined-info" id="loopAll_btn"><i class="fas fa-undo"></i> All</button>
-                        <button type="button" class="btn btn-outlined-warning" id="mute_btn"><i class="fas fa-volume-mute"></i></button>
-                        <button type="button" class="btn btn-outlined-secondary" id="auto_btn">autoplay</button>
-                        <button type="button" class="btn btn-outlined-danger" id="restart_btn">restart</button>
-                        <button type="button" class="btn btn-outlined-danger" id="reboot_btn">reboot</button>
+                        <button type="button" class="btn audio-element" id="hdmi_btn"><i class="fas fa-desktop"></i> HDMI</button>
+                        <button type="button" class="btn audio-element" id="jack_btn"><i class="fas fa-headphones"></i> Jack</button>
+                        <button type="button" class="btn mute-element" id="mute_btn"><i class="fas fa-volume-mute"></i> Mute</button>
+                        <button type="button" class="btn audio-element" id="mono_btn"><i class="fas fa-rss"></i> Mono</button>
                     </div>
                 </div>
 
@@ -76,7 +81,7 @@
                     </div>
                 </div>
 
-                <div class="col-12 col-lg-12 col-xl-4">
+                <div class="col-lg-3 col-md-4 col-12">
                     <div class="">
                         <span class="badge badge-secondary mr-2 vol-main">volume</span><span id="volumeMain"></span>
                         <input type="range" class="" id="volume_range" min="0" max="100">
@@ -97,19 +102,12 @@
                     </div>
                 </div>
 
-                <div class="col-12 col-md-6 col-xl-4">
-                    <div class="vol-more">
-                        <span class="badge badge-secondary mr-2">mono</span>
-                        <input type="checkbox" class="" id="audiomode_mono">
-                    </div>
-                </div>
-
             </div>
 
             <div class="row mt-2">
 
 
-                <div class="col-12 col-md-6 col-xl-6 mb-4 playlist-element">
+                <div class="col-lg-6 col-12 mb-4 playlist-element">
                     <div class="card-header text-white bg-dark">
                         Playlist
                         <button type="button" class="btn btn-warning btn-sm float-right" id="clear_btn">clear</button>
@@ -117,15 +115,15 @@
                     <div id="playlist" class=""></div>
                 </div>
 
-                <div class="col-12 col-md-6 col-xl-6">
+                <div class="col-lg-6 col-12">
                     <div class="card-header text-white bg-dark">
                         Files
                         <div class=" float-right">
                             <!-- <span class="badge badge-secondary mr-2">selection</span> -->
-                            <button type="button" class="btn btn-sm btn-outline-secondary" id="selall_btn"><i class="fas fa-check"></i> all</button>
-                            <button type="button" class="btn btn-sm btn-outline-secondary" id="selnone_btn"><i class="fas fa-ban"></i> none</button>
+                            <button type="button" class="btn btn-sm btn-outline-secondary playlist-element" id="selall_btn"><i class="fas fa-check"></i> all</button>
+                            <button type="button" class="btn btn-sm btn-outline-secondary playlist-element" id="selnone_btn"><i class="fas fa-ban"></i> none</button>
                             <button type="button" class="btn btn-sm btn-outline-success playlist-element" id="playsel_btn"><i class="fas fa-plus"></i> to playlist</button>
-                            <button type="button" class="btn btn-sm btn-outline-danger" id="delsel_btn"><i class="far fa-trash-alt"></i> delete</button>
+                            <button type="button" class="btn btn-sm btn-outline-danger playlist-element" id="delsel_btn"><i class="far fa-trash-alt"></i> delete</button>
                         </div>
                     </div>
                     <div id="trees" class="row mt-2"></div>
@@ -183,11 +181,22 @@
 
             <hr />
 
+
+
             <div class="row">
                 <div class="col-12">
-                    <h4>Logs</h4>
+                    <button type="button" class="btn" id="playlist_btn"><i class="fa fa-list"></i> Playlist</button>
+                    <button type="button" class="btn" id="logs_btn"><i class="fa fa-notes-medical"></i> Logs</button>
+                    <button type="button" class="btn" id="restart_btn"><i class="fa fa-sync"></i> Restart</button>
+                    <button type="button" class="btn" id="reboot_btn"><i class="fa fa-power-off"></i> Reboot</button>
+                </div>
+            </div>
+            <br />
+            <div class="row">
+                <div class="col-12">
                     <div id="log1" class="log-data"></div>
                     <div id="log2" class="log-data"></div>
+                    <div id="log3" class="log-data row"></div>
                 </div>
                 <!-- /logs -->
             </div>

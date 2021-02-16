@@ -8,7 +8,7 @@ import pathlib
 from ..module import Module
 
 class FileManager(Module):
-    def __init__(self, hplayer, roots=None):
+    def __init__(self, hplayer):
         super().__init__(hplayer, 'Files', 'yellow')
         self.hplayer = hplayer
 
@@ -27,9 +27,6 @@ class FileManager(Module):
                 self.refreshTimer.cancel()
             self.refreshTimer = Timer(.5, self.refresh)
             self.refreshTimer.start()
-
-        if roots: 
-            self.add(roots)
             
 
     def __call__(self, directory=None, fullpath=False):

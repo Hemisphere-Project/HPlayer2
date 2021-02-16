@@ -297,7 +297,7 @@ class MpvPlayer(BasePlayer):
 
     def _applyVolume(self, volume):
         self._mpv_send('{ "command": ["set_property", "volume", '+str(volume)+'] }')
-        self.log("VOLUME to", volume)
+        # self.log("VOLUME to", volume)
 
     def _applyPan(self, pan):
         if pan == 'mono':

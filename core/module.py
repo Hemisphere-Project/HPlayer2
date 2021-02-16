@@ -30,7 +30,6 @@ class Module(EventEmitterX):
 
     # Emit extended
     def emit(self, event, *args):
-        
         fullEvent = self.name.lower() + '.' + event
         if self.logEvents:
             self.log('-', event, *args )
