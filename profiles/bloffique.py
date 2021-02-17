@@ -5,7 +5,7 @@ import os, sys, types, platform
 
 # DIRECTORY / FILE
 profilename = os.path.basename(__file__).split('.')[0]
-base_path = ['/data/sync/'+network.get_hostname(), '/data/usb']
+base_path = ['/data/sync/', '/data/usb']
 
 # INIT HPLAYER
 hplayer = HPlayer2(base_path, "/data/hplayer2-"+profilename+".cfg")
@@ -14,7 +14,7 @@ hplayer = HPlayer2(base_path, "/data/hplayer2-"+profilename+".cfg")
 player 	= hplayer.addPlayer('mpv','mpv')
 
 # Interfaces
-hplayer.addInterface('zyre', 'wlan0')
+hplayer.addInterface('zyre', "wlan0")
 hplayer.addInterface('http2', 8080)
 hplayer.addInterface('keyboard')
 
@@ -22,6 +22,9 @@ if HPlayer2.isRPi():
 	hplayer.addInterface('keypad')
 
 
+# Build playlist
+#
+hplayer.playlist.load("*"+network.get_hostname()+"*")
 
 # Broadcast Order on OSC/Zyre to other Pi's
 #
@@ -33,34 +36,34 @@ def broadcast(path, *args):
 		hplayer.interface('zyre').node.broadcast(path, list(args))
 
 
-
 # Bind Keypad / GPIO events
 #
-hplayer.on('keypad.left', 		lambda: broadcast('play', "1*"))
-hplayer.on('keypad.up', 		lambda: broadcast('play', "2*"))
-hplayer.on('keypad.down', 		lambda: broadcast('play', "3*"))
-hplayer.on('keypad.right', 		lambda: broadcast('play', "4*")) 
-hplayer.on('keypad.select', 		lambda: broadcast('stop'))
+hplayer.on('keypad.right', 		lambda ev: broadcast('playindex', hplayer.playlist.nextIndex()))
+hplayer.on('keypad.up', 		lambda ev: broadcast('volume', hplayer.settings.get('volume')+1))
+hplayer.on('keypad.down', 		lambda ev: broadcast('volume', hplayer.settings.get('volume')-1))
+hplayer.on('keypad.left', 		lambda ev: broadcast('playindex', hplayer.playlist.prevIndex())) 
+hplayer.on('keypad.select', 		lambda ev: broadcast('stop'))
+
 
 
 # Keyboard
 #
-hplayer.on('keyboard.KEY_KP0-down', 		lambda: broadcast('play', "0*"))
-hplayer.on('keyboard.KEY_KP1-down', 		lambda: broadcast('play', "1*"))
-hplayer.on('keyboard.KEY_KP2-down', 		lambda: broadcast('play', "2*"))
-hplayer.on('keyboard.KEY_KP3-down', 		lambda: broadcast('play', "3*"))
-hplayer.on('keyboard.KEY_KP4-down', 		lambda: broadcast('play', "4*"))
-hplayer.on('keyboard.KEY_KP5-down', 		lambda: broadcast('play', "5*"))
-hplayer.on('keyboard.KEY_KP6-down', 		lambda: broadcast('play', "6*"))
-hplayer.on('keyboard.KEY_KP7-down', 		lambda: broadcast('play', "7*"))
-hplayer.on('keyboard.KEY_KP8-down', 		lambda: broadcast('play', "8*"))
-hplayer.on('keyboard.KEY_KP9-down', 		lambda: broadcast('play', "9*"))
-hplayer.on('keyboard.KEY_KPENTER-down',     	lambda: broadcast('stop'))
+hplayer.on('keyboard.KEY_KP0-down', 		lambda ev: broadcast('playindex', hplayer.playlist.findIndex("0_*")))
+hplayer.on('keyboard.KEY_KP1-down', 		lambda ev: broadcast('playindex', hplayer.playlist.findIndex("1_*")))
+hplayer.on('keyboard.KEY_KP2-down', 		lambda ev: broadcast('playindex', hplayer.playlist.findIndex("2_*")))
+hplayer.on('keyboard.KEY_KP3-down', 		lambda ev: broadcast('playindex', hplayer.playlist.findIndex("3_*")))
+hplayer.on('keyboard.KEY_KP4-down', 		lambda ev: broadcast('playindex', hplayer.playlist.findIndex("4_*")))
+hplayer.on('keyboard.KEY_KP5-down', 		lambda ev: broadcast('playindex', hplayer.playlist.findIndex("5_*")))
+hplayer.on('keyboard.KEY_KP6-down', 		lambda ev: broadcast('playindex', hplayer.playlist.findIndex("6_*")))
+hplayer.on('keyboard.KEY_KP7-down', 		lambda ev: broadcast('playindex', hplayer.playlist.findIndex("7_*")))
+hplayer.on('keyboard.KEY_KP8-down', 		lambda ev: broadcast('playindex', hplayer.playlist.findIndex("8_*")))
+hplayer.on('keyboard.KEY_KP9-down', 		lambda ev: broadcast('playindex', hplayer.playlist.findIndex("9_*")))
+hplayer.on('keyboard.KEY_KPENTER-down',     	lambda ev: broadcast('stop'))
 
-hplayer.on('keyboard.KEY_KPPLUS-down', 		lambda: broadcast('volume', hplayer.settings.get('volume')+1))
-hplayer.on('keyboard.KEY_KPPLUS-hold', 		lambda: broadcast('volume', hplayer.settings.get('volume')+1))
-hplayer.on('keyboard.KEY_KPMINUS-down', 	lambda: broadcast('volume', hplayer.settings.get('volume')-1))	
-hplayer.on('keyboard.KEY_KPMINUS-hold', 	lambda: broadcast('volume', hplayer.settings.get('volume')-1))	
+hplayer.on('keyboard.KEY_KPPLUS-down', 		lambda ev: broadcast('volume', hplayer.settings.get('volume')+1))
+hplayer.on('keyboard.KEY_KPPLUS-hold', 		lambda ev: broadcast('volume', hplayer.settings.get('volume')+1))
+hplayer.on('keyboard.KEY_KPMINUS-down', 	lambda ev: broadcast('volume', hplayer.settings.get('volume')-1))	
+hplayer.on('keyboard.KEY_KPMINUS-hold', 	lambda ev: broadcast('volume', hplayer.settings.get('volume')-1))	
 
 
 

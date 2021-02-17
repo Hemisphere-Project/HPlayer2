@@ -359,8 +359,8 @@ class ZyreNode ():
         # Zyre 
         self.zyre = Zyre(None)
         if netiface:
-            self.zyre.set_interface( string_at(netiface) )
-            self.interface.log("ZYRE Node forced netiface: ", string_at(netiface) )
+            self.zyre.set_interface( str(netiface).encode() )
+            self.interface.log("ZYRE Node forced netiface: ", str(netiface).encode() )
 
         self.zyre.set_name(str(self.interface.hplayer.name()).encode())
         self.zyre.set_header(b"TS-PORT",  str(get_port(self.timereply)).encode())

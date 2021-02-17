@@ -24,7 +24,7 @@ thread_lock = threading.Lock()
 
 class Http2Interface (BaseInterface):
 
-    def  __init__(self, hplayer, port, confe):
+    def  __init__(self, hplayer, port, confe={}):
         super(Http2Interface, self).__init__(hplayer, "HTTP2")
         self._port = port
 

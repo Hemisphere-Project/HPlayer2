@@ -134,5 +134,28 @@ class Playlist(Module):
     def first(self):
         self.playindex(0)
 
-
     
+    ## OBTAIN INDEX
+    def nextIndex(self):
+        return (self._index + 1) % self.size() if self.size() > 0 else 0
+
+    # PREVIOUS item in playlist
+    def prevIndex(self):
+        return (self._index - 1) % self.size() if self.size() > 0 else 0
+
+    # LAST item
+    def lastIndex(self):
+        return self.size()-1
+
+    # first item
+    def firstIndex(self):
+        return 0
+
+    # find item
+    def findIndex(self, pattern):
+        pattern = pattern.replace('*', '.+')
+        pattern = pattern.replace('?', '.')
+        for k,media in enumerate(self._playlist):
+            if re.search(pattern, media):
+                return k
+        return -1
