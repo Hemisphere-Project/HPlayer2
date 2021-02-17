@@ -12,7 +12,7 @@ if "-sync" in network.get_hostname():
     mediaPath = '/data/sync'
 
 # INIT HPLAYER
-hplayer = HPlayer2('/data/media', '/data/hplayer2-gadagne21.cfg')
+hplayer = HPlayer2(mediaPath, '/data/hplayer2-gadagne21.cfg')
 
 
 
