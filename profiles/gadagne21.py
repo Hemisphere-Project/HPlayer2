@@ -6,6 +6,10 @@ import time
 import tempfile
 tempfile.tempdir = '/data/var/tmp'
 
+# MEDIA PATH
+mediaPath = '/data/media'
+if "-sync" in network.get_hostname():
+    mediaPath = '/data/sync'
 
 # INIT HPLAYER
 hplayer = HPlayer2('/data/media', '/data/hplayer2-gadagne21.cfg')
