@@ -22,16 +22,25 @@ body {
     /* font-size: 0.9em; */
 }
 
-.log-data {
+.log-data,
+.settings-view {
+    display: none;
+}
+
+.settings-view {
+    height: 500px;
+}
+
+.log {
     overflow-y: auto;
     padding: 5px;
     margin: 2px;
     border: 1px solid #333;
-    display: none;
 }
 
 #log3 {
     max-height: 200px;
+    padding-top: 20px;
 }
 
 .btn-sm {

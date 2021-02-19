@@ -9,6 +9,8 @@ $(document).ready(function() {
 
     var playlistEnabled = true
 
+    $('#settingsframe').attr('src', location.protocol + '//' + document.domain + ':4038')
+
     /*
       SOCKETIO
     */
@@ -173,6 +175,8 @@ $(document).ready(function() {
 
     // LOGS
     socket.on('logs', function(msg) {
+        console.log(msg)
+
         var d = $('#log3')
         var cmd = msg.shift()
 
@@ -183,7 +187,6 @@ $(document).ready(function() {
             ).fadeTo(3000, 0.4, function() { $(this).fadeTo(5000, 0.1) })
 
         $('#log3').scrollTop(d.prop("scrollHeight"));
-
     });
 
     /*
@@ -370,6 +373,12 @@ $(document).ready(function() {
     var logsBtn = new Button('#logs_btn', 'secondary')
     logsBtn.btn.click(event => {
         $('.log-data').toggle()
+    });
+
+    // SETTINGS
+    var settings = new Button('#settings_btn', 'warning')
+    settings.btn.click(event => {
+        $('.settings-view').toggle()
     });
 
 

@@ -187,18 +187,25 @@
                 <div class="col-12">
                     <button type="button" class="btn" id="playlist_btn"><i class="fa fa-list"></i> Playlist</button>
                     <button type="button" class="btn" id="logs_btn"><i class="fa fa-notes-medical"></i> Logs</button>
+                    <button type="button" class="btn" id="settings_btn"><i class="fa fa-cog"></i> Settings</button>
                     <button type="button" class="btn" id="restart_btn"><i class="fa fa-sync"></i> Restart</button>
                     <button type="button" class="btn" id="reboot_btn"><i class="fa fa-power-off"></i> Reboot</button>
                 </div>
             </div>
             <br />
-            <div class="row">
+
+            <div class="row log-data">
                 <div class="col-12">
-                    <div id="log1" class="log-data"></div>
-                    <div id="log2" class="log-data"></div>
-                    <div id="log3" class="log-data row"></div>
+                    <div id="log1" class="log"></div>
+                    <div id="log2" class="log"></div>
+                    <div id="log3" class="log row"></div>
                 </div>
                 <!-- /logs -->
+            </div>
+
+            <div class="settings-view">
+                <iframe id="settingsframe" name="settingsframe" style="width:100%;height:100%;"></iframe>
+                <!-- /setting -->
             </div>
 
             <hr /> sources
