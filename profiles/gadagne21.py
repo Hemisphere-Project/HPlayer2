@@ -11,6 +11,7 @@ tempfile.tempdir = '/data/var/tmp'
 hplayer = HPlayer2('/data/media', '/data/hplayer2-gadagne21.cfg')
 
 
+
 # PLAYER
 player = hplayer.addPlayer('mpv', 'player')
 player.imagetime(15)

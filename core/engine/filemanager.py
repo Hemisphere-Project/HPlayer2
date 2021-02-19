@@ -222,7 +222,6 @@ class FileManager(Module):
         """
         Create recursive list of files based on source (can be files, folders, ...)
         """
-        
         liste = []
         if not isinstance(entries, (list,)):
             entries = [entries]
@@ -276,14 +275,16 @@ class FileManager(Module):
                             for root, dirs, files in os.walk(base, topdown=False):
                                for name in files:
                                   fpath = os.path.join(root, name)
-                                  match = re.match( r''+fullpath.replace('*','.*'), fpath, re.M|re.I)
+                                  match = re.fullmatch( r''+fullpath.replace('*','.*'), fpath, re.M|re.I)
+                                #   print(fpath, fullpath.replace('*','.*'), match)
                                   if ('/.' not in fpath) and match:
                                     	globlist.append(fpath)
-                            #print(globlist)
+                            # print(globlist)
                             for e in globlist:
                                 if os.path.isfile(e) and self.validExt(e):
                                     liste.append(e)
 
         liste.sort()
+        # print(liste)
         return liste
 
