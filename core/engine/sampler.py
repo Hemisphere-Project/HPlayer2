@@ -114,7 +114,8 @@ class Sampler(Module):
 
     # STOP Playback
     def stop(self, media=None):
+        _media = self.parent.files.listFiles(media)[0]  # find first matching media
         for p in self.players(): 
-            if not media or p.status('media') == media:
+            if not _media or p.status('media') == _media:
                 p.stop()
     
