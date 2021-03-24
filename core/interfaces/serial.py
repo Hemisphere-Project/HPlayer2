@@ -39,11 +39,24 @@ class SerialInterface (BaseInterface):
             # connect to serial
             elif not self.serial:
                 try:
+                    # Reset 
+                    self.serial = serial.Serial(self.port) # dummy connection to receive all the watchdog gibberish (unplug + replug) and properly reset the arduino
+                    with self.serial:
+                        self.serial.setDTR(False)   # reset flag
+                        time.sleep(1)
+                        self.serial.flushInput()
+                        self.serial.setDTR(True)
+                        time.sleep(0.5)
+                    
+                    # Connect
                     self.serial = serial.Serial(self.port, 115200, timeout=.1)
                     self.log("connected to", self.port, "!")
+
                 except:
                     self.log("connection failed on", self.port)
                     self.port = None
+                    self.serial = None
+                    time.sleep(0.5)
                     
 
             # read
@@ -59,3 +72,4 @@ class SerialInterface (BaseInterface):
                 except:
                     self.log("broken link..")
                     self.serial = None
+                    time.sleep(0.5)
