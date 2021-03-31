@@ -22,6 +22,10 @@ if HPlayer2.isRPi():
 	hplayer.addInterface('keypad')
 
 
+# No Loop, neither playlist
+hplayer.settings.set('loop', -1)
+
+
 # Build playlist
 #
 @hplayer.files.on('file-changed')
