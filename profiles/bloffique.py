@@ -25,7 +25,7 @@ if HPlayer2.isRPi():
 # Build playlist
 #
 @hplayer.files.on('file-changed')
-def bulid_list(ev=None):
+def bulid_list(ev=None, *args):
     hplayer.playlist.load("*"+network.get_hostname()+"*")
 bulid_list()
 
