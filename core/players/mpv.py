@@ -144,7 +144,7 @@ class MpvPlayer(BasePlayer):
 
                                 else: 
                                     self.emit('stopped')
-                                    # self.log('stop')
+                                    # self.log('stop')  # also Triggered with oneloop
                                     
                                 self._mpv_lockedout = 0
 
@@ -311,8 +311,11 @@ class MpvPlayer(BasePlayer):
     
     def _applyFlip(self, flip):
         if flip:
-            # self._mpv_send('{ "command": ["vf", "add", "mirror"] }')
-            pass
+            self._mpv_send('{ "command": ["vf", "del", "mirror"] }')
+            self._mpv_send('{ "command": ["vf", "add", "mirror"] }')
         else:
-            # self._mpv_send('{ "command": ["vf", "del", "mirror"] }')
+            self._mpv_send('{ "command": ["vf", "del", "mirror"] }')
             pass
+
+    def _applyOneLoop(self, oneloop):
+        self._mpv_send('{ "command": ["set_property", "loop", ' + ('"inf"' if oneloop else '"no"') +'] }')

@@ -69,7 +69,8 @@ class SerialInterface (BaseInterface):
                         if data[0][0] == '/': data[0] = data[0][1:]
                         data[0].replace('/','.')
                         self.emit(data[0], *data[1:])
-                except:
+                except Exception as e:
+                    print(e)
                     self.log("broken link..")
                     self.serial = None
                     time.sleep(0.5)
