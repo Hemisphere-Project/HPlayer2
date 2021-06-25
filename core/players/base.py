@@ -181,3 +181,6 @@ class BasePlayer(Module):
 
     def _applyFlip(self, flip):
         self.log("screen flip", flip)
+
+    def _applyOneLoop(self, oneloop):
+        self.log("one loop", oneloop)
