@@ -30,10 +30,17 @@ class KeyboardInterface (BaseInterface):
 
     # Find Keyboard
     def detect(self):
+        # FIND USB KEYBOARD
         kbd = subprocess.Popen("ls -la /dev/input/by-id/ | grep event-kbd | awk -F \"/\" '{print $NF}' ", shell=True, stdout=subprocess.PIPE).stdout.read().decode("utf-8").strip()
         if kbd:
             return '/dev/input/'+kbd
         else:
+            # FIND INTERAL KEYBOARD
+            # kbd = subprocess.Popen("ls -la /dev/input/by-path/ | grep event-kbd | awk -F \"/\" '{print $NF}' ", shell=True, stdout=subprocess.PIPE).stdout.read().decode("utf-8").strip()
+            # if kbd:
+            #     return '/dev/input/'+kbd
+            # else:
+            #     return None
             return None
 
     # Bind to interface
