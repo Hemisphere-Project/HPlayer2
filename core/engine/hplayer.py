@@ -432,6 +432,25 @@ class HPlayer2(EventEmitterX):
                 if (vol > 100): vol = 100
                 self.settings.set('volume', vol)
 
+        @module.on('volinc')
+        def volume(ev, *args):
+            inc = 1
+            if len(args) > 0:
+                inc = int(args[0])
+            vol = self.settings.get('volume') + inc
+            if (vol > 100): vol = 100
+            self.settings.set('volume', vol)
+
+        @module.on('voldec')
+        def volume(ev, *args):
+            dec = 1
+            if len(args) > 0:
+                dec = int(args[0])
+            vol = self.settings.get('volume') - dec
+            if (vol < 0): vol = 0
+            self.settings.set('volume', vol)
+
+
         @module.on('mute')
         def mute(ev, *args):
             doMute = True

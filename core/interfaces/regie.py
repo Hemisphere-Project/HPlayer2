@@ -75,8 +75,9 @@ class ThreadedHTTPServer(object):
 
 
         #
-        # FLASK Routing
+        # FLASK Routing Static
         #
+
         @app.route('/')
         def index():
             # self.regieinterface.log('requesting index')
@@ -87,6 +88,14 @@ class ThreadedHTTPServer(object):
             # self.regieinterface.log('requesting '+path)
             return send_from_directory(www_path, path)
 
+        #
+        # FLASK Routing API
+        #
+        
+        # @app.route('/<path:path>')
+        # def send_static(path):
+        #     # self.regieinterface.log('requesting '+path)
+        #     return send_from_directory(www_path, path)
 
         #
         # SOCKETIO Routing
