@@ -29,7 +29,8 @@ class BasePlayer(Module):
             'isPaused':     False,
             'media':        None,
             'time':         0,
-            'duration':     0
+            'duration':     0,
+            'speed':        1.0
         }
 
 
@@ -88,6 +89,9 @@ class BasePlayer(Module):
     def isPaused(self):
         return self._status['isPaused']
 
+    def position(self):
+        return self._status['time']
+
     #
     # Player CONTROLS
     #
@@ -138,6 +142,12 @@ class BasePlayer(Module):
     # SKIP time
     def skip(self, milli):
         self._skip(milli)
+
+    # SET speed
+    def speed(self, s):
+        if s != self._status['speed']:
+            self.update('speed', s)
+            self._speed(s)
 
     #
     # Player INTERNAL actions: Methods to overwrite !

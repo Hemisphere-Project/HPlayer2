@@ -127,7 +127,8 @@ class MpvPlayer(BasePlayer):
                             pass
                         
                         if 'name' in mpvsays:
-
+                            # print(mpvsays)
+                            
                             if mpvsays['name'] == 'idle':
                                 self.emit('idle')
 
@@ -288,12 +289,17 @@ class MpvPlayer(BasePlayer):
 
     def _seekTo(self, milli):
         self._mpv_send('{ "command": ["seek", "'+str(milli/1000)+'", "absolute"] }')
-        # self.log("seek to", milli/1000)
+        self.log("seek to", milli/1000, self._status['duration'])
+
 
     def _skip(self, milli):
         if self._status['time'] + milli/1000 < self._status['duration']:
             self._mpv_send('{ "command": ["seek", "'+str(milli/1000)+'", "relative"] }')
         # self.log("seek to", milli/1000)
+
+    def _speed(self, s):
+        self._mpv_send('{ "command": ["set_property", "speed", '+str(s)+'] }')
+        self.log("speed to", s)
 
     def _applyVolume(self, volume):
         self._mpv_send('{ "command": ["set_property", "volume", '+str(volume)+'] }')
