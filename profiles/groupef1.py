@@ -43,7 +43,7 @@ def f(ev, *args):
 	speed = 1.0
 
 	# corrector
-	fix = 0.04	# compensate mtc latency from clock to tc tracker (typically 1 frame on Ubuntu x64)
+	fix = 0.04	# compensate mtc latency from clock to tc tracker (typically 1 frame on Ubuntu x64 using Alsa Midi:Thru)
 
 	#jump
 	if abs(diff) > 1.0:
