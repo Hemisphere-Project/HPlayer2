@@ -228,13 +228,19 @@ class MpvPlayer(BasePlayer):
 
         # create subprocess
         script_path = os.path.dirname(os.path.realpath(__file__))
-        self._mpv_subproc = subprocess.Popen(
-                            ['mpv', '--input-ipc-server=' + self._mpv_socketpath + '',
+        
+        command = ['mpv', '--input-ipc-server=' + self._mpv_socketpath + '',
                                 '--idle=yes', '-v', '--no-osc', '--msg-level=ipc=v', '--quiet', '--fs','--keep-open'
                                 ,'--window-scale=' + str(self._mpv_scale)
                                 ,'--image-display-duration=' + str(self._mpv_imagetime)
                                 #,'--force-window=yes'
-                                ],
+                                ]
+        
+        # Special command for RockPro64
+        if os.path.exists('/usr/local/bin/rkmpv'):
+            command[0] = 'rkmpv'
+        
+        self._mpv_subproc = subprocess.Popen(command,
                             stdout=subprocess.PIPE, stdin=subprocess.PIPE, stderr = subprocess.STDOUT,
                             bufsize = 1, universal_newlines = True)
 
