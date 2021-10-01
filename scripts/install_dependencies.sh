@@ -23,10 +23,11 @@ if [[ $(command -v apt) ]]; then
     apt install libcaca-dev libsdl2-dev libasound2-dev -y
 
     # hplayer2 dependencies
-    apt install python python-pip
-    apt install python-liblo python-netifaces python-termcolor python-evdev python-flask-socketio python-eventlet -y
-    apt install python-watchdog python-pillow python-setuptools python-zeroconf python-socketio -y
-    apt install ttf-dejavu-core python-pyserial -y
+    apt install python3 python3-pip -y
+    apt install python3-liblo python3-netifaces python3-termcolor python3-evdev python3-flask-socketio python3-eventlet -y
+    apt install python3-watchdog python3-pillow python3-setuptools python3-zeroconf -y
+    apt install ttf-dejavu-core python3-pyserial libjack-dev libtool autotools-dev automake -y
+    /usr/bin/yes | pip3 install --upgrade python-socketio
 
     # RPi
     if [[ $(uname -m) = armv* ]]; then
@@ -44,14 +45,14 @@ elif [[ $(command -v pacman) ]]; then
     pacman -S alsa-lib alsa-firmware ttf-roboto --noconfirm --needed
 
     # hplayer2 dependencies
-    pacman -S python python-pip cython liblo --noconfirm --needed
-    pacman -S python-pyliblo python-netifaces python-termcolor python-evdev python-flask-socketio  --noconfirm --needed
-    pacman -S python-watchdog python-pillow python-setuptools python-zeroconf python-socketio --noconfirm --needed
-    pacman -S ttf-dejavu python-pyserial --noconfirm --needed
+    pacman -S pkg-config python3 python3-dev python3-pip cython liblo --noconfirm --needed
+    pacman -S python3-pyliblo python3-netifaces python3-termcolor python3-evdev python3-flask-socketio  --noconfirm --needed
+    pacman -S python3-watchdog python3-pillow python3-setuptools python3-zeroconf python3-socketio --noconfirm --needed
+    pacman -S ttf-dejavu python3-pyserial --noconfirm --needed
 
     # RPi
     if [[ $(uname -m) = armv* ]]; then
-      pacman -S python-queuelib i2c-tools --noconfirm --needed
+      pacman -S python3-queuelib i2c-tools --noconfirm --needed
     fi
 
 ## Plateform not detected ...
@@ -68,10 +69,12 @@ fi
 ####
 
 # PIP
+/usr/bin/yes | pip3 install --upgrade wheel
 /usr/bin/yes | pip3 install --upgrade pymitter
 /usr/bin/yes | pip3 install --upgrade mido
-/usr/bin/yes | pip3 install --upgrade python-rtmidi
+/usr/bin/yes | pip3 install --upgrade python3-rtmidi
 /usr/bin/yes | pip3 install --upgrade paho-mqtt
+
 
 # RPi
 if [[ $(uname -m) = armv* ]]; then
