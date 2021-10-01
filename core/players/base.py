@@ -17,6 +17,8 @@ class BasePlayer(Module):
             'recv': False,
             'cmds': False
         }
+        
+        self.logQuietEvents.append('status')  # Do not log status events
 
         self._validExt = []
 
@@ -63,7 +65,8 @@ class BasePlayer(Module):
 
     # Status SET 
     def update(self, key, value):
-        self._status[key] = value  
+        self._status[key] = value
+        self.emit('status', key, value)  
 
     # SET/GET is running
     def isRunning(self, state=None):

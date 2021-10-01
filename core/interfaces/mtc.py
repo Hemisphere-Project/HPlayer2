@@ -6,7 +6,8 @@ class MtcInterface (BaseInterface):
     def __init__(self, hplayer, port_name):
         super().__init__(hplayer, "MTC")
 
-        self.logEvents = False
+        self.logQuietEvents.extend(['qf', 'ff'])  # Do not log tc
+
         self.port = None
         self.port_name = port_name
 

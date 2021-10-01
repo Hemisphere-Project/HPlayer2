@@ -233,6 +233,7 @@ class MpvPlayer(BasePlayer):
                                 '--idle=yes', '-v', '--no-osc', '--msg-level=ipc=v', '--quiet', '--fs','--keep-open'
                                 ,'--window-scale=' + str(self._mpv_scale)
                                 ,'--image-display-duration=' + str(self._mpv_imagetime)
+                                ,'--hr-seek=absolute'
                                 #,'--force-window=yes'
                                 ]
         
@@ -305,7 +306,7 @@ class MpvPlayer(BasePlayer):
 
     def _speed(self, s):
         self._mpv_send('{ "command": ["set_property", "speed", '+str(s)+'] }')
-        self.log("speed to", s)
+        # self.log("speed to", s)
 
     def _applyVolume(self, volume):
         self._mpv_send('{ "command": ["set_property", "volume", '+str(volume)+'] }')
