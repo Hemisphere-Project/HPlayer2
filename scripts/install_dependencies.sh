@@ -74,7 +74,7 @@ fi
 /usr/bin/yes | pip3 install --upgrade mido
 /usr/bin/yes | pip3 install --upgrade python3-rtmidi
 /usr/bin/yes | pip3 install --upgrade paho-mqtt
-
+/usr/bin/yes | pip3 install --upgrade timecode
 
 # RPi
 if [[ $(uname -m) = armv* ]]; then
