@@ -233,7 +233,8 @@ class MpvPlayer(BasePlayer):
                                 '--idle=yes', '-v', '--no-osc', '--msg-level=ipc=v', '--quiet', '--fs','--keep-open'
                                 ,'--window-scale=' + str(self._mpv_scale)
                                 ,'--image-display-duration=' + str(self._mpv_imagetime)
-                                ,'--hr-seek=absolute'
+                                ,'--hr-seek=yes'
+                                ,'--af=rubberband'
                                 #,'--force-window=yes'
                                 ]
         
@@ -295,7 +296,7 @@ class MpvPlayer(BasePlayer):
         self._mpv_send('{ "command": ["set_property", "pause", false] }')
 
     def _seekTo(self, milli):
-        self._mpv_send('{ "command": ["seek", "'+str(milli/1000)+'", "absolute"] }')
+        self._mpv_send('{ "command": ["seek", "'+str(milli/1000)+'", "absolute", "keyframes"] }')
         self.log("seek to", milli/1000, self._status['duration'])
 
 
