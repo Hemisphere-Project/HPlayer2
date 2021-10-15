@@ -24,10 +24,10 @@ if [[ $(command -v apt) ]]; then
 
     # hplayer2 dependencies
     apt install python3 python3-pip -y
-    apt install python3-liblo python3-netifaces python3-termcolor python3-evdev python3-flask-socketio python3-eventlet -y
-    apt install python3-watchdog python3-pillow python3-setuptools python3-zeroconf -y
+    apt install python3-liblo python3-netifaces python3-termcolor python3-evdev python3-eventlet -y
+    apt install python3-watchdog python3-pillow python3-setuptools -y
     apt install ttf-dejavu-core python3-pyserial libjack-dev libtool autotools-dev automake -y
-    /usr/bin/yes | pip3 install --upgrade python-socketio
+    
 
     # RPi
     if [[ $(uname -m) = armv* ]]; then
@@ -46,8 +46,8 @@ elif [[ $(command -v pacman) ]]; then
 
     # hplayer2 dependencies
     pacman -S pkg-config python3 python3-dev python3-pip cython liblo --noconfirm --needed
-    pacman -S python3-pyliblo python3-netifaces python3-termcolor python3-evdev python3-flask-socketio  --noconfirm --needed
-    pacman -S python3-watchdog python3-pillow python3-setuptools python3-zeroconf python3-socketio --noconfirm --needed
+    pacman -S python3-pyliblo python3-netifaces python3-termcolor python3-evdev --noconfirm --needed
+    pacman -S python3-watchdog python3-pillow python3-setuptools --noconfirm --needed
     pacman -S ttf-dejavu python3-pyserial --noconfirm --needed
 
     # RPi
@@ -69,6 +69,8 @@ fi
 ####
 
 # PIP
+/usr/bin/yes | pip3 install --upgrade flask-socketio
+/usr/bin/yes | pip3 install zeronconf==0.31.0
 /usr/bin/yes | pip3 install --upgrade wheel
 /usr/bin/yes | pip3 install --upgrade pymitter
 /usr/bin/yes | pip3 install --upgrade mido
