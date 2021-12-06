@@ -1,6 +1,18 @@
+#define CR_VERSION  0.10  // M5stick-C
+#define CR_VERSION  0.11  // M5stick-C+
+
+#define MODEL 4     // 0: remote ciconia   1: ttgo   2: htit   3: M5stickC 4: M5stickC+
+
+
 #include <Arduino.h>
 #include "debug.h"
-#include "M5StickC.h"
+
+#if MODEL == 3
+  #include "M5StickC.h"
+#elif MODEL == 4
+  #include "M5StickCPlus.h"
+#endif
+
 #include "oled.h"
 #include "settings.h"
 #include "events.h"
@@ -10,7 +22,7 @@
 #include "http.h"
 #include "actions.h"
 
-#define CR_VERSION  0.10  // M5stick
+
 
 // IP
 String myIP = "3.0.0.";
@@ -29,12 +41,11 @@ void setup() {
   // delay(1000);
 
   // Settings config
-  String keys[16] = {"id", "model"};
+  String keys[16] = {"id"};
   settings_load( keys );
 
   // Settings SET EEPROM !
-  settings_set("id", 10);
-  settings_set("model", 3);   // 0: remote ciconia   1: ttgo   2: htit   3: M5stickC
+  // settings_set("id", 13);
 
   // Wifi
   myIP += String(settings_get("id")+100);
