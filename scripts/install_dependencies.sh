@@ -45,14 +45,14 @@ elif [[ $(command -v pacman) ]]; then
     pacman -S alsa-lib alsa-firmware ttf-roboto --noconfirm --needed
 
     # hplayer2 dependencies
-    pacman -S pkg-config python3 python3-dev python3-pip cython liblo --noconfirm --needed
-    pacman -S python3-pyliblo python3-netifaces python3-termcolor python3-evdev --noconfirm --needed
-    pacman -S python3-watchdog python3-pillow python3-setuptools --noconfirm --needed
-    pacman -S ttf-dejavu python3-pyserial --noconfirm --needed
+    pacman -S pkg-config python python-pip cython liblo --noconfirm --needed
+    pacman -S python-pyliblo python-netifaces python-termcolor python-evdev --noconfirm --needed
+    pacman -S python-watchdog python-pillow python-setuptools --noconfirm --needed
+    pacman -S ttf-dejavu python-pyserial --noconfirm --needed
 
     # RPi
     if [[ $(uname -m) = armv* ]]; then
-      pacman -S python3-queuelib i2c-tools --noconfirm --needed
+      pacman -S python-queuelib i2c-tools --noconfirm --needed
     fi
 
 ## Plateform not detected ...
@@ -70,11 +70,11 @@ fi
 
 # PIP
 /usr/bin/yes | pip3 install --upgrade flask-socketio
-/usr/bin/yes | pip3 install zeronconf==0.31.0
+/usr/bin/yes | pip3 install zeroconf==0.31.0
 /usr/bin/yes | pip3 install --upgrade wheel
 /usr/bin/yes | pip3 install --upgrade pymitter
 /usr/bin/yes | pip3 install --upgrade mido
-/usr/bin/yes | pip3 install --upgrade python3-rtmidi
+/usr/bin/yes | pip3 install --upgrade python-rtmidi
 /usr/bin/yes | pip3 install --upgrade paho-mqtt
 /usr/bin/yes | pip3 install --upgrade timecode
 
