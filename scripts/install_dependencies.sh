@@ -26,7 +26,7 @@ if [[ $(command -v apt) ]]; then
     apt install python python-pip
     apt install python-netifaces python-termcolor python-evdev python-flask-socketio python-eventlet -y
     apt install python-watchdog python-pillow python-setuptools python-zeroconf python-socketio -y
-    apt install ttf-dejavu-core python-pyserial -y
+    apt install ttf-dejavu-core python-pyserial libjack-dev libtool autotools-dev automake -y
 
     # RPi
     if [[ $(uname -m) = armv* ]]; then
@@ -44,9 +44,9 @@ elif [[ $(command -v pacman) ]]; then
     pacman -S alsa-lib alsa-firmware ttf-roboto --noconfirm --needed
 
     # hplayer2 dependencies
-    pacman -S python python-pip cython liblo libxcrypt --noconfirm --needed
-    pacman -S python-netifaces python-termcolor python-evdev python-flask-socketio  --noconfirm --needed
-    pacman -S python-watchdog python-pillow python-setuptools python-zeroconf python-socketio --noconfirm --needed
+    pacman -S pkg-config python python-pip cython liblo libxcrypt --noconfirm --needed
+    pacman -S python-netifaces python-termcolor python-evdev --noconfirm --needed
+    pacman -S python-watchdog python-pillow python-setuptools --noconfirm --needed
     pacman -S ttf-dejavu python-pyserial --noconfirm --needed
 
     # RPi
@@ -68,11 +68,15 @@ fi
 ####
 
 # PIP
+/usr/bin/yes | pip install --upgrade flask-socketio
+/usr/bin/yes | pip install zeroconf==0.31.0
+/usr/bin/yes | pip install --upgrade wheel
 /usr/bin/yes | pip install --upgrade pyliblo3
 /usr/bin/yes | pip install --upgrade pymitter
 /usr/bin/yes | pip install --upgrade mido
 /usr/bin/yes | pip install --upgrade python-rtmidi
 /usr/bin/yes | pip install --upgrade paho-mqtt
+/usr/bin/yes | pip install --upgrade timecode
 
 # RPi
 if [[ $(uname -m) = armv* ]]; then

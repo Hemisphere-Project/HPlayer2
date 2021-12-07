@@ -92,6 +92,13 @@ class HPlayer2(EventEmitterX):
             def flip(ev, value, settings):
                 p._applyFlip( settings['flip'] )
 
+            # Bind OneLoop
+            @self.settings.on('do-loop')
+            @self.playlist.on('updated')
+            def loop(ev, value, settings=None):
+                oneLoop = (self.settings.get('loop') == 1) or (self.settings.get('loop') == 2 and self.playlist.size() == 1)
+                p._applyOneLoop( oneLoop )
+
 
             # Bind playlist
             p.on('end',              lambda ev: self.playlist.onMediaEnd())    # Media end    -> Playlist next
@@ -139,7 +146,7 @@ class HPlayer2(EventEmitterX):
             s = Sampler(self, ptype, poly)
             self._samplers[name] = s
 
-            # # Bind Volume
+            # Bind Volume
             # @self.settings.on('do-volume')
             # @self.settings.on('do-mute')
             # def vol(ev, value, settings):
@@ -155,6 +162,11 @@ class HPlayer2(EventEmitterX):
             # @self.settings.on('do-flip')
             # def flip(ev, value, settings):
             #     s.flip( settings['flip'] )
+
+            # Bind OneLoop
+            # @self.settings.on('do-loop')
+            # def loop(ev, value, settings):
+            #     s.oneloop( settings['loop'] == 1 )
 
             # Bind status (player update triggers hplayer emit)
             @s.on('status')
@@ -419,6 +431,25 @@ class HPlayer2(EventEmitterX):
                 if (vol < 0): vol = 0
                 if (vol > 100): vol = 100
                 self.settings.set('volume', vol)
+
+        @module.on('volinc')
+        def volume(ev, *args):
+            inc = 1
+            if len(args) > 0:
+                inc = int(args[0])
+            vol = self.settings.get('volume') + inc
+            if (vol > 100): vol = 100
+            self.settings.set('volume', vol)
+
+        @module.on('voldec')
+        def volume(ev, *args):
+            dec = 1
+            if len(args) > 0:
+                dec = int(args[0])
+            vol = self.settings.get('volume') - dec
+            if (vol < 0): vol = 0
+            self.settings.set('volume', vol)
+
 
         @module.on('mute')
         def mute(ev, *args):

@@ -125,7 +125,7 @@ def togglePlay(ev, *args):
 # SERIAL events
 @hplayer.on('serial.playsample')
 def playsample(ev, *args):
-    sampler.play( args[0]+"_*.*" )
+    sampler.play( args[0]+"_*.*", oneloop = True )  # !!!! Nivard: False / Puzzle: True !!!!
 
 @hplayer.on('serial.stopsample')
 def playsample(ev, *args):

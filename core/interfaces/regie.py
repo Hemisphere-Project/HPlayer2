@@ -1,5 +1,4 @@
 from .base import BaseInterface
-import socketio
 import eventlet
 from watchdog.observers import Observer
 from watchdog.events import PatternMatchingEventHandler
@@ -17,7 +16,8 @@ from zeroconf import ServiceInfo, Zeroconf
 thread = None
 thread_lock = threading.Lock()
 
-REGIE_PATH = '/opt/RPi-Regie'
+REGIE_PATH1 = '/opt/RPi-Regie'
+REGIE_PATH2 = '/data/RPi-Regie'
 
 
 class RegieInterface (BaseInterface):
@@ -62,10 +62,10 @@ class ThreadedHTTPServer(object):
 
         interface_path = os.path.dirname(os.path.realpath(__file__))
 
-        localRegie = os.path.isdir(REGIE_PATH)
-
-        if localRegie:
-            www_path = os.path.join(REGIE_PATH, 'web')
+        if os.path.isdir(REGIE_PATH1):
+            www_path = os.path.join(REGIE_PATH1, 'web')
+        elif os.path.isdir(REGIE_PATH2):
+            www_path = os.path.join(REGIE_PATH2, 'web')
         else:
             www_path = os.path.join(interface_path, 'regie')
 
@@ -75,8 +75,9 @@ class ThreadedHTTPServer(object):
 
 
         #
-        # FLASK Routing
+        # FLASK Routing Static
         #
+
         @app.route('/')
         def index():
             # self.regieinterface.log('requesting index')
@@ -87,6 +88,14 @@ class ThreadedHTTPServer(object):
             # self.regieinterface.log('requesting '+path)
             return send_from_directory(www_path, path)
 
+        #
+        # FLASK Routing API
+        #
+        
+        # @app.route('/<path:path>')
+        # def send_static(path):
+        #     # self.regieinterface.log('requesting '+path)
+        #     return send_from_directory(www_path, path)
 
         #
         # SOCKETIO Routing

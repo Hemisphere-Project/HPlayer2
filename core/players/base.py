@@ -17,6 +17,8 @@ class BasePlayer(Module):
             'recv': False,
             'cmds': False
         }
+        
+        self.logQuietEvents.append('status')  # Do not log status events
 
         self._validExt = []
 
@@ -29,7 +31,8 @@ class BasePlayer(Module):
             'isPaused':     False,
             'media':        None,
             'time':         0,
-            'duration':     0
+            'duration':     0,
+            'speed':        1.0
         }
 
 
@@ -62,7 +65,8 @@ class BasePlayer(Module):
 
     # Status SET 
     def update(self, key, value):
-        self._status[key] = value  
+        self._status[key] = value
+        self.emit('status', key, value)  
 
     # SET/GET is running
     def isRunning(self, state=None):
@@ -87,6 +91,9 @@ class BasePlayer(Module):
 
     def isPaused(self):
         return self._status['isPaused']
+
+    def position(self):
+        return self._status['time']
 
     #
     # Player CONTROLS
@@ -139,6 +146,12 @@ class BasePlayer(Module):
     def skip(self, milli):
         self._skip(milli)
 
+    # SET speed
+    def speed(self, s):
+        if s != self._status['speed']:
+            self.update('speed', s)
+            self._speed(s)
+
     #
     # Player INTERNAL actions: Methods to overwrite !
     #
@@ -181,3 +194,6 @@ class BasePlayer(Module):
 
     def _applyFlip(self, flip):
         self.log("screen flip", flip)
+
+    def _applyOneLoop(self, oneloop):
+        self.log("one loop", oneloop)

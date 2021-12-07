@@ -22,7 +22,7 @@ class Module(EventEmitterX):
         self.name = name.replace(" ", "_")
         self.nameP = colored(('['+self.name+']').ljust(10, ' ')+' ', color)
         self.parent = parent
-        self.logEvents = True
+        self.logQuietEvents = []    # list of not-logged events  '*' for full quiet
 
     def log(self, *argv):
         safe_print(self.nameP, *argv)
@@ -31,7 +31,7 @@ class Module(EventEmitterX):
     # Emit extended
     def emit(self, event, *args):
         fullEvent = self.name.lower() + '.' + event
-        if self.logEvents:
+        if not '*' in self.logQuietEvents and not event in self.logQuietEvents:
             self.log('-', event, *args )
 
         super().emit(event, *args) 

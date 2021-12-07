@@ -127,7 +127,8 @@ class MpvPlayer(BasePlayer):
                             pass
                         
                         if 'name' in mpvsays:
-
+                            # print(mpvsays)
+                            
                             if mpvsays['name'] == 'idle':
                                 self.emit('idle')
 
@@ -144,7 +145,7 @@ class MpvPlayer(BasePlayer):
 
                                 else: 
                                     self.emit('stopped')
-                                    # self.log('stop')
+                                    # self.log('stop')  # also Triggered with oneloop
                                     
                                 self._mpv_lockedout = 0
 
@@ -227,13 +228,21 @@ class MpvPlayer(BasePlayer):
 
         # create subprocess
         script_path = os.path.dirname(os.path.realpath(__file__))
-        self._mpv_subproc = subprocess.Popen(
-                            ['mpv', '--input-ipc-server=' + self._mpv_socketpath + '',
+        
+        command = ['mpv', '--input-ipc-server=' + self._mpv_socketpath + '',
                                 '--idle=yes', '-v', '--no-osc', '--msg-level=ipc=v', '--quiet', '--fs','--keep-open'
                                 ,'--window-scale=' + str(self._mpv_scale)
                                 ,'--image-display-duration=' + str(self._mpv_imagetime)
+                                ,'--hr-seek=yes'
+                                ,'--af=rubberband'
                                 #,'--force-window=yes'
-                                ],
+                                ]
+        
+        # Special command for RockPro64
+        if os.path.exists('/usr/local/bin/rkmpv'):
+            command[0] = 'rkmpv'
+        
+        self._mpv_subproc = subprocess.Popen(command,
                             stdout=subprocess.PIPE, stdin=subprocess.PIPE, stderr = subprocess.STDOUT,
                             bufsize = 1, universal_newlines = True)
 
@@ -287,13 +296,18 @@ class MpvPlayer(BasePlayer):
         self._mpv_send('{ "command": ["set_property", "pause", false] }')
 
     def _seekTo(self, milli):
-        self._mpv_send('{ "command": ["seek", "'+str(milli/1000)+'", "absolute"] }')
-        # self.log("seek to", milli/1000)
+        self._mpv_send('{ "command": ["seek", "'+str(milli/1000)+'", "absolute", "keyframes"] }')
+        self.log("seek to", milli/1000, self._status['duration'])
+
 
     def _skip(self, milli):
         if self._status['time'] + milli/1000 < self._status['duration']:
             self._mpv_send('{ "command": ["seek", "'+str(milli/1000)+'", "relative"] }')
         # self.log("seek to", milli/1000)
+
+    def _speed(self, s):
+        self._mpv_send('{ "command": ["set_property", "speed", '+str(s)+'] }')
+        # self.log("speed to", s)
 
     def _applyVolume(self, volume):
         self._mpv_send('{ "command": ["set_property", "volume", '+str(volume)+'] }')
@@ -311,8 +325,11 @@ class MpvPlayer(BasePlayer):
     
     def _applyFlip(self, flip):
         if flip:
-            # self._mpv_send('{ "command": ["vf", "add", "mirror"] }')
-            pass
+            self._mpv_send('{ "command": ["vf", "del", "mirror"] }')
+            self._mpv_send('{ "command": ["vf", "add", "mirror"] }')
         else:
-            # self._mpv_send('{ "command": ["vf", "del", "mirror"] }')
+            self._mpv_send('{ "command": ["vf", "del", "mirror"] }')
             pass
+
+    def _applyOneLoop(self, oneloop):
+        self._mpv_send('{ "command": ["set_property", "loop", ' + ('"inf"' if oneloop else '"no"') +'] }')
