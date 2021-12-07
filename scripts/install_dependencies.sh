@@ -24,7 +24,7 @@ if [[ $(command -v apt) ]]; then
 
     # hplayer2 dependencies
     apt install python python-pip
-    apt install python-liblo python-netifaces python-termcolor python-evdev python-flask-socketio python-eventlet -y
+    apt install python-netifaces python-termcolor python-evdev python-flask-socketio python-eventlet -y
     apt install python-watchdog python-pillow python-setuptools python-zeroconf python-socketio -y
     apt install ttf-dejavu-core python-pyserial -y
 
@@ -44,8 +44,8 @@ elif [[ $(command -v pacman) ]]; then
     pacman -S alsa-lib alsa-firmware ttf-roboto --noconfirm --needed
 
     # hplayer2 dependencies
-    pacman -S python python-pip cython liblo --noconfirm --needed
-    pacman -S python-pyliblo python-netifaces python-termcolor python-evdev python-flask-socketio  --noconfirm --needed
+    pacman -S python python-pip cython liblo libxcrypt --noconfirm --needed
+    pacman -S python-netifaces python-termcolor python-evdev python-flask-socketio  --noconfirm --needed
     pacman -S python-watchdog python-pillow python-setuptools python-zeroconf python-socketio --noconfirm --needed
     pacman -S ttf-dejavu python-pyserial --noconfirm --needed
 
@@ -68,18 +68,19 @@ fi
 ####
 
 # PIP
-/usr/bin/yes | pip3 install --upgrade pymitter
-/usr/bin/yes | pip3 install --upgrade mido
-/usr/bin/yes | pip3 install --upgrade python-rtmidi
-/usr/bin/yes | pip3 install --upgrade paho-mqtt
+/usr/bin/yes | pip install --upgrade pyliblo3
+/usr/bin/yes | pip install --upgrade pymitter
+/usr/bin/yes | pip install --upgrade mido
+/usr/bin/yes | pip install --upgrade python-rtmidi
+/usr/bin/yes | pip install --upgrade paho-mqtt
 
 # RPi
 if [[ $(uname -m) = armv* ]]; then
-    /usr/bin/yes | pip3 install --upgrade RPi.GPIO
+    /usr/bin/yes | pip install --upgrade RPi.GPIO
 
     git clone https://github.com/adafruit/Adafruit_Python_CharLCD.git
     cd Adafruit_Python_CharLCD
-    python3 setup.py install
+    python setup.py install
     cd .. && rm -Rf Adafruit_Python_CharLCD
 fi
 
@@ -94,14 +95,14 @@ git clone git://github.com/zeromq/czmq.git && cd czmq
 ./autogen.sh && ./configure && make check -j4
 make install && ldconfig
 ln -s /usr/local/lib/libczmq.so.4 /usr/lib/
-cd bindings/python/ && python3 setup.py build && python3 setup.py install
+cd bindings/python/ && python setup.py build && python setup.py install
 
 cd /tmp
 git clone git://github.com/zeromq/zyre.git && cd zyre
 ./autogen.sh && ./configure && make check -j4
 make install && ldconfig
 ln -s /usr/local/lib/libzyre.so.2 /usr/lib/
-cd bindings/python/ && python3 setup.py build && python3 setup.py install
+cd bindings/python/ && python setup.py build && python setup.py install
 
 
 
