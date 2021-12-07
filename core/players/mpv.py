@@ -140,11 +140,11 @@ class MpvPlayer(BasePlayer):
                                     # self.log('play')
 
                                 elif self.status('isPaused'): 
-                                    self.emit('paused')
+                                    self.emit('paused', self.status('media'))
                                     # self.log('pause')
 
                                 else: 
-                                    self.emit('stopped')
+                                    self.emit('stopped', self.status('media'))
                                     # self.log('stop')  # also Triggered with oneloop
                                     
                                 self._mpv_lockedout = 0
@@ -160,7 +160,7 @@ class MpvPlayer(BasePlayer):
                             elif mpvsays['name'] == 'eof-reached' and mpvsays['data'] == True:
                                 self.update('isPaused', False)
                                 self.update('isPlaying', False)
-                                self.emit('end')
+                                self.emit('end', self.status('media'))
                                     
                             else:
                                 pass

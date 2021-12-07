@@ -101,8 +101,8 @@ class HPlayer2(EventEmitterX):
 
 
             # Bind playlist
-            p.on('end',              lambda ev: self.playlist.onMediaEnd())    # Media end    -> Playlist next
-            self.playlist.on('end',  lambda ev: p.stop())                      # Playlist end -> Stop player
+            p.on('end',              lambda ev, *args: self.playlist.onMediaEnd())    # Media end    -> Playlist next
+            self.playlist.on('end',  lambda ev, *args: p.stop())                      # Playlist end -> Stop player
 
             # Bind status (player update triggers hplayer emit)
             @p.on('status')
