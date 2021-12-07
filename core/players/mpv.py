@@ -234,7 +234,7 @@ class MpvPlayer(BasePlayer):
                                 ,'--window-scale=' + str(self._mpv_scale)
                                 ,'--image-display-duration=' + str(self._mpv_imagetime)
                                 ,'--hr-seek=yes'
-                                ,'--af=rubberband'
+                                # ,'--af=rubberband'
                                 #,'--force-window=yes'
                                 ]
         
