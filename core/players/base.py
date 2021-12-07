@@ -18,6 +18,7 @@ class BasePlayer(Module):
             'cmds': False
         }
         
+        
         self.logQuietEvents.append('status')  # Do not log status events
 
         self._validExt = []

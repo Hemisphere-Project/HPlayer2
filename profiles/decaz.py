@@ -3,7 +3,7 @@ from core.engine import network
 
 import os, sys, types, platform
 import json
-
+import time
 
 # DIRECTORY / FILE
 profilename = os.path.basename(__file__).split('.')[0]
@@ -12,7 +12,7 @@ projectfolder = os.path.join('/data/sync', profilename)
 devicename = network.get_hostname()
 devicefolder = os.path.join('/data/sync/solo', devicename)
 
-base_path = ['/data/usb', projectfolder, devicefolder, '/data/media']
+base_path = ['/data/usb', projectfolder, devicefolder]
 
 
 # INIT HPLAYER
@@ -26,7 +26,7 @@ video = hplayer.addPlayer('mpv', 'video')
 # hplayer.addInterface('keyboard')
 osc =   hplayer.addInterface('osc', 1222, 3737)
 gpio =  hplayer.addInterface('gpio', [15], 300, 'PUP')
-# zyre =  hplayer.addInterface('zyre')
+zyre =  hplayer.addInterface('zyre')
 http2 = hplayer.addInterface('http2', 8080)
 regie = hplayer.addInterface('regie', 9111, projectfolder)
 
@@ -50,9 +50,13 @@ def hello(ev, *args):
     gpio.set(14, False)
 
 
-# VIDEO playing
+
+# VIDEO playing start LED
+wait = 3
+
 @hplayer.on('video.playing')
 def hello(ev, *args):
+    time.sleep(wait)
     gpio.set(14, True)
 
 
@@ -61,7 +65,13 @@ def hello(ev, *args):
 def hello(ev, *args):
     gpio.emit('play', 'small.mp4')
     
-
+@hplayer.on('osc.hello')
+def hello(ev, *args):
+    global wait
+    wait = int(args[0])
+    osc.emit('play', 'small.mp4')
+    print(args[0])
+    
 # BTN pin 16
 @hplayer.on('gpio.18')
 def hello(ev, *args):
@@ -71,7 +81,7 @@ def hello(ev, *args):
 # OSC /hello
 @hplayer.on('osc.hello')
 def hello(ev, *args):
-    gpio.set(14, True)
+    gpio.set(14, False)
  
 
  # OSC /goodbye
