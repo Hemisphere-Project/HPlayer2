@@ -19,6 +19,8 @@ class FileManager(Module):
         self.refreshTimer = None
         self.pathObservers = []
         
+        self.logQuietEvents.append('file-changed')
+        
         @self.on('file-changed')                # file changed on disk -> trigger full refresh
         @self.parent.on('player-added')        # new player means new authorized extension -> trigger list refresh
         @self.parent.on('sampler-added')        # new player means new authorized extension -> trigger list refresh
