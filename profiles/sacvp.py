@@ -37,7 +37,7 @@ except: pass
 hplayer.addInterface('keyboard')
 hplayer.addInterface('osc', 1222, 3737)
 hplayer.addInterface('zyre')
-# hplayer.addInterface('mqtt', '10.0.0.1')
+hplayer.addInterface('mqtt', '10.0.0.1')
 hplayer.addInterface('http2', 8080)
 hplayer.addInterface('teleco')
 hplayer.addInterface('regie', 9111, projectfolder)
@@ -49,6 +49,69 @@ if myESP:
 if hplayer.isRPi():
     video.addOverlay('rpifade')
 
+
+
+#
+# SYNC PLAY
+#
+
+# Broadcast Order on OSC/Zyre to other Pi's
+#
+def broadcast(path, *args):
+	# print(path, list(args))
+	if path.startswith('play'):
+		hplayer.interface('zyre').node.broadcast(path, list(args), 500)   ## WARNING LATENCY !!
+	else:
+		hplayer.interface('zyre').node.broadcast(path, list(args))
+
+
+# Keyboard
+#
+dotHold = False
+
+@hplayer.on('keyboard.*')
+def keyboard(ev, *args):
+    global dotHold
+    
+    base, key = ev.split("keyboard.KEY_")
+    if not key: return
+    
+    key, mode = key.split("-")
+    if key.startswith('KP'): key = key[2:]
+    
+    if key.isdigit() and mode == 'down':
+        numk = int(key)
+        if dotHold:
+            # select folder
+            try: broadcast('load', hplayer.files.listDir()[numk])
+            except: pass
+                
+        else:
+            # play media
+            broadcast('playindex', numk)
+        
+    elif key == 'ENTER' and mode == 'down':
+        broadcast('stop')
+    
+    elif key == 'DOT':
+        dotHold = (mode != 'up')
+        
+    elif key == 'NUMLOCK' and mode == 'down': pass
+    elif key == 'SLASH' and mode == 'down': pass
+    elif key == 'ASTERISK' and mode == 'down': pass
+    elif key == 'BACKSPACE' and mode == 'down': pass
+    
+    # volume
+    elif key == 'PLUS' and (mode == 'down' or mode == 'hold'):
+        broadcast('volume', hplayer.settings.get('volume')+1)
+    elif key == 'MINUS' and (mode == 'down' or mode == 'hold'):
+        broadcast('volume', hplayer.settings.get('volume')-1)	
+
+
+
+#
+# LIGHTS ESP32
+#
 
 # ESP -> MQTT / BT
 lastEspEvent = 'sacvp.esp'  # save last event
