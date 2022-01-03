@@ -92,10 +92,11 @@ class RegieInterface (BaseInterface):
             orderz = []
             boxes = [b for b in self._project["project"][0][activeSceneIndex]["allMedias"] if b["y"] == index]
             for b in boxes:
-                order = {
-                    'peer':     self._project["pool"][ b["x"] ]["name"],
-                    'synchro':  True,
-                }
+                peerName = self._project["pool"][ b["x"] ]["name"]
+                
+                
+                # MEDIA
+                order = { 'peer': peerName, 'synchro':  True}
                 
                 if b["media"] in ['stop', 'pause', 'unfade'] :
                     order["event"] = b["media"]
@@ -107,8 +108,39 @@ class RegieInterface (BaseInterface):
                 else:
                     order["event"] = 'play'
                     order["data"] = self._project["project"][0][activeSceneIndex]["name"] + '/' + b["media"]
-            
+    
                 orderz.append(order)
+                
+                # LOOP
+                if b["loop"] == 'loop':
+                    orderz.append( { 'peer': peerName, 'event':  'loop', 'data': 1} )
+                elif b["loop"] == 'unloop':
+                    orderz.append( { 'peer': peerName, 'event':  'unloop'} )
+
+                # LIGHT
+                if b["light"] and b["light"] != '...':
+                    order = { 'peer': peerName, 'synchro':  True, 'event': 'esp'}
+                    
+                    if b["light"].startswith('light'):
+                        order["data"] = {
+                            'topic': 'leds/all',
+                            'data': b["light"].split('light ')[1]
+                        }
+                    
+                    elif b["light"].startswith('preset'):
+                        order["data"] = {
+                            'topic': 'leds/mem',
+                            'data': b["light"].split('preset ')[1]
+                        }
+                        
+                    elif b["light"].startswith('off'):
+                        order["data"] = {
+                            'topic': 'leds/stop',
+                            'data': ''
+                        }
+                        
+                    orderz.append(order)
+                    
             
             self.emit('peers.triggers', orderz, 437)
 
