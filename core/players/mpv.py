@@ -2,6 +2,7 @@ from __future__ import print_function
 from termcolor import colored
 import socket, threading, subprocess, os, json, select
 import time
+from shutil import which
 from .base import BasePlayer
 
 class MpvPlayer(BasePlayer):
@@ -241,6 +242,10 @@ class MpvPlayer(BasePlayer):
         # Special command for RockPro64
         if os.path.exists('/usr/local/bin/rkmpv'):
             command[0] = 'rkmpv'
+            
+        # Local mpv
+        elif which('mpv') is None:
+            command[0] = os.path.dirname(os.path.realpath(__file__))+'/../../bin/mpv'
         
         self._mpv_subproc = subprocess.Popen(command,
                             stdout=subprocess.PIPE, stdin=subprocess.PIPE, stderr = subprocess.STDOUT,
