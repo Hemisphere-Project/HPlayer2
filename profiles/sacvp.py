@@ -79,16 +79,17 @@ def keyboard(ev, *args):
     key, mode = key.split("-")
     if key.startswith('KP'): key = key[2:]
     
+    # 0 -> 9
     if key.isdigit() and mode == 'down':
         numk = int(key)
         if dotHold:
-            # select folder
-            try: broadcast('load', hplayer.files.listDir()[numk])
-            except: pass
+            # select folder (locally only)
+            hplayer.files.selectDir(numk)
                 
         else:
-            # play media
-            broadcast('playindex', numk)
+            # play sequence regie
+            hplayer.interface('regie').playseq(numk-1)
+            
         
     elif key == 'ENTER' and mode == 'down':
         broadcast('stop')
@@ -106,7 +107,6 @@ def keyboard(ev, *args):
         broadcast('volume', hplayer.settings.get('volume')+1)
     elif key == 'MINUS' and (mode == 'down' or mode == 'hold'):
         broadcast('volume', hplayer.settings.get('volume')-1)	
-
 
 
 #

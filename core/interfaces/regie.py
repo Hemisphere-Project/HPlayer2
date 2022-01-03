@@ -26,6 +26,8 @@ class RegieInterface (BaseInterface):
         super(RegieInterface, self).__init__(hplayer, "Regie")
         self._port = port
         self._datapath = datapath
+        self._server = None
+        
 
     # HTTP receiver THREAD
     def listen(self):
@@ -45,12 +47,76 @@ class RegieInterface (BaseInterface):
         # Start server
         self.log( "regie interface on port", self._port)
         with ThreadedHTTPServer(self, self._port) as server:
+            self._server = server
             self.stopped.wait()
 
+        self._server = None
+        
         # Unregister ZeroConf
         zeroconf.unregister_service(info)
         zeroconf.close()
+        
+        
+    def projectPath(self):
+        return os.path.join(self._datapath, 'project.json')
+    
 
+    def projectRaw(self):
+        project =  '{"pool":[], "project":[[]]}'
+        if os.path.isfile(self.projectPath()):
+            with open( self.projectPath(), 'r') as file:
+                project = file.read()
+        return project
+        
+        
+    # parse locally for programatic execution
+    def reload(self):    
+        try:
+            self._project = json.loads(self.projectRaw())
+        except:
+            self._project = None
+            self.log("Error while parsing project..")
+            
+        # print(self._project)
+        
+        return self._project
+    
+    
+    # play sequence
+    def playseq(self, index):
+        self.log("PLAYSEQ")
+        activeSceneIndex = self.hplayer.files.currentIndex()
+        
+        try:
+            # self.log('PLAYSEQ', index, activeSceneIndex, boxes)
+            orderz = []
+            boxes = [b for b in self._project["project"][0][activeSceneIndex]["allMedias"] if b["y"] == index]
+            for b in boxes:
+                order = {
+                    'peer':     self._project["pool"][ b["x"] ]["name"],
+                    'synchro':  True,
+                }
+                
+                if b["media"] in ['stop', 'pause', 'unfade'] :
+                    order["event"] = b["media"]
+                elif b["media"] == '...':
+                    order["event"] = 'continue'
+                elif b["media"].startswith('fade'):
+                    order["event"] = 'fade'
+                    order["data"] = b["media"].split('fade ')[1]
+                else:
+                    order["event"] = 'play'
+                    order["data"] = self._project["project"][0][activeSceneIndex]["name"] + '/' + b["media"]
+            
+                orderz.append(order)
+            
+            self.emit('peers.triggers', orderz, 437)
+
+        except:
+            self.log('Error playing Seq', index)
+            
+    
+ 
 
 #
 # Threaded HTTP Server
@@ -163,15 +229,18 @@ class ThreadedHTTPServer(object):
 
         @socketio.on('event')
         def event(data):
-            self.regieinterface.emit('peers.triggers', data, 374)
+            self.regieinterface.emit('peers.triggers', data, 437)
 
 
         # prepare sub-thread
         self.server_thread = threading.Thread(target=lambda:socketio.run(app, host='0.0.0.0', port=port))
         self.server_thread.daemon = True
-
+        
         # watchdog project.json
         self.watcher()
+        
+        # internal load project
+        self.regieinterface.reload()
 
 
     def start(self):
@@ -190,36 +259,28 @@ class ThreadedHTTPServer(object):
 
     def __exit__(self, type, value, traceback):
         self.stop()
-
-
-    def projectPath(self):
-        return os.path.join(self.regieinterface._datapath, 'project.json')
-
-
+        
+    
     def projectData(self):
         data={
-            'fullproject':  '{"pool":[], "project":[[]]}',
+            'fullproject':  self.regieinterface.projectRaw(),
             'fileTree':     self.regieinterface.hplayer.files()
         }
-            
-        if os.path.isfile(self.projectPath()):
-            with open( self.projectPath(), 'r') as file:
-                data['fullproject'] = file.read()
-
         return data
-
-
+    
+    
     def watcher(self):
-
+    
         def onchange(e):
             self.regieinterface.log('project updated ! pushing it...')
+            self.regieinterface.reload()
             self.sendBuffer.put( ('data', self.projectData()) )
 
         handler = PatternMatchingEventHandler("*/project.json", None, False, True)
         handler.on_any_event = onchange
         self.projectObserver = Observer()
-        self.projectObserver.schedule(handler, os.path.dirname(self.projectPath()))
+        self.projectObserver.schedule(handler, os.path.dirname(self.regieinterface.projectPath()))
         try:
             self.projectObserver.start()
         except:
-            self.regieinterface.log('project.json not found')
+            self.log('project.json not found')
