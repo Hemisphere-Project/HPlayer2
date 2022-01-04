@@ -1,0 +1,10 @@
+zeroconf==0.31.0
+flask-socketio
+netifaces
+wheel
+pyliblo3
+pymitter
+mido
+python-rtmidi
+paho-mqtt
+timecode
