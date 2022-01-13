@@ -145,7 +145,8 @@ class MpvPlayer(BasePlayer):
                                     # self.log('pause')
 
                                 else: 
-                                    self.emit('stopped', self.status('media'))
+                                    # print('STOP')
+                                    self.emit('stopped', self.status('media'))    # DO NOT emit STOPPED HERE -> STOP SHOULD BE TRIGGERED AFTER MEDIA-END
                                     # self.log('stop')  # also Triggered with oneloop
                                     
                                 self._mpv_lockedout = 0
@@ -161,7 +162,8 @@ class MpvPlayer(BasePlayer):
                             elif mpvsays['name'] == 'eof-reached' and mpvsays['data'] == True:
                                 self.update('isPaused', False)
                                 self.update('isPlaying', False)
-                                self.emit('end', self.status('media'))
+                                print('END')
+                                self.emit('media-end', self.status('media'))
                                     
                             else:
                                 pass
@@ -287,10 +289,11 @@ class MpvPlayer(BasePlayer):
         self._mpv_send('{ "command": ["set_property", "pause", false] }')
 
     def _stop(self):
+        wasPlaying = self.status('isPlaying')
         self.update('isPaused', False)
         self._mpv_send('{ "command": ["stop"] }')
-        if not self.status('isPlaying'):
-            self.emit('stopped')    # already stopped, so manually trigger event
+        # if not wasPlaying:
+        #     self.emit('stopped')    # already stopped, so manually trigger event
 
     def _pause(self):
         self.update('isPaused', True)

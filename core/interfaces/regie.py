@@ -28,6 +28,7 @@ class RegieInterface (BaseInterface):
         self._datapath = datapath
         self._server = None
         
+        
 
     # HTTP receiver THREAD
     def listen(self):
@@ -83,17 +84,15 @@ class RegieInterface (BaseInterface):
     
     
     # play sequence
-    def playseq(self, index):
+    def playseq(self, sceneIndex, seqIndex):
         self.log("PLAYSEQ")
-        activeSceneIndex = self.hplayer.files.currentIndex()
         
         try:
-            # self.log('PLAYSEQ', index, activeSceneIndex, boxes)
+            # self.log('PLAYSEQ', seqIndex, sceneIndex, boxes)
             orderz = []
-            boxes = [b for b in self._project["project"][0][activeSceneIndex]["allMedias"] if b["y"] == index]
+            boxes = [b for b in self._project["project"][0][sceneIndex]["allMedias"] if b["y"] == seqIndex]
             for b in boxes:
                 peerName = self._project["pool"][ b["x"] ]["name"]
-                
                 
                 # MEDIA
                 order = { 'peer': peerName, 'synchro':  True}
@@ -106,10 +105,22 @@ class RegieInterface (BaseInterface):
                     order["event"] = 'fade'
                     order["data"] = b["media"].split('fade ')[1]
                 else:
-                    order["event"] = 'play'
-                    order["data"] = self._project["project"][0][activeSceneIndex]["name"] + '/' + b["media"]
+                    order["event"] = 'playthen'
+                    order["data"] = [ self._project["project"][0][sceneIndex]["name"] + '/' + b["media"] ]
+                    
+                    # ON MEDIA END
+                    if 'onend' in b:
+                        if b['onend'] == 'next':
+                            order["data"].append( {'event': 'do-playseq', 'data': [sceneIndex, seqIndex+1] } )
+                        elif b['onend'] == 'prev':
+                            order["data"].append( {'event': 'do-playseq', 'data': [sceneIndex, seqIndex-1] } )
+                        elif b['onend'] == 'replay':
+                            order["data"].append( {'event': 'do-playseq', 'data': [sceneIndex, seqIndex] } )                  
     
                 orderz.append(order)
+                
+                
+                        
                 
                 # LOOP
                 if b["loop"] == 'loop':
@@ -141,11 +152,11 @@ class RegieInterface (BaseInterface):
                         
                     orderz.append(order)
                     
-            
+            self.emit('playingseq', sceneIndex, seqIndex)
             self.emit('peers.triggers', orderz, 437)
 
         except:
-            self.log('Error playing Seq', index)
+            self.log('Error playing Scene', sceneIndex, 'Seq', seqIndex)
             
     
  
@@ -215,6 +226,14 @@ class ThreadedHTTPServer(object):
         @self.regieinterface.hplayer.on('files.dirlist-updated')
         def filetree_send(ev, *args):
             self.sendBuffer.put( ('data', {'fileTree': self.regieinterface.hplayer.files()}) )
+            
+        @self.regieinterface.hplayer.on('files.activedir-updated')
+        def activedir_send(ev, *args):
+            self.sendBuffer.put( ('data', {'scene': args[1]}) )
+            
+        @self.regieinterface.hplayer.on('regie.playingseq')
+        def activedir_send(ev, *args):
+            self.sendBuffer.put( ('data', {'scene': args[0], 'seq': args[1]}) )
 
         @self.regieinterface.hplayer.on('*.peer.*')
         def peer_send(ev, *args):
@@ -315,4 +334,4 @@ class ThreadedHTTPServer(object):
         try:
             self.projectObserver.start()
         except:
-            self.log('project.json not found')
+            self.regieinterface.log('project.json not found')

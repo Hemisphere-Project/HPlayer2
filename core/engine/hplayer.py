@@ -101,7 +101,7 @@ class HPlayer2(EventEmitterX):
 
 
             # Bind playlist
-            p.on('end',              lambda ev, *args: self.playlist.onMediaEnd())    # Media end    -> Playlist next
+            p.on('media-end',        lambda ev, *args: self.playlist.onMediaEnd())    # Media end    -> Playlist next
             self.playlist.on('end',  lambda ev, *args: p.stop())                      # Playlist end -> Stop player
 
             # Bind status (player update triggers hplayer emit)
@@ -340,6 +340,14 @@ class HPlayer2(EventEmitterX):
         def playindex(ev, *args):
             if len(args) > 0:
                 self.playlist.playindex(int(args[0]))
+                
+        # Play a list then trigger an event on media-end
+        @module.on('playthen')
+        def playindex(ev, *args):
+            if len(args) > 1:
+                self.playlist.playthen(args[0], args[1])
+            elif len(args) > 0:
+                self.playlist.playthen(args[0], None)
 
         @module.on('add')
         def add(ev, *args):
@@ -410,6 +418,14 @@ class HPlayer2(EventEmitterX):
                         p.skip(int(args[0]))
                 
 
+        # REGIE
+        #
+        
+        @module.on('do-playseq')
+        def doplayseq(ev, *args):
+            if len(args) > 1 and self.interface('regie'):
+                self.interface('regie').playseq(args[0], args[1])
+        
         # SETTINGS
         #
 

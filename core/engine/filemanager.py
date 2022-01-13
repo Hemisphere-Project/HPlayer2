@@ -126,6 +126,7 @@ class FileManager(Module):
         self.active_list = self.listFiles( self.currentDir() )
         
         self.emit('filelist-updated', self.active_list)
+        self.emit('activedir-updated', self.currentDir(), self.currentIndex())
 
         return self.currentDir()
 

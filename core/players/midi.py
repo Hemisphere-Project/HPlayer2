@@ -66,7 +66,7 @@ class MidiPlayer(BasePlayer):
 
          except StopIteration:	
             self.stop()	
-            self.emit('end')	
+            self.emit('media-end')	
 
          except TypeError:	
             self.log('malformed message')	

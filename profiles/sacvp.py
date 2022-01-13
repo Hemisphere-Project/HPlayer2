@@ -88,7 +88,7 @@ def keyboard(ev, *args):
                 
         else:
             # play sequence regie
-            hplayer.interface('regie').playseq(numk-1)
+            hplayer.interface('regie').playseq(hplayer.files.currentIndex(), numk-1)
             
         
     elif key == 'ENTER' and mode == 'down':
@@ -148,7 +148,7 @@ def espStop(ev, *args):
 # default volume
 @video.on('ready')
 def init(ev, *args):
-    hplayer.settings.set('volume', 50)
+    hplayer.settings.set('volume', 100)
     hplayer.settings.set('loop', -1)
 
 # RUN

@@ -65,7 +65,7 @@ class OmxPlayer(BasePlayer):
         self._runflag.clear()
         self.update('isPlaying', False)
         self.update('isPaused', False)
-        self.emit('end')
+        self.emit('media-end')
         self.emit('stopped')
         self.log('stop')
 

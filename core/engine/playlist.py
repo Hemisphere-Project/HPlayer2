@@ -8,9 +8,17 @@ class Playlist(Module):
     _playlist = []
     _index = 0
     
+    
     def __init__(self, hplayer):
         super().__init__(hplayer, 'Playlist', 'yellow')
         self.hplayer = hplayer
+        
+        # Custom action to do on playlist end
+        self.onEnd = None
+        @self.on('end')
+        def _onEnd(ev, *args):
+            if self.onEnd: self.onEnd()
+            
 
     def __call__(self):
         return self.export()
@@ -83,6 +91,8 @@ class Playlist(Module):
 
     # PLAY a playlist
     def play(self, plist=None, index=-1):
+        self.onEnd = None
+        
         if plist: 
             self.load(plist)
         
@@ -93,6 +103,11 @@ class Playlist(Module):
         else:
             self.playindex(0)
 
+    # PLAY a playlist and execute event on end
+    def playthen(self, plist=None, then=None):
+        self.play(plist)
+        if then:
+            self.onEnd = lambda: self.emit(then['event'], *then['data'])
 
     # PLAY at index
     def playindex(self, index):

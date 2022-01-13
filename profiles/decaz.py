@@ -9,10 +9,7 @@ import time
 profilename = os.path.basename(__file__).split('.')[0]
 projectfolder = os.path.join('/data/sync', profilename)
 
-devicename = network.get_hostname()
-devicefolder = os.path.join('/data/sync/solo', devicename)
-
-base_path = ['/data/usb', projectfolder, devicefolder]
+base_path = ['/data/usb', projectfolder]
 
 
 # INIT HPLAYER
@@ -23,12 +20,12 @@ hplayer = HPlayer2(base_path, '/data/hplayer2-decaz.conf')
 video = hplayer.addPlayer('mpv', 'video')
 
 # INTERFACES
-# hplayer.addInterface('keyboard')
-osc =   hplayer.addInterface('osc', 1222, 3737)
-gpio =  hplayer.addInterface('gpio', [15], 300, 'PUP')
-zyre =  hplayer.addInterface('zyre')
-http2 = hplayer.addInterface('http2', 8080)
-regie = hplayer.addInterface('regie', 9111, projectfolder)
+keyboard    = hplayer.addInterface('keyboard')
+osc         = hplayer.addInterface('osc', 1222, 3737)
+gpio        = hplayer.addInterface('gpio', [15], 300, 'PUP')
+zyre        = hplayer.addInterface('zyre')
+http2       = hplayer.addInterface('http2', 8080)
+regie       = hplayer.addInterface('regie', 9111, projectfolder)
 
 # Overlay
 if hplayer.isRPi():
@@ -41,11 +38,63 @@ if hplayer.isRPi():
 #     print('ALL EVENTS', ev, args)
 
 
+#
+# SYNC PLAY
+#
+
+
+# Keyboard
+#
+dotHold = False
+
+@hplayer.on('keyboard.*')
+def keyboard(ev, *args):
+    global dotHold
+    
+    base, key = ev.split("keyboard.KEY_")
+    if not key: return
+    
+    key, mode = key.split("-")
+    if key.startswith('KP'): 
+        key = key[2:]
+    
+    # 0 -> 9
+    if key.isdigit() and mode == 'down':
+        numk = int(key)
+        if dotHold:
+            # select folder (locally only)
+            hplayer.files.selectDir(numk)
+                
+        else:
+            # play sequence regie 
+            regie.playseq(hplayer.files.currentIndex(), numk-1)
+            
+    # ENTER    
+    elif key == 'ENTER' and mode == 'down':
+        zyre.node.broadcast('stop')
+    
+    # DOT
+    elif key == 'DOT':
+        dotHold = (mode != 'up')
+        
+    elif key == 'NUMLOCK' and mode == 'down': pass
+    elif key == 'SLASH' and mode == 'down': pass
+    elif key == 'ASTERISK' and mode == 'down': pass
+    elif key == 'BACKSPACE' and mode == 'down': pass
+    
+    # volume
+    elif key == 'PLUS' and (mode == 'down' or mode == 'hold'):
+        zyre.node.broadcast('volume', [hplayer.settings.get('volume')+1])
+    elif key == 'MINUS' and (mode == 'down' or mode == 'hold'):
+        zyre.node.broadcast('volume', [hplayer.settings.get('volume')-1])	
+        
+
+
 # LED init
 gpio.set(14, False)
 
 # VIDEO stopped
-@hplayer.on('video.stopped')
+@hplayer.on('*.stopped')
 def hello(ev, *args):
     gpio.set(14, False)
 
@@ -54,7 +103,7 @@ def hello(ev, *args):
 # VIDEO playing start LED
 wait = 3
 
-@hplayer.on('video.playing')
+@hplayer.on('*.playing')
 def hello(ev, *args):
     time.sleep(wait)
     gpio.set(14, True)
