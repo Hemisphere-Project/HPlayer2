@@ -230,11 +230,6 @@ class ThreadedHTTPServer(object):
         @self.regieinterface.hplayer.on('files.activedir-updated')
         def activedir_send(ev, *args):
             self.sendBuffer.put( ('data', {'scene': args[1]}) )
-            
-        @self.regieinterface.hplayer.on('regie.playingseq')
-        @self.regieinterface.hplayer.on('*.peer.playingseq')
-        def activedir_send(ev, *args):
-            self.sendBuffer.put( ('data', {'scene': args[0], 'seq': args[1]}) )
 
         @self.regieinterface.hplayer.on('*.peer.*')
         def peer_send(ev, *args):
