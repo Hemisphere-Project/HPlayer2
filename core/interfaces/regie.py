@@ -233,8 +233,13 @@ class ThreadedHTTPServer(object):
 
         @self.regieinterface.hplayer.on('*.peer.*')
         def peer_send(ev, *args):
-            args[0].update({'type': ev.split('.')[-1]})
-            self.sendBuffer.put( ('dispo', args[0]) )
+            event = ev.split('.')[-1]
+            if event == 'playingseq':
+                print(ev, args[0]['data'][1])
+                self.sendBuffer.put( ('data', {'sequence': args[0]['data'][1]}) )
+            else:
+                args[0].update({'type': event})
+                self.sendBuffer.put( ('peer', args[0]) )
 
 
         # !!! TODO: stop zyre monitoring when every client are disconnected
