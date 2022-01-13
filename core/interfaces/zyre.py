@@ -687,6 +687,11 @@ class ZyreInterface (BaseInterface):
         @self.hplayer.on('settings.updated')
         def se(ev, settings):
             self.node.publish('peer.settings', settings)
+            
+        # Publish when self do play seq
+        @self.hplayer.on('*.playing-seq')
+        def se(ev, *args):
+            self.node.publish('peer.playing-seq', args)
 
         # Subscribe to peers
         @self.hplayer.on('*.peers.subscribe')

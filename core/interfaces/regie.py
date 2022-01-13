@@ -275,7 +275,7 @@ class ThreadedHTTPServer(object):
         def register(data):
             # enable peer monitoring
             self.regieinterface.emit('peers.getlink')
-            self.regieinterface.emit('peers.subscribe', ['status', 'settings'])
+            self.regieinterface.emit('peers.subscribe', ['status', 'settings', 'playing-seq'])
 
 
         @socketio.on('event')
