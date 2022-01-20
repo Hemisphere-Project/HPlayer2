@@ -152,14 +152,14 @@ class MpvPlayer(BasePlayer):
                                 self._mpv_lockedout = 0
 
                             elif mpvsays['name'] == 'time-pos':
-                                if mpvsays['data']:
+                                if 'data' in mpvsays and mpvsays['data']:
                                     self.update('time', round(float(mpvsays['data']),2))
 
                             elif mpvsays['name'] == 'duration':
-                                if mpvsays['data']:
+                                if 'data' in mpvsays and mpvsays['data']:
                                     self.update('duration', round(float(mpvsays['data']),2))
 
-                            elif mpvsays['name'] == 'eof-reached' and mpvsays['data'] == True:
+                            elif mpvsays['name'] == 'eof-reached' and 'data' in mpvsays and  mpvsays['data'] == True:
                                 self.update('isPaused', False)
                                 self.update('isPlaying', False)
                                 print('END')
@@ -232,14 +232,16 @@ class MpvPlayer(BasePlayer):
         # create subprocess
         script_path = os.path.dirname(os.path.realpath(__file__))
         
-        command = ['mpv', '--input-ipc-server=' + self._mpv_socketpath + '',
-                                '--idle=yes', '-v', '--no-osc', '--msg-level=ipc=v', '--quiet', '--fs','--keep-open'
+        command = ['mpv', '--vo=gpu', '--gpu-context=drm', '--hwdec=mmal-copy'      
+                                ,'--input-ipc-server=' + self._mpv_socketpath + ''
+                                ,'--idle=yes', '-v', '--no-osc', '--msg-level=ipc=v', '--quiet', '--fs','--keep-open'
                                 ,'--window-scale=' + str(self._mpv_scale)
                                 ,'--image-display-duration=' + str(self._mpv_imagetime)
                                 ,'--hr-seek=yes'
                                 # ,'--af=rubberband'
                                 #,'--force-window=yes'
                                 ]
+        
         
         # Special command for RockPro64
         if os.path.exists('/usr/local/bin/rkmpv'):
