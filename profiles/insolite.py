@@ -19,11 +19,11 @@ video = hplayer.addPlayer('mpv', 'video')
 
 # INTERFACES
 keyboard    = hplayer.addInterface('keyboard')
-osc         = hplayer.addInterface('osc', 3333, 4444)
-# gpio        = hplayer.addInterface('gpio', [15], 300, 'PUP')
-# zyre        = hplayer.addInterface('zyre')
 http2       = hplayer.addInterface('http2', 8080)
-# regie       = hplayer.addInterface('regie', 9111, projectfolder)
+
+osc         = hplayer.addInterface('osc', 3333, 4444)
+osc.hostOut = '10.0.0.200'
+
 
 # Overlay
 # if hplayer.isRPi():
@@ -92,12 +92,18 @@ def keyboard(ev, *args):
         
     
 @hplayer.on('osc.pad')
-def hello(ev, *args):
+def pad(ev, *args):
     
     scene = 'Scene-'+str(args[0])
     media = ('0' if args[1] < 10 else '')+str(args[1])+'-*'
     
     osc.emit('play', scene+'/'+media  )
+    
+    
+@hplayer.on('osc.ping')
+def pad(ev, *args):  
+	#print(str(video.status('media')))
+	osc.send('/status', str(video.status('media')) )
 
     
 # RUN
