@@ -22,7 +22,7 @@ video = hplayer.addPlayer('mpv', 'video')
 # INTERFACES
 keyboard    = hplayer.addInterface('keyboard')
 osc         = hplayer.addInterface('osc', 1222, 3737)
-gpio        = hplayer.addInterface('gpio', [15], 300, 'PUP')
+gpio        = hplayer.addInterface('gpio', [2], 300, 'PUP')
 zyre        = hplayer.addInterface('zyre')
 #mqtt        = hplayer.addInterface('mqtt', '10.0.0.1')
 http2       = hplayer.addInterface('http2', 8080)
@@ -92,24 +92,80 @@ def keyboard(ev, *args):
         
 
 
-# LED init
-gpio.set(14, False)
+
+#LED osc on/off
+@hplayer.on('osc.on')
+def hello(ev, *args):
+    gpio.set(2, False)
+
+@hplayer.on('osc.off')
+def hello(ev, *args):
+    gpio.set(2, True)
+    
+
+@hplayer.on('status.*')
+def status(ev, *args):
+    print(ev, args)
+
+
+# VIDEO playing gpio control on/off (besoin append au noms fichier lu "_durée-en-sec_on/off_init/end_durée-en-sec")
+@hplayer.on('video.playing')
+def  hello(ev, *args):
+    a=args[-1]
+    b=a.split('/')[-1].split('_')[-5:-1]
+    print('YOUU', b)
+    if b[-2] =='init':
+        if b[-3] =='on':
+            time.sleep(float(b[-4]))
+            print('ON')
+            gpio.set(2, False)
+        elif b[-3] =='off':
+            time.sleep(float(b[-4]))
+            print('OFF')
+            gpio.set(2, True)
+        if float(b[-1]) > 0 :
+            if b[-3] =='on':
+                time.sleep(float(b[-1]))
+                print('OFF')
+                gpio.set(2, True)
+            elif b[-3] =='off':
+                time.sleep(float(b[-1]))
+                print('ON')
+                gpio.set(2, False)
+                
+                
+
+# VIDEO end gpio control on/off (besoin append au noms fichier lu "_durée-en-sec_on/off_init/end_durée-en-sec_")
+@hplayer.on('video.end')
+def  hello(ev, *args):
+    a=args[-1]
+    b=a.split('/')[-1].split('_')[-5:-1]
+    print('YAAA', b)
+    if b[-2] =='end':
+        if b[-3] =='on':
+            time.sleep(float(b[-4]))
+            print('ON')
+            gpio.set(2, False)
+        elif b[-3] =='off':
+            time.sleep(float(b[-4]))
+            print('OFF')
+            gpio.set(2, True)
+        if float(b[-1]) > 0 :
+            if b[-3] =='on':
+                time.sleep(float(b[-1]))
+                print('OFF')
+                gpio.set(2, True)
+            elif b[-3] =='off':
+                time.sleep(float(b[-1]))
+                print('ON')
+                gpio.set(2, False)
+                
+# VIDEO stopped gpio control
 
 # VIDEO stopped
-@hplayer.on('*.stopped')
+'''{@hplayer.on('video.stopped')
 def hello(ev, *args):
-    gpio.set(14, False)
-
-
-
-# VIDEO playing start LED
-wait = 3
-
-@hplayer.on('*.playing')
-def hello(ev, *args):
-    time.sleep(wait)
-    gpio.set(14, True)
-
+    gpio.set(2, False)'''
 
 # VIDEO play
 @hplayer.on('gpio.15-on')
@@ -118,27 +174,39 @@ def hello(ev, *args):
     
 @hplayer.on('osc.hello')
 def hello(ev, *args):
-    global wait
-    wait = int(args[0])
-    osc.emit('play', 'small.mp4')
-    print(args[0])
+    osc.emit('play', 'youhou.wav')
+    
+
+@hplayer.on('osc.decazeville')
+def hello(ev, *args):
+    osc.emit('play', 'D_MEDIA 1_EPISODE_2.mp4')
+ 
     
 # BTN pin 16
 @hplayer.on('gpio.18')
 def hello(ev, *args):
-    gpio.set(14, args[0])
+    gpio.set(2, args[0])
 
 
-# OSC /hello
+"""# OSC /hello
 @hplayer.on('osc.hello')
 def hello(ev, *args):
-    gpio.set(14, False)
- 
+    gpio.set(14, False)"""
+
+#volume control
+@hplayer.on('osc.vol')
+def volum(ev, *args):
+    print(ev, args)
+    v=args[0]
+    print(v)
+    hplayer.settings.set('volume', v)
 
  # OSC /goodbye
 @hplayer.on('osc.goodbye')
 def hello(ev, *args):
     gpio.set(14, False)   
+
+
 
     
 # RUN
