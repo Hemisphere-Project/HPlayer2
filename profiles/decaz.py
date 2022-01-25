@@ -119,17 +119,21 @@ def dogpio(ev, *args):
     gpio.set(args[0], args[1])
     
 
-# VIDEO playing gpio control on/off (besoin append au noms fichier lu "_durée-en-sec_on/off_playing/end_durée-en-sec")
+# VIDEO playing gpio control on/off (besoin append au noms fichier lu "_durée-en-sec_on/off_start/end_durée-en-sec")
 @hplayer.on('video.playing')
-@hplayer.on('video.end')
+@hplayer.on('video.media-end')
 def trig(ev, *args):
+    
+    event = ""
+    if ev.split('.')[-1] == 'media-end': event = 'end'
+    if ev.split('.')[-1] == 'playing': event = 'start'
     
     a=args[-1]
     b=a.split('/')[-1].split('_')[-5:-1]
     print('YOUU', b)
     if len(b) < 2: return
     
-    if b[-2] == ev.split('.')[-1]:
+    if b[-2] == event:
         
         global timer1, timer2
         if timer1: 
