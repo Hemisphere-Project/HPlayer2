@@ -4,6 +4,7 @@ from core.engine import network
 import os, sys, types, platform
 import json
 import time
+from threading import Timer
 
 # DIRECTORY / FILE
 profilename = os.path.basename(__file__).split('.')[0]
@@ -22,7 +23,7 @@ video = hplayer.addPlayer('mpv', 'video')
 # INTERFACES
 keyboard    = hplayer.addInterface('keyboard')
 osc         = hplayer.addInterface('osc', 1222, 3737)
-gpio        = hplayer.addInterface('gpio', [2], 300, 'PUP')
+gpio        = hplayer.addInterface('gpio', [], 300, 'PUP')
 zyre        = hplayer.addInterface('zyre')
 #mqtt        = hplayer.addInterface('mqtt', '10.0.0.1')
 http2       = hplayer.addInterface('http2', 8080)
@@ -101,64 +102,46 @@ def hello(ev, *args):
 @hplayer.on('osc.off')
 def hello(ev, *args):
     gpio.set(2, True)
+
+
+timer1 = None
+timer2 = None   
+
+def triggerGPIO(pin1, state, pin2=None):
+    print('Timer trigger', pin1, state)
+    hplayer.emit('do-gpio', pin1, not state)
+    if pin2:
+        hplayer.emit('do-gpio', pin2, state)
+
+@hplayer.on('do-gpio')
+def dogpio(ev, *args):
+    print('Gpio set', args)
+    gpio.set(args[0], args[1])
     
 
-@hplayer.on('status.*')
-def status(ev, *args):
-    print(ev, args)
-
-
-# VIDEO playing gpio control on/off (besoin append au noms fichier lu "_durée-en-sec_on/off_init/end_durée-en-sec")
+# VIDEO playing gpio control on/off (besoin append au noms fichier lu "_durée-en-sec_on/off_playing/end_durée-en-sec")
 @hplayer.on('video.playing')
-def  hello(ev, *args):
+@hplayer.on('video.end')
+def trig(ev, *args):
+    
     a=args[-1]
     b=a.split('/')[-1].split('_')[-5:-1]
     print('YOUU', b)
-    if b[-2] =='init':
-        if b[-3] =='on':
-            time.sleep(float(b[-4]))
-            print('ON')
-            gpio.set(2, False)
-        elif b[-3] =='off':
-            time.sleep(float(b[-4]))
-            print('OFF')
-            gpio.set(2, True)
-        if float(b[-1]) > 0 :
-            if b[-3] =='on':
-                time.sleep(float(b[-1]))
-                print('OFF')
-                gpio.set(2, True)
-            elif b[-3] =='off':
-                time.sleep(float(b[-1]))
-                print('ON')
-                gpio.set(2, False)
+    if len(b) < 2: return
+    
+    if b[-2] == ev.split('.')[-1]:
+        
+        global timer1, timer2
+        if timer1: 
+            timer1.cancel()
+        timer1 = Timer(float(b[-4]), triggerGPIO, ([2], b[-3]=='on', [4]) )
+        timer1.start()
+        
+        if timer2: 
+            timer2.cancel()
+        timer2 = Timer(float(b[-4])+float(b[-1]), triggerGPIO, ([2], b[-3]!='on', [4]) )
+        timer2.start()                
                 
-                
-
-# VIDEO end gpio control on/off (besoin append au noms fichier lu "_durée-en-sec_on/off_init/end_durée-en-sec_")
-@hplayer.on('video.end')
-def  hello(ev, *args):
-    a=args[-1]
-    b=a.split('/')[-1].split('_')[-5:-1]
-    print('YAAA', b)
-    if b[-2] =='end':
-        if b[-3] =='on':
-            time.sleep(float(b[-4]))
-            print('ON')
-            gpio.set(2, False)
-        elif b[-3] =='off':
-            time.sleep(float(b[-4]))
-            print('OFF')
-            gpio.set(2, True)
-        if float(b[-1]) > 0 :
-            if b[-3] =='on':
-                time.sleep(float(b[-1]))
-                print('OFF')
-                gpio.set(2, True)
-            elif b[-3] =='off':
-                time.sleep(float(b[-1]))
-                print('ON')
-                gpio.set(2, False)
                 
 # VIDEO stopped gpio control
 

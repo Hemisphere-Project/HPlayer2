@@ -41,22 +41,26 @@ class GpioInterface (BaseInterface):
         
         
     # GPIO set
-    def set(self, pin, state):
+    def set(self, pinz, state):
         
-        # Can't set if already an INPUT 
-        if pin in self._pinsIN:
-            self.log("GPIO", pin, "is already set as INPUT only... can't set it!")
-            return
+        if not isinstance(pinz, list): 
+            pinz = [pinz]
         
-        # Create pin if it does not exists yet
-        if pin not in self._pinsOUT:
-            self._pinsOUT.append(pin)
-            GPIO.setup(pin, GPIO.OUT)            
+        for pin in pinz:
+            # Can't set if already an INPUT 
+            if pin in self._pinsIN:
+                self.log("GPIO", pin, "is already set as INPUT only... can't set it!")
+                return
             
-        if (str(state).lower() == 'on' or str(state).lower() == 'up'):    state=True
-        if (str(state).lower() == 'off' or str(state).lower() == 'down'): state=False
-        GPIO.output(pin, state)
-        self._state[pin] = GPIO.input(pin)
+            # Create pin if it does not exists yet
+            if pin not in self._pinsOUT:
+                self._pinsOUT.append(pin)
+                GPIO.setup(pin, GPIO.OUT)            
+                
+            if (str(state).lower() == 'on' or str(state).lower() == 'up'):    state=True
+            if (str(state).lower() == 'off' or str(state).lower() == 'down'): state=False
+            GPIO.output(pin, state)
+            self._state[pin] = GPIO.input(pin)
         
     
     # GPIO get
