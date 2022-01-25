@@ -24,7 +24,9 @@ keyboard    = hplayer.addInterface('keyboard')
 osc         = hplayer.addInterface('osc', 1222, 3737)
 gpio        = hplayer.addInterface('gpio', [15], 300, 'PUP')
 zyre        = hplayer.addInterface('zyre')
+#mqtt        = hplayer.addInterface('mqtt', '10.0.0.1')
 http2       = hplayer.addInterface('http2', 8080)
+teleco      = hplayer.addInterface('teleco')
 regie       = hplayer.addInterface('regie', 9111, projectfolder)
 
 # Overlay
