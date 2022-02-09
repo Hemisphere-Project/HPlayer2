@@ -13,7 +13,12 @@ class MpvPlayer(BasePlayer):
     def __init__(self, hplayer, name):
         super().__init__(hplayer, name)
 
-        self._validExt = ['mp4', 'm4v', 'mkv', 'avi', 'mov', 'flv', 'mpg', 'wmv', '3gp', 'mp3', 'aac', 'wma', 'wav', 'flac', 'aif', 'aiff', 'm4a', 'ogg', 'opus', 'webm', 'jpg', 'jpeg', 'gif', 'png', 'tif', 'tiff']
+        self._videoExt = ['mp4', 'm4v', 'mkv', 'avi', 'mov', 'flv', 'mpg', 'wmv', '3gp', 'webm']
+        self._audioExt = ['mp3', 'aac', 'wma', 'wav', 'flac', 'aif', 'aiff', 'm4a', 'ogg', 'opus']
+        self._imageExt = ['jpg', 'jpeg', 'gif', 'png', 'tif', 'tiff']
+
+        self._validExt = self._videoExt + self._audioExt + self._imageExt
+        
 
         self._mpv_procThread = None
         self._mpv_sock = None
@@ -117,7 +122,7 @@ class MpvPlayer(BasePlayer):
                     self.doLog['recv'] = False
                     self.doLog['cmds'] = False
 
-                    # self.log("IPC says:", msg.rstrip())
+                    self.log("IPC says:", msg.rstrip())
                     
                     # Message received
                     for event in msg.rstrip().split( b"\n" ):
@@ -181,14 +186,15 @@ class MpvPlayer(BasePlayer):
                 except socket.timeout:
                     # print('-', end ="")
                     if self.status('isPlaying'):
-                        self.log('PLAYBACK LOCKED OUT', self._mpv_lockedout)
-                        self._mpv_send('{ "command": ["set_property", "pause", false] }')
-                        self._mpv_lockedout += 1
-                        if self._mpv_lockedout > 3:
-                            print("CRASH STOP")
-                            self._mpv_send('{ "command": ["stop"] }')
-                            os.system('pkill mpv')
-                            self.emit('hardreset')
+                        if not self.status('media').split('.')[-1] in self._imageExt:
+                            self.log('PLAYBACK LOCKED OUT', self._mpv_lockedout)
+                            self._mpv_send('{ "command": ["set_property", "pause", false] }')
+                            self._mpv_lockedout += 1
+                            if self._mpv_lockedout > 3:
+                                print("CRASH STOP")
+                                self._mpv_send('{ "command": ["stop"] }')
+                                os.system('pkill mpv')
+                                self.emit('hardreset')
                     pass
 
                 # Socket error: exit
