@@ -74,7 +74,7 @@ def pir(ev, *args):
         if args[0] == 'ON':
              if not video.isPlaying():
                 hplayer.playlist.playindex(0)
-                hplayer.settings.set('loop', 2)
+             hplayer.settings.set('loop', 2)
         elif args[0] == 'OFF':
              if video.isPlaying():
                 hplayer.settings.set('loop', 0)
