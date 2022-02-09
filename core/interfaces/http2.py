@@ -1,7 +1,7 @@
 from .base import BaseInterface
 import socketio
 import eventlet
-from flask import Flask, render_template, session, request, send_from_directory, send_file
+from flask import Flask, render_template, session, request, send_from_directory, send_file, redirect, url_for
 from flask_socketio import SocketIO, emit, join_room, leave_room, close_room, rooms, disconnect
 from werkzeug.utils import secure_filename
 import threading, os, time
@@ -33,7 +33,8 @@ class Http2Interface (BaseInterface):
             'isRPi'     : hplayer.isRPi(),
             'playlist'  : True,
             'loop'      : True,
-            'mute'      : True
+            'mute'      : True,
+            'page'      : 'full'
         }
         self.conf.update(confe)
 
@@ -90,11 +91,20 @@ class ThreadedHTTPServer(object):
         @app.route('/')
         def index():
             # return render_template('index.html', async_mode=socketio.async_mode)
-            return send_from_directory(www_path, 'index.html')
+            # return send_from_directory(www_path, 'full.html')
+            return redirect(url_for(self.http2interface.conf['page']), code=303)
+        
+        @app.route('/full')
+        def full():
+            return send_from_directory(www_path, 'full.html')
             
         @app.route('/simple')
         def simple():
             return send_from_directory(www_path, 'simple.html')
+        
+        @app.route('/mini')
+        def mini():
+            return send_from_directory(www_path, 'mini.html')
 
         @app.route('/filedownload', methods=['GET'])
         def filedownload():
