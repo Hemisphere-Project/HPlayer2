@@ -17,8 +17,8 @@ class GpioInterface (BaseInterface):
             self.watch(pin)
 
     def onchange(self, pin):
-        #self.log("channel", pin, "triggered")
         value = not GPIO.input(pin) if self._pupdown == 'PUP' else GPIO.input(pin)       
+        # self.log("channel", pin, "triggered", value)
         if value:
             if self._state[pin]:
                 self.emit(str(pin)+'-off')
@@ -98,10 +98,13 @@ class GpioInterface (BaseInterface):
         self._pinsIN.append(pin)
         if self._pupdown == 'PUP':
             GPIO.setup(pin, GPIO.IN, pull_up_down=GPIO.PUD_UP)
+            # self.log("GPIO", pin, "watched PUP", self._debounce)
         elif self._pupdown == 'PDOWN':
             GPIO.setup(pin, GPIO.IN, pull_up_down=GPIO.PUD_DOWN)
+            # self.log("GPIO", pin, "watched PDOWN", self._debounce)
         else:
             GPIO.setup(pin, GPIO.IN)
+            # self.log("GPIO", pin, "watched FREE", self._debounce)
             
         self._state[pin] = False
         GPIO.add_event_detect(pin, GPIO.BOTH, callback=self.onchange, bouncetime=self._debounce)

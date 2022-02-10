@@ -40,7 +40,9 @@ hplayer.addInterface('zyre')
 hplayer.addInterface('mqtt', '10.0.0.1')
 hplayer.addInterface('http2', 8080)
 hplayer.addInterface('teleco')
+hplayer.addInterface('serial', '^M5')
 hplayer.addInterface('regie', 9111, projectfolder)
+gpio = hplayer.addInterface('gpio', [16, 20, 21], 1, 'PUP')
 if myESP:
     hplayer.addInterface('btserial', 'k32-'+str(myESP))
 
@@ -48,8 +50,6 @@ if myESP:
 # Overlay
 if hplayer.isRPi():
     video.addOverlay('rpifade')
-
-
 
 #
 # SYNC PLAY
@@ -144,6 +144,48 @@ def espStop(ev, *args):
     if lastEspEvent == 'sacvp.esp':
         hplayer.emit('sacvp.esp', {'topic': 'leds/stop', 'data': ''})
 
+#
+# GPIO
+#
+
+# BTN 1
+@hplayer.on('gpio.16')
+def play1(ev, *args):
+    isAlreadyPlaying = hplayer.activePlayer().status()['media'] and hplayer.activePlayer().status()['media'].split('/')[-1].startswith("1_")
+    print("BTN1:", args[0] == 0, "isPlaying", isAlreadyPlaying )
+    if args[0] == 0:
+        if not isAlreadyPlaying:
+            hplayer.playlist.play("1_*.*")
+    elif isAlreadyPlaying:
+        hplayer.activePlayer().stop()
+  
+# BTN 2
+@hplayer.on('gpio.20')
+def play2(ev, *args):
+    isAlreadyPlaying = hplayer.activePlayer().status()['media'] and hplayer.activePlayer().status()['media'].split('/')[-1].startswith("2_")
+    print("BTN2:", args[0] == 0, "isPlaying", isAlreadyPlaying )
+    if args[0] == 0:
+        if not isAlreadyPlaying:
+            hplayer.playlist.play("2_*.*")
+    elif isAlreadyPlaying:
+        hplayer.activePlayer().stop()
+    
+    
+# BTN 3
+@hplayer.on('gpio.21')
+def play1(ev, *args):
+    isAlreadyPlaying = hplayer.activePlayer().status()['media'] and hplayer.activePlayer().status()['media'].split('/')[-1].startswith("3_")
+    print("BTN3:", args[0] == 0, "isPlaying", isAlreadyPlaying )
+    if args[0] == 0:
+        if not isAlreadyPlaying:
+            hplayer.playlist.play("3_*.*")
+    elif isAlreadyPlaying:
+        hplayer.activePlayer().stop()
+
+
+#
+# RUN
+#
 
 # default volume
 @video.on('ready')
