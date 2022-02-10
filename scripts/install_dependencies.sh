@@ -78,6 +78,8 @@ if [[ $(uname -m) = armv* || $(uname -m) = aarch64 ]]; then
     cd .. && rm -Rf Adafruit_Python_CharLCD
 fi
 
+exit 0
+
 # ZYRE
 cd /tmp
 git clone git://github.com/zeromq/libzmq.git && cd libzmq
