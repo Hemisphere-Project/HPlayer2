@@ -7,7 +7,7 @@ import json, random
 
 
 # INIT HPLAYER
-hplayer = HPlayer2('/root/media')
+hplayer = HPlayer2('/data/usb')
 
 # PLAYERS
 video = hplayer.addPlayer('gst', 'video')
@@ -57,7 +57,7 @@ def nextend(ev, *args):
 def init(ev, *args):
     hplayer.settings.set('volume', 100)
     hplayer.settings.set('loop', -1)
-    hplayer.playlist.load('/root/media')
+    hplayer.playlist.load('/data/usb')
 
 # RUN
 hplayer.run()                               						# TODO: non blocking
