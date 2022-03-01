@@ -145,6 +145,7 @@ class ThreadedHTTPServer(object):
                     pass
 
                 fileslist_message()
+                self.http2interface.emit('file-uploaded', filepath)
                 # self.http2interface.hplayer.add(filepath)
                 return 'ok'
 

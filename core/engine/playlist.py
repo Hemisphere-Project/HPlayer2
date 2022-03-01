@@ -1,13 +1,14 @@
 from ..module import Module
 import os
 import re
+from random import randrange
 
 
 class Playlist(Module):
     
     _playlist = []
     _index = 0
-    
+    _lastran = -1
     
     def __init__(self, hplayer):
         super().__init__(hplayer, 'Playlist', 'yellow')
@@ -148,6 +149,16 @@ class Playlist(Module):
     # first item
     def first(self):
         self.playindex(0)
+        
+    # random item
+    def random(self):
+        if self.size() > 0:
+            ran = randrange(self.size())
+            if self.size() > 1:
+                while ran == self._lastran:
+                    ran = randrange(self.size())
+            self._lastran = ran
+            self.playindex( ran )
 
     
     ## OBTAIN INDEX
