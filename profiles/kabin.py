@@ -7,23 +7,24 @@ import json
 
 
 # INIT HPLAYER
-hplayer = HPlayer2('/data/usb')
+hplayer = HPlayer2('/media/usb/test')
 
 # PLAYERS
-video = hplayer.addPlayer('mpv', 'video')
+back = hplayer.addPlayer('mpv', 'video')
+video = hplayer.addPlayer('gst', 'video')
 
 
 # INTERFACES
 ticker      = hplayer.addInterface('ticker', 137, 'tick')
-keyboard    = hplayer.addInterface('keyboard')
-osc         = hplayer.addInterface('osc', 1222, 3737)
-mqtt        = hplayer.addInterface('mqtt', '10.0.0.1')
-http2       = hplayer.addInterface('http2', 80, {'page': 'mini'})
-teleco      = hplayer.addInterface('teleco')
+# keyboard    = hplayer.addInterface('keyboard')
+# osc         = hplayer.addInterface('osc', 1222, 3737)
+# mqtt        = hplayer.addInterface('mqtt', '10.0.0.1')
+http2       = hplayer.addInterface('http2', 8080, {'page': 'mini'})
+# teleco      = hplayer.addInterface('teleco')
 
 # Overlay
-if hplayer.isRPi():
-    video.addOverlay('rpifade')
+# if hplayer.isRPi():
+#     video.addOverlay('rpifade')
 
 
 
@@ -32,7 +33,7 @@ if hplayer.isRPi():
 def init(ev, *args):
     hplayer.settings.set('volume', 100)
     hplayer.settings.set('loop', -1)
-    hplayer.playlist.load('/data/usb')
+    hplayer.playlist.load('/media/usb/test')
     hplayer.playlist.play(0)
     
     
@@ -46,6 +47,7 @@ def upload(ev, *args):
 @ticker.on('tick')
 def tick(ev, *args):
     if args[0]%8 == 0:
+        print('HEY!')
         video.stop()
         hplayer.playlist.random()
 

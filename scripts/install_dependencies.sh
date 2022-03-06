@@ -23,10 +23,10 @@ if [[ $(command -v apt) ]]; then
     apt install libcaca-dev libsdl2-dev libasound2-dev -y
 
     # hplayer2 dependencies
-    apt install python python-pip
-    apt install python-termcolor python-evdev python-eventlet -y
-    apt install python-watchdog python-pillow python-setuptools -y
-    apt install ttf-dejavu-core python-pyserial libjack-dev libtool autotools-dev automake -y
+    apt install python3 python3-pip
+    apt install python3-termcolor python3-evdev python3-eventlet -y
+    apt install python3-watchdog python3-pillow python3-setuptools -y
+    apt install ttf-dejavu-core python3-pyserial libjack-dev libtool autotools-dev automake liblo7 -y
 
     # RPi
     if [[ $(uname -m) = armv* ]]; then

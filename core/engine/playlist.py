@@ -159,6 +159,7 @@ class Playlist(Module):
                     ran = randrange(self.size())
             self._lastran = ran
             self.playindex( ran )
+        print('RAN', self.size())
 
     
     ## OBTAIN INDEX
