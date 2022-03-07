@@ -47,7 +47,7 @@ elif [[ $(command -v pacman) ]]; then
     pacman -S alsa-lib alsa-firmware ttf-roboto --noconfirm --needed
 
     # GStreamer
-    pacman -S drm mpg123 gstreamer1.0-plugins-ugly libgstreamer1.0-dev libgstreamer-plugins-base1.0-dev gstreamer1.0-pulseaudio gstreamer1.0-x gstreamer1.0-plugins-bad gstreamer1.0-alsa gstreamer1.0-plugins-base gstreamer1.0-plugins-good --noconfirm --needed
+    pacman -S libdrm mpg123 gst-plugins-ugly gst-libav gst-plugins-base-libs gstreamer gst-plugins-bad gst-plugins-base gst-plugins-good --noconfirm --needed
 
     # hplayer2 dependencies
     pacman -S pkg-config python python-pip cython liblo libxcrypt --noconfirm --needed
