@@ -20,6 +20,7 @@ class GstPlayer(BasePlayer):
     _time = 0
     _duration = 0
     _file = None
+    _goto = -1;
     
 
     def __init__(self, hplayer, name):
@@ -82,9 +83,10 @@ class GstPlayer(BasePlayer):
                     # print("- PLAYING")
 
                     # we just moved to the playing state
-                    query = Gst.Query.new_seeking(Gst.Format.TIME)
-                    if self.playbin.query(query):
-                        fmt, self._seek_enabled, start, end = query.parse_seeking()
+                    if not self._seek_enabled:
+                        query = Gst.Query.new_seeking(Gst.Format.TIME)
+                        if self.playbin.query(query):
+                            fmt, self._seek_enabled, start, end = query.parse_seeking()
                         
                 self._state = new_state      
             
@@ -122,6 +124,11 @@ class GstPlayer(BasePlayer):
                         (ret, cur) = self.playbin.query_position(Gst.Format.TIME)
                         if ret:
                             self.update('time', round(float(cur/Gst.SECOND),2))
+                            
+                    # DELAYED SEEK
+                    if self._goto >= 0 and self._seek_enabled:
+                        self._seekTo(self._goto)
+                        self._goto = -1
                             
         finally:
             self.isRunning(False)
@@ -205,14 +212,17 @@ class GstPlayer(BasePlayer):
         print("* RESUMED")
 
     def _seekTo(self, milli):
-        self.log("seek to", milli/1000, self._status['duration'])
-        # TODO
-
+        if self._seek_enabled:
+            self.log("seek to", milli/1000, self._status['duration'])
+            if milli/1000 < self._status['duration']:
+                self.playbin.seek_simple(Gst.Format.TIME, Gst.SeekFlags.FLUSH | Gst.SeekFlags.KEY_UNIT, milli * Gst.MSECOND)
+            else:
+                self.stop()
+        else:
+            self._goto = milli  # delayed skip when ready
 
     def _skip(self, milli):
-        if self._status['time'] + milli/1000 < self._status['duration']:
-            # TODO
-            pass
+        self._seekTo(self._status['time']*1000 + milli)
         # self.log("seek to", milli/1000)
 
     def _speed(self, s):
