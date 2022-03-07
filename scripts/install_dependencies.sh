@@ -22,6 +22,9 @@ if [[ $(command -v apt) ]]; then
     apt install libxrandr-dev libgles2-mesa-dev libgles1-mesa-dev libv4l-dev libxss-dev libgl1-mesa-dev -y
     apt install libcaca-dev libsdl2-dev libasound2-dev -y
 
+    # GStreamer
+    apt install libdrm libmpg123 gstreamer1.0-plugins-ugly libgstreamer1.0-dev libgstreamer-plugins-base1.0-dev gstreamer1.0-pulseaudio gstreamer1.0-x gstreamer1.0-plugins-bad gstreamer1.0-alsa gstreamer1.0-plugins-base gstreamer1.0-plugins-good -y
+
     # hplayer2 dependencies
     apt install python3 python3-pip
     apt install python3-termcolor python3-evdev python3-eventlet -y
@@ -42,6 +45,9 @@ elif [[ $(command -v pacman) ]]; then
     pacman -S lua luajit libvdpau libva libxv libjpeg libxkbcommon libxrandr libv4l libxss libcaca sdl2 --noconfirm --needed
     pacman -S base-devel libx264 mesa fbida libbluray --noconfirm --needed
     pacman -S alsa-lib alsa-firmware ttf-roboto --noconfirm --needed
+
+    # GStreamer
+    pacman -S drm mpg123 gstreamer1.0-plugins-ugly libgstreamer1.0-dev libgstreamer-plugins-base1.0-dev gstreamer1.0-pulseaudio gstreamer1.0-x gstreamer1.0-plugins-bad gstreamer1.0-alsa gstreamer1.0-plugins-base gstreamer1.0-plugins-good --noconfirm --needed
 
     # hplayer2 dependencies
     pacman -S pkg-config python python-pip cython liblo libxcrypt --noconfirm --needed

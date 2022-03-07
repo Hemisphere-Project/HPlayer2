@@ -38,7 +38,7 @@ class GstPlayer(BasePlayer):
     ############
     ## public METHODS
     ############
-
+    
     def scale(self, sc):
         self._gst_scale = sc
 
@@ -132,13 +132,11 @@ class GstPlayer(BasePlayer):
     ## Inherited "abstract" METHODS overloads
     ##########
 
-    #
-    # Start the player:
-    #   - instantiate mpv subprocess
-    #   - connect IPC socket i/o
-    #
     def _start(self):
 
+        self.log('Setting FBI black background')
+        os.system('/usr/bin/fbi -d /dev/fb0 --noverbose -a -T 1 '+os.path.dirname(os.path.abspath(__file__)) + '/../../extra/black.png > /dev/null 2>&1')
+        
         self.playbin = Gst.ElementFactory.make("playbin", "player")
         self.playbin.set_property("video-sink", Gst.ElementFactory.make("kmssink", "videosink"))
         self.playbin.set_property("audio-sink", Gst.ElementFactory.make("autoaudiosink", "audiosink"))
@@ -150,18 +148,15 @@ class GstPlayer(BasePlayer):
         self._clear()
 
 
-
-    #
-    # Exit the player
-    #   - stop subprocess
-    #   - close IPC socket
-    #
     def _quit(self):
         self.isRunning(False)
 
         if  self._thread_handle:
             # self.log("stopping process thread")
             self._thread_handle.join()
+        
+        self.log('killing FBI black background')
+        os.system('pkill fbi')
         
         self.log("stopped")
 

@@ -10,7 +10,6 @@ import json
 hplayer = HPlayer2('/media/usb/test')
 
 # PLAYERS
-back = hplayer.addPlayer('mpv', 'video')
 video = hplayer.addPlayer('gst', 'video')
 
 
@@ -47,8 +46,6 @@ def upload(ev, *args):
 @ticker.on('tick')
 def tick(ev, *args):
     if args[0]%8 == 0:
-        print('HEY!')
-        video.stop()
         hplayer.playlist.random()
 
 
