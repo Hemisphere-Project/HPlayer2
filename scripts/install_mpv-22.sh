@@ -1,6 +1,13 @@
 # Get MPV Build tools
 cd "$(dirname "$(readlink -f "$0")")"
 
+# libass / ffmpeg / mpv dependencies
+pacman -S freetype2 fribidi fontconfig yasm git autoconf pkg-config libtool --noconfirm --needed
+pacman -S lua luajit libvdpau libva libxv libjpeg libxkbcommon libxrandr libv4l libxss libcaca sdl2 --noconfirm --needed
+pacman -S base-devel libx264 mesa fbida libbluray --noconfirm --needed
+pacman -S alsa-lib alsa-firmware ttf-roboto --noconfirm --needed
+
+
 rm -rf mpv-build
 git clone https://github.com/mpv-player/mpv-build.git
 cd mpv-build

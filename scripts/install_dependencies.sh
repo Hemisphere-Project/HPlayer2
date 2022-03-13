@@ -40,23 +40,15 @@ if [[ $(command -v apt) ]]; then
 elif [[ $(command -v pacman) ]]; then
     DISTRO='arch'
 
-    # libass / ffmpeg / mpv dependencies
-    pacman -S freetype2 fribidi fontconfig yasm git autoconf pkg-config libtool --noconfirm --needed
-    pacman -S lua luajit libvdpau libva libxv libjpeg libxkbcommon libxrandr libv4l libxss libcaca sdl2 --noconfirm --needed
-    pacman -S base-devel libx264 mesa fbida libbluray --noconfirm --needed
-    pacman -S alsa-lib alsa-firmware ttf-roboto --noconfirm --needed
-
     # GStreamer
-    pacman -S libdrm mpg123 gst-plugins-ugly gst-libav gst-plugins-base-libs gstreamer gst-plugins-bad gst-plugins-base gst-plugins-good --noconfirm --needed
-
+    pacman -S gst-python libdrm mpg123 gst-plugins-ugly gst-libav gst-plugins-base-libs gstreamer gst-plugins-bad gst-plugins-base gst-plugins-good --noconfirm --needed
+    
     # hplayer2 dependencies
-    pacman -S pkg-config python python-pip cython liblo libxcrypt --noconfirm --needed
-    pacman -S python-termcolor python-evdev --noconfirm --needed
-    pacman -S python-watchdog python-pillow python-setuptools --noconfirm --needed
-    pacman -S ttf-dejavu python-pyserial --noconfirm --needed
+    pacman -S pkg-config python python-pip cython liblo libxcrypt python-termcolor python-evdev python-eventlet \
+        python-watchdog python-pillow python-setuptools ttf-dejavu python-pyserial --noconfirm --needed
 
     # RPi
-    if [[ $(uname -m) = armv* ]]; then
+    if [[ $(uname -m) = armv* || $(uname -m) = aarch64 ]]; then
       pacman -S python-queuelib i2c-tools --noconfirm --needed
     fi
 
@@ -77,7 +69,7 @@ fi
 pip3 install -r requirements.txt
 
 # RPi
-if [[ $(uname -m) = armv* ]]; then
+if [[ $(uname -m) = armv* || $(uname -m) = aarch64 ]]; then
     /usr/bin/yes | pip install --upgrade RPi.GPIO
 
     git clone https://github.com/adafruit/Adafruit_Python_CharLCD.git
