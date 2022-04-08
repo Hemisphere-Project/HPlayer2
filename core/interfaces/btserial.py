@@ -43,6 +43,7 @@ class BtserialInterface (BaseInterface):
     # BTSERIAL loop
     def listen(self):
 
+        retry = 0.5
         
         # SCAN devices to find ADDR
         self.log("looking for ", self.device_name)
@@ -58,7 +59,8 @@ class BtserialInterface (BaseInterface):
                     break
                 else:
                     self.log("can't find ", self.device_name, ", retrying...")
-                    sleep(0.5)
+                    sleep(retry)
+                    retry = min(30, retry+1)
             except:
                 self.log("BT error...")
                 for i in range(2):

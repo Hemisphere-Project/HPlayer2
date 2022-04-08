@@ -29,6 +29,7 @@ class KeypadInterface (BaseInterface):
         except:
             self.log("LCD Keypad not found ...")
             self.lcd = None
+            return
         
         self.lcd.set_color(0, 0, 0)
         
@@ -58,6 +59,7 @@ class KeypadInterface (BaseInterface):
 
 
     def draw(self, forced=None):
+        if not self.lcd: return
         lines = self.update() if not forced else forced
         if lines[0] != self.display[0]:
             self.display[0] = lines[0]
