@@ -16,12 +16,11 @@ player 	= hplayer.addPlayer('mpv','mpv')
 
 # Interfaces
 zyre		= hplayer.addInterface('zyre', 'wlan0')
-# osc			= hplayer.addInterface('osc', 4000).hostOut = '10.0.0.255'
+keypad 		= hplayer.addInterface('keypad')
+# osc		= hplayer.addInterface('osc', 4000).hostOut = '10.0.0.255'
 # http		= hplayer.addInterface('http', 8037)
 # http2		= hplayer.addInterface('http2', 8080)
 # keyboard 	= hplayer.addInterface('keyboard')
-keypad 		= hplayer.addInterface('keypad')
-
 
 
 # RSync USB (on start)
@@ -198,10 +197,10 @@ def lcd_update(self):
 	lines[1] += keypad.CHAR_PEERS +str(zyre.activeCount()).ljust(2, ' ')[:2]+" "
 
 	# COLORS
-	if blinkCounter > 0:
-		self.lcd.set_color( 1 if not media else 0 , 0 , 1 if media else 0)
-	else:
-		self.lcd.set_color( 0, 1 , 0)
+	if blinkCounter > 0: color = ( 1 if not media else 0 , 0 , 1 if media else 0)	# RED/GREEN: play state
+	else: color = ( 0, 1 , 0)														# BLUE flash: no wifi
+	
+	self.lcd.set_color( *color )
   
 	return lines
 
