@@ -1,7 +1,7 @@
 from core.engine.hplayer import HPlayer2
 from core.engine import network
 
-import os, sys, types, platform, time
+import os, sys, types, platform, time, math
 from threading import Timer
 
 # DIRECTORY / FILE
@@ -80,41 +80,34 @@ def play_indexed(ev, *args):
     hplayer.playlist.emit('playindex', hplayer.playlist.findIndex(str(args[0])+"_*") )
 
 
-# Emit cmd
-#
-def do(path, *args):
-	player.emit(path, list(args))
-
-
-
 # Bind Keypad / GPIO events
 #
 @hplayer.on('keypad.left')
 @hplayer.on('keypad.left-hold')
 def prev(ev, *args):
     if player.isPlaying() and player.position() > introDuration:
-        do('playindex', hplayer.playlist.index())
+        hplayer.playlist.emit('playindex', hplayer.playlist.index())
     else:
-        do('playindex', hplayer.playlist.prevIndex())
+        hplayer.playlist.emit('playindex', hplayer.playlist.prevIndex())
         
 @hplayer.on('keypad.right')
 @hplayer.on('keypad.right-hold')
 def next(ev, *args):
-    do('playindex', hplayer.playlist.nextIndex())
+    hplayer.playlist.emit('playindex', hplayer.playlist.nextIndex())
 
 @hplayer.on('keypad.up')
 @hplayer.on('keypad.up-hold')
 def up(ev, *args):
-    do('volume', hplayer.settings.get('volume')+1)
+    hplayer.playlist.emit('volume', hplayer.settings.get('volume')+1)
 
 @hplayer.on('keypad.down')
 @hplayer.on('keypad.down-hold')
 def down(ev, *args):
-    do('volume', hplayer.settings.get('volume')-1)
+    hplayer.playlist.emit('volume', hplayer.settings.get('volume')-1)
     
 @hplayer.on('keypad.select')
 def down(ev, *args):
-    do('stop')
+    hplayer.playlist.emit('stop')
     global holdCounter
     holdCounter = 0
 
@@ -168,24 +161,17 @@ def lcd_update(self):
   
 
 	# Line 1 : VOLUME
-	lines[1] = keypad.CHAR_VOL +str(hplayer.settings.get('volume')).ljust(5, ' ')
+	lines[1] = keypad.CHAR_VOL +str(hplayer.settings.get('volume')).ljust(4, ' ')
+ 
+	# Line 1: PROGRESS
+	ctime = math.floor(player.status('time'))
+	ctime = str(math.floor(ctime/60)).rjust(2, '0')+':'+str(math.floor(ctime%60)).rjust(2, '0')              
+ 
+	lines[1] += ctime.rjust(11, ' ') 
 
-	# Line 1 : WIFI
-	lines[1] += keypad.CHAR_WIFI
-	if network.get_essid('wlan0'): 
-		lines[1] += (str( min(100, network.get_rssi('wlan0')) )+"%").ljust(6, ' ')
-		blinkCounter = 1
-	else: 
-		lines[1] += "---% "
-		blinkCounter = (blinkCounter+1) % blinkSpeed
-	
-	# Line 1 : ZYRE
-	lines[1] += keypad.CHAR_PEERS +str(zyre.activeCount()).ljust(2, ' ')[:2]+" "
 
 	# COLORS
-	if blinkCounter > 0: color = ( 1 if not media else 0 , 0 , 1 if media else 0)	# RED/GREEN: play state
-	else: color = ( 0, 1 , 0)														# BLUE flash: no wifi
-	
+	color = ( 1 if not media else 0 , 0 , 1 if media else 0)	# RED/GREEN: play state	
 	self.lcd.set_color( *color )
   
 	return lines
