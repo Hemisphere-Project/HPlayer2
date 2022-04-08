@@ -23,7 +23,7 @@ if [[ $(command -v apt) ]]; then
     apt install libcaca-dev libsdl2-dev libasound2-dev -y
 
     # hplayer2 dependencies
-    apt install python python-pip
+    apt install python python-pip rsync
     apt install python-termcolor python-evdev python-eventlet -y
     apt install python-watchdog python-pillow python-setuptools -y
     apt install ttf-dejavu-core python-pyserial libjack-dev libtool autotools-dev automake -y
@@ -44,7 +44,7 @@ elif [[ $(command -v pacman) ]]; then
     pacman -S alsa-lib alsa-firmware ttf-roboto --noconfirm --needed
 
     # hplayer2 dependencies
-    pacman -S pkg-config python python-pip cython liblo libxcrypt --noconfirm --needed
+    pacman -S pkg-config python python-pip cython liblo libxcrypt rsync --noconfirm --needed
     pacman -S python-termcolor python-evdev --noconfirm --needed
     pacman -S python-watchdog python-pillow python-setuptools --noconfirm --needed
     pacman -S ttf-dejavu python-pyserial --noconfirm --needed

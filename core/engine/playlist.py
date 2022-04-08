@@ -88,6 +88,9 @@ class Playlist(Module):
         self._index = -1
         self.update()
 
+    # JUST SET INDEX TO -1
+    def rearm(self):
+        self._index = -1
 
     # PLAY a playlist
     def play(self, plist=None, index=-1):
