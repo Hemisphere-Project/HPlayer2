@@ -22,7 +22,9 @@ keypad 		= hplayer.addInterface('keypad')
 # http2		= hplayer.addInterface('http2', 8080)
 # keyboard 	= hplayer.addInterface('keyboard')
 
-keypad.draw( [".:: HPlayer2 ::.", "     Hello!     "] )
+keypad.lcd.set_color( 100, 0, 100)
+keypad.draw( [".:: HPlayer2 ::.", "   Starting "+keypad.CHAR_LOVE+"   "] )
+time.sleep(2.0)  	# wait for USB to get ready
 
 # RSync USB (on start)
 #
@@ -40,8 +42,8 @@ if usbCount > 0:
 	def ledBLink():
 		global blink
 		blink = not blink
-		if blink: keypad.lcd.set_color( 1, 0, 1)
-		else: keypad.lcd.set_color( 0, 0, 0)
+		if blink: keypad.lcd.set_color( 100, 100, 0)
+		else: keypad.lcd.set_color( 100, 0, 0)
     
 	timer = RepeatTimer(0.2, ledBLink)
 	timer.start()
@@ -108,51 +110,104 @@ hplayer.on('keyboard.KEY_KPMINUS-down', 	lambda ev: broadcast('volume', hplayer.
 hplayer.on('keyboard.KEY_KPMINUS-hold', 	lambda ev: broadcast('volume', hplayer.settings.get('volume')-1))	
 
 
+# Keylock
+#
+keylock = True
+canToggle = True
+lockAlertCounter = 0
+
+def lockAlert():
+  global lockAlertCounter
+  if (keylock): lockAlertCounter = 10
+  else: lockAlertCounter = -10
+  return
+
+def toggleLock():
+	global keylock, canToggle
+	keylock = not keylock
+	canToggle = False
+	lockAlert()
+ 
+def checkHoldLock():
+  if canToggle and upHold and downHold: toggleLock()
+  
+upHold = False
+downHold = False
+
 # Bind Keypad / GPIO events
 #
 @hplayer.on('keypad.left')
 @hplayer.on('keypad.left-hold')
 def prev(ev, *args):
-    if player.isPlaying() and player.position() > introDuration:
-        broadcast('playindex', hplayer.playlist.index())
-    else:
-        broadcast('playindex', hplayer.playlist.prevIndex())
+	if keylock: 
+		return lockAlert()
+	if player.isPlaying() and player.position() > introDuration:
+			broadcast('playindex', hplayer.playlist.index())
+	else:
+			broadcast('playindex', hplayer.playlist.prevIndex())
         
 @hplayer.on('keypad.right')
 @hplayer.on('keypad.right-hold')
 def next(ev, *args):
-    broadcast('playindex', hplayer.playlist.nextIndex())
+	if keylock: 
+		return lockAlert()
+	broadcast('playindex', hplayer.playlist.nextIndex())
 
 @hplayer.on('keypad.up')
 @hplayer.on('keypad.up-hold')
 def up(ev, *args):
-    broadcast('volume', hplayer.settings.get('volume')+1)
+	if ev == 'keypad.up-hold':
+		global upHold
+		upHold = True
+		checkHoldLock()
+	if lockAlertCounter < 0:
+		return
+	if keylock: 
+		return lockAlert()
+	broadcast('volume', hplayer.settings.get('volume')+1)
+ 
+@hplayer.on('keypad.up-release')
+def releaseup(ev, *args):
+	global upHold
+	upHold = False
 
 @hplayer.on('keypad.down')
 @hplayer.on('keypad.down-hold')
 def down(ev, *args):
-    broadcast('volume', hplayer.settings.get('volume')-1)
+	if ev == 'keypad.down-hold':
+		global downHold
+		downHold = True
+		checkHoldLock()
+	if lockAlertCounter < 0:
+		return
+	if keylock: 
+		return lockAlert()
+	broadcast('volume', hplayer.settings.get('volume')-1)
+ 
+@hplayer.on('keypad.down-release')
+def releasedown(ev, *args):
+	global downHold
+	downHold = False
     
 @hplayer.on('keypad.select')
 def down(ev, *args):
-    broadcast('stop')
-    global holdCounter
-    holdCounter = 0
-
+	if keylock: 
+		return lockAlert()
+	broadcast('stop')
     
 @hplayer.on('keypad.select-hold')
-def down(ev, *args):
-    global holdCounter 
-    if holdCounter >= 0: 
-        holdCounter+=1
+def select(ev, *args):
+	if keylock: 
+		return lockAlert()
+	global holdCounter 
+	if holdCounter >= 0: 
+			holdCounter+=1
     
 holdCounter = 0
 scrollSpeed = 3.08
 introDuration = 1.5
 blinkCounter = 0
 blinkSpeed = 10
-
-
 
 
 
@@ -165,9 +220,19 @@ def lcd_update(self):
 		Timer(0.4, lambda: self.emit('hardreset')).start()
   
 	if holdCounter < 0:
-		self.lcd.set_color( 0, 0 , 0)
+		self.lcd.set_color( 100, 0 , 0)
 		return [".:: HPlayer2 ::.", "   restarting   "]
-    
+
+	global lockAlertCounter, canToggle
+	if lockAlertCounter > 0:
+		lockAlertCounter -= 1
+		return ["... Locked ! ...", "                "]
+	elif lockAlertCounter < 0:
+		lockAlertCounter += 1
+		return [".. Unlocked ! ..", "                "]
+	else: 
+		canToggle = True
+	
 	lines = ["", ""]
  
 	media = player.status()['media']
@@ -204,8 +269,8 @@ def lcd_update(self):
 	lines[1] += keypad.CHAR_PEERS +str(zyre.activeCount()).ljust(2, ' ')[:2]+" "
 
 	# COLORS
-	if blinkCounter > 0: color = ( 1 if not media else 0 , 0 , 1 if media else 0)	# RED/GREEN: play state
-	else: color = ( 0, 1 , 0)														# BLUE flash: no wifi
+	if blinkCounter > 0: color = ( 100 if not media else 0 , 100, 100 if not media else 0)	# RED/GREEN: play state
+	else: color = ( 0, 0 , 100)														# BLUE flash: no wifi
 	
 	self.lcd.set_color( *color )
   
