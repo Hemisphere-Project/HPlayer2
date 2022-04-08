@@ -111,7 +111,7 @@ hplayer.on('keyboard.KEY_KPMINUS-hold', 	lambda ev: broadcast('volume', hplayer.
 @hplayer.on('keypad.left')
 @hplayer.on('keypad.left-hold')
 def prev(ev, *args):
-    if player.isPlaying() and player.position() > 1:
+    if player.isPlaying() and player.position() > introDuration:
         broadcast('playindex', hplayer.playlist.index())
     else:
         broadcast('playindex', hplayer.playlist.prevIndex())
@@ -141,44 +141,49 @@ def down(ev, *args):
 @hplayer.on('keypad.select-hold')
 def down(ev, *args):
     global holdCounter 
-    holdCounter+=1
-    if holdCounter > 10:
-        keypad.emit('hardreset')
+    if holdCounter >= 0: 
+        holdCounter+=1
     
 holdCounter = 0
-titleScroller = 0
-titleCurrent = ""
-titleSpeed = 2.5
+scrollSpeed = 3.08
+introDuration = 1.5
 blinkCounter = 0
 blinkSpeed = 10
 
 # PATCH Keypad LCD update
 def lcd_update(self):
+    
+	global holdCounter, blinkCounter
+	if holdCounter > 10:
+		holdCounter = -1
+		Timer(0.4, lambda: self.emit('hardreset')).start()
+  
+	if holdCounter < 0:
+		self.lcd.set_color( 0, 0 , 0)
+		return [".:: HPlayer2 ::.", "   restarting   "]
+    
 	lines = ["", ""]
  
 	media = player.status()['media']
-	if media: media = os.path.basename(media)[:-4]
-	
-	global titleCurrent, titleScroller, blinkCounter
-	if media != titleCurrent:
-		titleScroller = 0
-		titleCurrent = media
-	elif titleCurrent:
-		titleScroller = (titleScroller+1) % ( (len(titleCurrent)+5)*titleSpeed)
-	
-	if media:
-		offset = min( max(0, int(titleScroller/titleSpeed)-9), len(titleCurrent)-8)
-		media = media[offset:].ljust(16, ' ')
  
 	# Line 0 : MEDIA
-	lines[0] = str(hplayer.playlist.index()+1) + "/" + str(hplayer.playlist.size())	
+	playlistCount = str(hplayer.playlist.index()+1) + "/" + str(hplayer.playlist.size())	
 	if media:
-		lines[0] = keypad.CHAR_PLAY + lines[0] + " " + media[:(14-len(lines[0]))] 
+		lines[0] = keypad.CHAR_PLAY + playlistCount + " " 
+		
+		media = os.path.basename(media)[:-4]
+		skroller3 = max(0, (player.position()*scrollSpeed) % len(media) - introDuration * scrollSpeed)
+		offset = min( int(skroller3), len(media)-15 +len(lines[0]) )
+		lines[0] += media[offset:]
+
 	else:
-		lines[0] = keypad.CHAR_STOP + lines[0] + ' '*(15-len(lines[0]))
+		lines[0] = keypad.CHAR_STOP + playlistCount
+	
+	lines[0] = lines[0].ljust(16, ' ')[:16]
+  
 
 	# Line 1 : VOLUME
-	lines[1] += keypad.CHAR_VOL +str(hplayer.settings.get('volume')).ljust(5, ' ')
+	lines[1] = keypad.CHAR_VOL +str(hplayer.settings.get('volume')).ljust(5, ' ')
 
 	# Line 1 : WIFI
 	lines[1] += keypad.CHAR_WIFI
