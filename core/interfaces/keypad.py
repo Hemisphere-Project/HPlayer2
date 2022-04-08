@@ -55,8 +55,8 @@ class KeypadInterface (BaseInterface):
         return lines
 
 
-    def draw(self):
-        lines = self.update()
+    def draw(self, forced=None):
+        lines = self.update() if not forced else forced
         if lines[0] != self.display[0]:
             self.display[0] = lines[0]
             self.lcd.set_cursor(0, 0)

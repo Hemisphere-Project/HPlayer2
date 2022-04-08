@@ -22,11 +22,14 @@ keypad 		= hplayer.addInterface('keypad')
 # http2		= hplayer.addInterface('http2', 8080)
 # keyboard 	= hplayer.addInterface('keyboard')
 
+keypad.draw( [".:: HPlayer2 ::.", "     Hello!     "] )
 
 # RSync USB (on start)
 #
 usbCount = len([name for name in os.listdir('/data/usb') if os.path.isfile( os.path.join('/data/usb', name) )])
 if usbCount > 0:
+    
+	keypad.draw( [".:: HPlayer2 ::.", "    USB sync    "] )
     
 	class RepeatTimer(Timer):
 		def run(self):
@@ -148,6 +151,10 @@ scrollSpeed = 3.08
 introDuration = 1.5
 blinkCounter = 0
 blinkSpeed = 10
+
+
+
+
 
 # PATCH Keypad LCD update
 def lcd_update(self):
