@@ -462,6 +462,8 @@ $(document).ready(function() {
     };
 
     playlistMedia = function() {
+        if ($('#playlist').length == 0) return
+        
         $('#playlist').treeview('getNodes').forEach(function(node) {
             if (last_status && (node.nodeId == last_status['index'])) node.backColor = "#343"
             else node.backColor = "#333"

@@ -113,6 +113,7 @@ class HPlayer2(EventEmitterX):
             @p.on('hardreset')
             def reset(ev, *args):
                 self.log('HARD KILL FROM PLAYER')
+                os.system('pkill mpv')
                 os._exit(0)
 
             self.emit('player-added', p)
@@ -177,6 +178,7 @@ class HPlayer2(EventEmitterX):
             @s.on('hardreset')
             def reset(ev, *args):
                 self.log('HARD KILL FROM PLAYER')
+                os.system('pkill mpv')
                 os._exit(0)
 
             self.emit('sampler-added', s)

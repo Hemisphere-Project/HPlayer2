@@ -36,6 +36,7 @@ except: pass
 # INTERFACES
 hplayer.addInterface('keyboard')
 hplayer.addInterface('osc', 1222, 3737)
+hplayer.addInterface('serial', 'M5')
 hplayer.addInterface('zyre')
 hplayer.addInterface('mqtt', '10.0.0.1')
 hplayer.addInterface('http2', 8080)
@@ -63,6 +64,20 @@ def broadcast(path, *args):
 		hplayer.interface('zyre').node.broadcast(path, list(args), 500)   ## WARNING LATENCY !!
 	else:
 		hplayer.interface('zyre').node.broadcast(path, list(args))
+
+
+# PIR
+#
+@hplayer.on('*.pir')
+def pir(ev, *args):
+    if len(args) > 0:
+        if args[0] == 'ON':
+             if not video.isPlaying():
+                hplayer.playlist.playindex(0)
+             hplayer.settings.set('loop', 2)
+        elif args[0] == 'OFF':
+             if video.isPlaying():
+                hplayer.settings.set('loop', 0)
 
 
 # Keyboard
