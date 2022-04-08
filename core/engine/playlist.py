@@ -133,17 +133,11 @@ class Playlist(Module):
 
     # NEXT item in playlist
     def next(self):
-        i = self._index + 1
-        if i >= self.size():
-            i = 0
-        self.playindex(i)
+        self.playindex( self.nextIndex() )
 
     # PREVIOUS item in playlist
     def prev(self):
-        i = self._index - 1
-        if i < 0:
-            i = self.size()-1
-        self.playindex(i)
+        self.playindex( self.prevIndex() )
 
     # LAST item
     def last(self):
@@ -171,11 +165,14 @@ class Playlist(Module):
 
     # PREVIOUS item in playlist
     def prevIndex(self):
-        return (self._index - 1) % self.size() if self.size() > 0 else 0
+        i = self._index - 1
+        if i < 0: i = self.size()-1
+        return i if i > 0 else 0
 
     # LAST item
     def lastIndex(self):
-        return self.size()-1
+        i = self._index + 1
+        return i if i < self.size() else 0
 
     # first item
     def firstIndex(self):
