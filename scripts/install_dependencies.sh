@@ -22,11 +22,14 @@ if [[ $(command -v apt) ]]; then
     apt install libxrandr-dev libgles2-mesa-dev libgles1-mesa-dev libv4l-dev libxss-dev libgl1-mesa-dev -y
     apt install libcaca-dev libsdl2-dev libasound2-dev -y
 
+    # GStreamer
+    apt install libdrm libmpg123 gstreamer1.0-plugins-ugly libgstreamer1.0-dev libgstreamer-plugins-base1.0-dev gstreamer1.0-pulseaudio gstreamer1.0-x gstreamer1.0-plugins-bad gstreamer1.0-alsa gstreamer1.0-plugins-base gstreamer1.0-plugins-good -y
+
     # hplayer2 dependencies
-    apt install python python-pip
-    apt install python-liblo python-netifaces python-termcolor python-evdev python-flask-socketio python-eventlet -y
-    apt install python-watchdog python-pillow python-setuptools python-zeroconf python-socketio -y
-    apt install ttf-dejavu-core python-pyserial -y
+    apt install python3 python3-pip rsync
+    apt install python3-termcolor python3-evdev python3-eventlet -y
+    apt install python3-watchdog python3-pillow python3-setuptools -y
+    apt install ttf-dejavu-core python3-pyserial libjack-dev libtool autotools-dev automake liblo7 -y
 
     # RPi
     if [[ $(uname -m) = armv* ]]; then
@@ -37,20 +40,15 @@ if [[ $(command -v apt) ]]; then
 elif [[ $(command -v pacman) ]]; then
     DISTRO='arch'
 
-    # libass / ffmpeg / mpv dependencies
-    pacman -S freetype2 fribidi fontconfig yasm git autoconf pkg-config libtool --noconfirm --needed
-    pacman -S lua luajit libvdpau libva libxv libjpeg libxkbcommon libxrandr libv4l libxss libcaca sdl2 --noconfirm --needed
-    pacman -S base-devel libx264 mesa fbida libbluray --noconfirm --needed
-    pacman -S alsa-lib alsa-firmware ttf-roboto --noconfirm --needed
-
+    # GStreamer
+    pacman -S gst-python libdrm mpg123 gst-plugins-ugly gst-libav gst-plugins-base-libs gstreamer gst-plugins-bad gst-plugins-base gst-plugins-good --noconfirm --needed
+    
     # hplayer2 dependencies
-    pacman -S python python-pip cython liblo --noconfirm --needed
-    pacman -S python-pyliblo python-netifaces python-termcolor python-evdev python-flask-socketio  --noconfirm --needed
-    pacman -S python-watchdog python-pillow python-setuptools python-zeroconf python-socketio --noconfirm --needed
-    pacman -S ttf-dejavu python-pyserial --noconfirm --needed
+    pacman -S pkg-config python python-pip cython liblo libxcrypt python-termcolor python-evdev python-eventlet \
+        python-watchdog python-pillow python-setuptools ttf-dejavu python-pyserial rsync --noconfirm --needed
 
     # RPi
-    if [[ $(uname -m) = armv* ]]; then
+    if [[ $(uname -m) = armv* || $(uname -m) = aarch64 ]]; then
       pacman -S python-queuelib i2c-tools --noconfirm --needed
     fi
 
@@ -68,20 +66,19 @@ fi
 ####
 
 # PIP
-/usr/bin/yes | pip3 install --upgrade pymitter
-/usr/bin/yes | pip3 install --upgrade mido
-/usr/bin/yes | pip3 install --upgrade python-rtmidi
-/usr/bin/yes | pip3 install --upgrade paho-mqtt
+pip3 install -r requirements.txt
 
 # RPi
-if [[ $(uname -m) = armv* ]]; then
-    /usr/bin/yes | pip3 install --upgrade RPi.GPIO
+if [[ $(uname -m) = armv* || $(uname -m) = aarch64 ]]; then
+    /usr/bin/yes | pip install --upgrade RPi.GPIO
 
     git clone https://github.com/adafruit/Adafruit_Python_CharLCD.git
     cd Adafruit_Python_CharLCD
-    python3 setup.py install
+    python setup.py install
     cd .. && rm -Rf Adafruit_Python_CharLCD
 fi
+
+exit 0
 
 # ZYRE
 cd /tmp
@@ -94,14 +91,14 @@ git clone git://github.com/zeromq/czmq.git && cd czmq
 ./autogen.sh && ./configure && make check -j4
 make install && ldconfig
 ln -s /usr/local/lib/libczmq.so.4 /usr/lib/
-cd bindings/python/ && python3 setup.py build && python3 setup.py install
+cd bindings/python/ && python setup.py build && python setup.py install
 
 cd /tmp
 git clone git://github.com/zeromq/zyre.git && cd zyre
 ./autogen.sh && ./configure && make check -j4
 make install && ldconfig
 ln -s /usr/local/lib/libzyre.so.2 /usr/lib/
-cd bindings/python/ && python3 setup.py build && python3 setup.py install
+cd bindings/python/ && python setup.py build && python setup.py install
 
 
 

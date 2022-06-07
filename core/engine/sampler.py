@@ -82,7 +82,7 @@ class Sampler(Module):
             p.quit()
     
     # Play Media
-    def play(self, media):
+    def play(self, media, oneloop=False):
         freeP = None
         _media = self.parent.files.listFiles(media)[0]  # find first matching media
         if not _media:
@@ -106,15 +106,17 @@ class Sampler(Module):
             freeP = self.players()[0].name   # default: take 0
 
         self._players[freeP].play(_media)
+        self._players[freeP]._applyOneLoop(oneloop)
 
         self._usedHistory = [x for x in self._usedHistory if x != freeP]
         self._usedHistory.append(freeP)
-        
-        
 
     # STOP Playback
     def stop(self, media=None):
+        _media = self.parent.files.listFiles(media)[0]  # find first matching media
         for p in self.players(): 
-            if not media or p.status('media') == media:
+            if not _media or p.status('media') == _media:
                 p.stop()
+
+    
     

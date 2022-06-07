@@ -34,8 +34,9 @@ try:
 except: pass
 
 # INTERFACES
-# hplayer.addInterface('keyboard')
-# hplayer.addInterface('osc', 1222, 3737)
+hplayer.addInterface('keyboard')
+hplayer.addInterface('osc', 1222, 3737)
+hplayer.addInterface('serial', 'M5')
 hplayer.addInterface('zyre')
 hplayer.addInterface('mqtt', '10.0.0.1')
 hplayer.addInterface('http2', 8080)
@@ -49,6 +50,83 @@ if myESP:
 if hplayer.isRPi():
     video.addOverlay('rpifade')
 
+
+
+#
+# SYNC PLAY
+#
+
+# Broadcast Order on OSC/Zyre to other Pi's
+#
+def broadcast(path, *args):
+	# print(path, list(args))
+	if path.startswith('play'):
+		hplayer.interface('zyre').node.broadcast(path, list(args), 500)   ## WARNING LATENCY !!
+	else:
+		hplayer.interface('zyre').node.broadcast(path, list(args))
+
+
+# PIR
+#
+@hplayer.on('*.pir')
+def pir(ev, *args):
+    if len(args) > 0:
+        if args[0] == 'ON':
+             if not video.isPlaying():
+                hplayer.playlist.playindex(0)
+             hplayer.settings.set('loop', 2)
+        elif args[0] == 'OFF':
+             if video.isPlaying():
+                hplayer.settings.set('loop', 0)
+
+
+# Keyboard
+#
+dotHold = False
+
+@hplayer.on('keyboard.*')
+def keyboard(ev, *args):
+    global dotHold
+    
+    base, key = ev.split("keyboard.KEY_")
+    if not key: return
+    
+    key, mode = key.split("-")
+    if key.startswith('KP'): key = key[2:]
+    
+    # 0 -> 9
+    if key.isdigit() and mode == 'down':
+        numk = int(key)
+        if dotHold:
+            # select folder (locally only)
+            hplayer.files.selectDir(numk)
+                
+        else:
+            # play sequence regie
+            hplayer.interface('regie').playseq(hplayer.files.currentIndex(), numk-1)
+            
+        
+    elif key == 'ENTER' and mode == 'down':
+        broadcast('stop')
+    
+    elif key == 'DOT':
+        dotHold = (mode != 'up')
+        
+    elif key == 'NUMLOCK' and mode == 'down': pass
+    elif key == 'SLASH' and mode == 'down': pass
+    elif key == 'ASTERISK' and mode == 'down': pass
+    elif key == 'BACKSPACE' and mode == 'down': pass
+    
+    # volume
+    elif key == 'PLUS' and (mode == 'down' or mode == 'hold'):
+        broadcast('volume', hplayer.settings.get('volume')+1)
+    elif key == 'MINUS' and (mode == 'down' or mode == 'hold'):
+        broadcast('volume', hplayer.settings.get('volume')-1)	
+
+
+#
+# LIGHTS ESP32
+#
 
 # ESP -> MQTT / BT
 lastEspEvent = 'sacvp.esp'  # save last event
@@ -85,7 +163,7 @@ def espStop(ev, *args):
 # default volume
 @video.on('ready')
 def init(ev, *args):
-    hplayer.settings.set('volume', 50)
+    hplayer.settings.set('volume', 100)
     hplayer.settings.set('loop', -1)
 
 # RUN

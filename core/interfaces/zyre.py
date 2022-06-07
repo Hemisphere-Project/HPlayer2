@@ -359,8 +359,8 @@ class ZyreNode ():
         # Zyre 
         self.zyre = Zyre(None)
         if netiface:
-            self.zyre.set_interface( string_at(netiface) )
-            self.interface.log("ZYRE Node forced netiface: ", string_at(netiface) )
+            self.zyre.set_interface( str(netiface).encode() )
+            self.interface.log("ZYRE Node forced netiface: ", str(netiface).encode() )
 
         self.zyre.set_name(str(self.interface.hplayer.name()).encode())
         self.zyre.set_header(b"TS-PORT",  str(get_port(self.timereply)).encode())
@@ -676,9 +676,9 @@ class ZyreInterface (BaseInterface):
         self.node = ZyreNode(self, netiface)
 
         # Publish self status
-        @self.hplayer.on('player.playing')
-        @self.hplayer.on('player.paused')
-        @self.hplayer.on('player.stopped')
+        @self.hplayer.on('*.playing')
+        @self.hplayer.on('*.paused')
+        @self.hplayer.on('*.stopped')
         def st(ev, *args):
             # print('peer.status', self.hplayer.statusPlayers())
             self.node.publish('peer.status', self.hplayer.statusPlayers())
@@ -687,6 +687,11 @@ class ZyreInterface (BaseInterface):
         @self.hplayer.on('settings.updated')
         def se(ev, settings):
             self.node.publish('peer.settings', settings)
+            
+        # Publish when self do play seq
+        @self.hplayer.on('*.playingseq')
+        def se(ev, *args):
+            self.node.publish('peer.playingseq', args)
 
         # Subscribe to peers
         @self.hplayer.on('*.peers.subscribe')

@@ -1,0 +1,90 @@
+<!DOCTYPE HTML>
+<html>
+
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+    <link rel="shortcut icon" href="/res/hemi.ico" />
+
+    <title>HPlayer2</title>
+
+    <script type="text/javascript" src="/res/jquery-3.3.1.min.js"></script>
+    <script type="text/javascript" src="/res/socket.io.v4.js"></script>
+
+    <link href="/res/css/fontawesome.min.css" rel="stylesheet">
+    <link href="/res/css/solid.min.css" rel="stylesheet">
+    <link href="/res/css/regular.min.css" rel="stylesheet">
+
+    <link rel="stylesheet" href="/res/bootstrap.min.css">
+    <script type="text/javascript" src="/res/bootstrap.bundle.min.js"></script>
+
+    <link rel="stylesheet" href="/res/bootstrap-treeview.min.css">
+    <script type="text/javascript" src="/res/bootstrap-treeview-custom.js"></script>
+
+    <link rel="stylesheet" href="/res/jquery.dm-uploader.min.css">
+    <script type="text/javascript" src="/res/jquery.dm-uploader.min.js"></script>
+    <script type="text/javascript" src="/res/uploader-profile.js"></script>
+
+    <link rel="stylesheet" href="/style.css?6">
+    <script type="text/javascript" src="/script.js"></script>
+</head>
+
+<body>
+  <nav class="navbar navbar-dark bg-dark mb-3">
+    <span id="playerName"></span>
+    <span id="link-connected">connected</span>
+    <span id="link-disconnected">disconnected</span>
+  </nav>
+
+  <div class="row panel">
+    <div class="col-sm-0 col-md-1 col-lg-2 col-xl-3"></div>
+    <div class="col-sm-12 col-md-10 col-lg-8 col-xl-6">
+
+      <hr />
+
+      <div class="row">
+        <div class="col-12 col-sm-5">
+            <div id="drag-and-drop-zone" class="dm-uploader p-2 text-center" style="height: 54px;">
+                <!-- <h3 class="mb-5 mt-5 text-muted d-none d-xl-block">Drag &amp; drop Files here</h3> -->
+                <div class="btn btn-primary btn-block mb-5">
+                  <span>Envoyer un media</span>
+                  <input type="file" title='Click to add Files' />
+                </div><!-- /uploader -->
+            </div>
+        </div>
+        <div class="col-12 col-sm-7">
+            <div class="card" style="height:300px;margin-bottom: 10px;" id="upload-list">
+                <ul class="list-unstyled p-2 d-flex flex-column col" id="files" style="margin-bottom: 0">
+                <li class="text-muted text-center empty"></li>
+                </ul>
+            </div>
+        </div>
+      </div>
+
+      <hr />
+
+      <!-- File item template -->
+      <script type="text/html" id="files-template">
+        <li class="media">
+            <div class="media-body mb-1">
+              <p class="mb-2">
+                <strong>%%filename%%</strong> - Status: <span class="text-muted">Waiting</span>
+              </p>
+              <div class="progress mb-2">
+                <div class="progress-bar progress-bar-striped progress-bar-animated bg-primary"
+                  role="progressbar"
+                  style="width: 0%"
+                  aria-valuenow="0" aria-valuemin="0" aria-valuemax="100">
+                </div>
+              </div>
+              <hr class="mt-1 mb-1" />
+            </div>
+          </li>
+        </script>
+
+    </div>
+  </div>
+</body>
+
+</html>
+

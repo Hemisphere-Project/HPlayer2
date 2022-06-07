@@ -35,10 +35,18 @@ int remotePORT_osc = 4001;
 // SCL = 14 / SDA = 2 / RX = 3 / TX = 1
 //
 int *pins;
-int pinout[1][2] = {  {D6, D7}                           // model 0 : ciconia 1                   
+int pinout[1][2] = {  {3, 13}                           // model 0 : ciconia 1                   
                       //{D3, D7, D6, 14, 2, 3, 1}    
                     };
 
+
+void ICACHE_RAM_ATTR trig0() {
+  event_trigger(pins[0], next);
+};
+
+void ICACHE_RAM_ATTR trig1() {
+  event_trigger(pins[1], prev);
+};
 
 void setup(void) {
   LOGSETUP();
@@ -49,8 +57,8 @@ void setup(void) {
   settings_load( keys );
 
   // Settings SET EEPROM !
-  // settings_set("id", 2);
-  // settings_set("model", 0);   // 0: remote ciconia 
+  //settings_set("id", 2);
+  //settings_set("model", 0);   // 0: remote ciconia 
 
   // Oled
   oled_init();
@@ -71,17 +79,13 @@ void setup(void) {
   pins = pinout[settings_get("model")];
 
   // SET PULLUP
-  for(int k=0; k<5; k++) pinMode(pins[k], INPUT_PULLUP);
+  for(int k=0; k<2; k++) pinMode(pins[k], INPUT_PULLUP);
   
   // next 
-  attachInterrupt(digitalPinToInterrupt(pins[0]), []() {
-    event_trigger(pins[0], next);
-  }, FALLING);
+  attachInterrupt(digitalPinToInterrupt(pins[0]), trig0, FALLING);
 
   // prev
-  attachInterrupt(digitalPinToInterrupt(pins[1]), []() {
-    event_trigger(pins[1], prev);
-  }, FALLING);
+  attachInterrupt(digitalPinToInterrupt(pins[1]), trig1, FALLING);
 
   //UDP
   // input socket

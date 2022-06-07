@@ -78,7 +78,7 @@ class OscInterface (BaseInterface):
 
         @osc(None, None)
         def fallback(path, args, types, src):
-            self.emit(path[1:], args)
+            self.emit(path[1:], *args)
 
         # Advertize on ZeroConf
         zeroconf = Zeroconf()

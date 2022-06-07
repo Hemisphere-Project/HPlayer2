@@ -8,6 +8,7 @@ String lastdisp;
 
 void oled_init() {
   u8x8.begin();
+  u8x8.setContrast(1);
 }
 
 void oled_hello() {

@@ -6,9 +6,13 @@ import time
 import tempfile
 tempfile.tempdir = '/data/var/tmp'
 
+# MEDIA PATH
+mediaPath = '/data/media'
+if "-sync" in network.get_hostname():
+    mediaPath = '/data/sync'
 
 # INIT HPLAYER
-hplayer = HPlayer2('/data/media', '/data/hplayer2-gadagne21.cfg')
+hplayer = HPlayer2(mediaPath, '/data/hplayer2-gadagne21.cfg')
 
 
 
@@ -31,7 +35,7 @@ hplayer.addInterface('serial', "^CP2102", 20)
 if hplayer.isRPi():
     hplayer.addInterface('gpio', [21,20,16,26,14,15], 310)
 if "-sync" in network.get_hostname():
-    	hplayer.addInterface('zyre', 'eth0')
+    	hplayer.addInterface('zyre')
 
 
 
@@ -50,10 +54,10 @@ def doPlay(media, debounce=0):
 	debounceLastTime = now
 	debounceLastMedia = media
 
-	# PLAY SYNC
+	# PLAY SYNC -> forward to peers
 	if "-sync" in network.get_hostname():
 		if "-master" in network.get_hostname():
-			hplayer.getInterface('zyre').node.broadcast('/play', list(media), 200)
+			hplayer.interface('zyre').node.broadcast('playzinc', media, 200)
 			print('doPLay: master.. broadcast')
 		else:
 			print('doPLay: slave.. do nothing')
@@ -66,6 +70,16 @@ def doPlay(media, debounce=0):
 		time.sleep(0.05)
 		hplayer.settings.set('mute', False)
 
+
+# PLAY sync on peer (add dispo name in media => 0_Pirogue1*.*)
+@hplayer.on('zyre.playzinc')
+def playZ(ev, *args):
+	media = args[0].replace('*.*', network.get_hostname().split('-sync')[0]+'*.*')
+	hplayer.settings.set('mute', True)
+	time.sleep(0.1)
+	hplayer.playlist.play(media)
+	time.sleep(0.05)
+	hplayer.settings.set('mute', False)
 
 
 # DEFAULT File
@@ -111,7 +125,7 @@ def togglePlay(ev, *args):
 # SERIAL events
 @hplayer.on('serial.playsample')
 def playsample(ev, *args):
-    sampler.play( args[0]+"_*.*" )
+    sampler.play( args[0]+"_*.*", oneloop = True )  # !!!! Nivard: False / Puzzle: True !!!!
 
 @hplayer.on('serial.stopsample')
 def playsample(ev, *args):

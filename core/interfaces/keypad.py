@@ -6,13 +6,19 @@ import os
 
 class KeypadInterface (BaseInterface):
 
-    buttons = ( (LCD.SELECT, 'Select', (1,1,1)),
-                (LCD.LEFT,   'Left'  , (1,0,0)),
-                (LCD.UP,     'Up'    , (0,0,1)),
-                (LCD.DOWN,   'Down'  , (0,1,0)),
-                (LCD.RIGHT, 'Right' , (1,0,1)) )
+    buttons = ( (LCD.SELECT, 'select',     (1,1,1)),
+                (LCD.LEFT,   'left'  ,  (1,0,0)),
+                (LCD.UP,     'up'    ,  (0,0,1)),
+                (LCD.DOWN,   'down'  ,  (0,1,0)),
+                (LCD.RIGHT,  'right' ,  (1,0,1)) )
 
     display = ["", ""]
+    
+    CHAR_WIFI   = '\x00'
+    CHAR_PEERS  = '\x01'
+    CHAR_VOL    = '\x02'
+    CHAR_PLAY   = '\x03'
+    CHAR_STOP   = '\x04'
 
     def __init__(self, hplayer):
         super(KeypadInterface, self).__init__(hplayer, "KEYPAD")
@@ -22,6 +28,15 @@ class KeypadInterface (BaseInterface):
         except:
             self.log("LCD Keypad not found ...")
             self.lcd = None
+        
+        self.lcd.set_color(0, 0, 0)
+        
+        # special chars # http://www.quinapalus.com/hd44780udg.html
+        self.lcd.create_char(0, [0,0,28,6,27,13,21,0])      #  CHAR_WIFI
+        self.lcd.create_char(1, [27,27,27,0,27,27,27,0])    #  CHAR_PEERS
+        self.lcd.create_char(2, [2,3,2,2,14,30,12,0])       #  CHAR_VOL
+        self.lcd.create_char(3, [0,8,12,14,12,8,0,0])       #  CHAR_PLAY
+        self.lcd.create_char(4, [0,0,14,14,14,0,0,0])     #  CHAR_STOP
 
     def update(self):
         lines = ["", ""]
@@ -40,8 +55,8 @@ class KeypadInterface (BaseInterface):
         return lines
 
 
-    def draw(self):
-        lines = self.update()
+    def draw(self, forced=None):
+        lines = self.update() if not forced else forced
         if lines[0] != self.display[0]:
             self.display[0] = lines[0]
             self.lcd.set_cursor(0, 0)
@@ -59,41 +74,31 @@ class KeypadInterface (BaseInterface):
 
         self.log("starting KEYPAD listener")
 
-        pressed = dict.fromkeys(['UP', 'DOWN', 'RIGHT', 'LEFT', 'SEL'], 0)
-        debounce = 5
+        pressed = {}
+        
+        def processBtn(btn):
+            if not btn[1] in pressed:
+                pressed[btn[1]] = 0
+            
+            if self.lcd.is_pressed(btn[0]):
+                if pressed[btn[1]] == 0:
+                    self.emit(btn[1])
+                    pressed[btn[1]] = 5    
+                elif pressed[btn[1]] == 1:
+                    self.emit(btn[1]+'-hold')
+                else:
+                    pressed[btn[1]] -= 1
+            else:    
+                pressed[btn[1]] = 0
+                
 
         while self.isRunning():
 
-            if self.lcd.is_pressed(LCD.UP) and pressed['UP'] == 0:
-                self.emit('up')
-                pressed['UP'] = debounce
-            elif pressed['UP'] > 0:
-                pressed['UP']-=1
-
-            if self.lcd.is_pressed(LCD.DOWN) and pressed['DOWN'] == 0:
-                self.emit('down')
-                pressed['DOWN'] = debounce
-            elif pressed['DOWN'] > 0:
-                pressed['DOWN']-=1
-
-            if self.lcd.is_pressed(LCD.RIGHT) and pressed['RIGHT'] == 0:
-                self.emit('right')
-                pressed['RIGHT'] = debounce
-            elif pressed['RIGHT'] > 0:
-                pressed['RIGHT']-=1
-
-            if self.lcd.is_pressed(LCD.LEFT) and pressed['LEFT'] == 0:
-                self.emit('left')
-                pressed['LEFT'] = debounce
-            elif pressed['LEFT'] > 0:
-                pressed['LEFT']-=1
-
-            if self.lcd.is_pressed(LCD.SELECT) and pressed['SEL'] == 0:
-                self.emit('select')
-                pressed['SEL'] = debounce
-            elif pressed['SEL'] > 0:
-                pressed['SEL']-=1
-
+            for btn in self.buttons:
+                processBtn(btn)
+                
             self.draw()
 
             sleep(0.04)
+        
+        self.lcd.set_color(0, 0, 0)

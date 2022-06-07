@@ -1,5 +1,4 @@
 from .base import BaseInterface
-import socketio
 import eventlet
 from watchdog.observers import Observer
 from watchdog.events import PatternMatchingEventHandler
@@ -17,7 +16,8 @@ from zeroconf import ServiceInfo, Zeroconf
 thread = None
 thread_lock = threading.Lock()
 
-REGIE_PATH = '/opt/RPi-Regie'
+REGIE_PATH1 = '/opt/RPi-Regie'
+REGIE_PATH2 = '/data/RPi-Regie'
 
 
 class RegieInterface (BaseInterface):
@@ -26,6 +26,9 @@ class RegieInterface (BaseInterface):
         super(RegieInterface, self).__init__(hplayer, "Regie")
         self._port = port
         self._datapath = datapath
+        self._server = None
+        
+        
 
     # HTTP receiver THREAD
     def listen(self):
@@ -45,12 +48,118 @@ class RegieInterface (BaseInterface):
         # Start server
         self.log( "regie interface on port", self._port)
         with ThreadedHTTPServer(self, self._port) as server:
+            self._server = server
             self.stopped.wait()
 
+        self._server = None
+        
         # Unregister ZeroConf
         zeroconf.unregister_service(info)
         zeroconf.close()
+        
+        
+    def projectPath(self):
+        return os.path.join(self._datapath, 'project.json')
+    
 
+    def projectRaw(self):
+        project =  '{"pool":[], "project":[[]]}'
+        if os.path.isfile(self.projectPath()):
+            with open( self.projectPath(), 'r') as file:
+                project = file.read()
+        return project
+        
+        
+    # parse locally for programatic execution
+    def reload(self):    
+        try:
+            self._project = json.loads(self.projectRaw())
+        except:
+            self._project = None
+            self.log("Error while parsing project..")
+            
+        # print(self._project)
+        
+        return self._project
+    
+    
+    # play sequence
+    def playseq(self, sceneIndex, seqIndex):
+        self.log("PLAYSEQ")
+        
+        try:
+            # self.log('PLAYSEQ', seqIndex, sceneIndex, boxes)
+            orderz = []
+            boxes = [b for b in self._project["project"][0][sceneIndex]["allMedias"] if b["y"] == seqIndex]
+            for b in boxes:
+                peerName = self._project["pool"][ b["x"] ]["name"]
+                
+                # MEDIA
+                order = { 'peer': peerName, 'synchro':  True}
+                
+                if b["media"] in ['stop', 'pause', 'unfade'] :
+                    order["event"] = b["media"]
+                elif b["media"] == '...':
+                    order["event"] = 'continue'
+                elif b["media"].startswith('fade'):
+                    order["event"] = 'fade'
+                    order["data"] = b["media"].split('fade ')[1]
+                else:
+                    order["event"] = 'playthen'
+                    order["data"] = [ self._project["project"][0][sceneIndex]["name"] + '/' + b["media"] ]
+                    
+                    # ON MEDIA END
+                    if 'onend' in b:
+                        if b['onend'] == 'next':
+                            order["data"].append( {'event': 'do-playseq', 'data': [sceneIndex, seqIndex+1] } )
+                        elif b['onend'] == 'prev':
+                            order["data"].append( {'event': 'do-playseq', 'data': [sceneIndex, seqIndex-1] } )
+                        elif b['onend'] == 'replay':
+                            order["data"].append( {'event': 'do-playseq', 'data': [sceneIndex, seqIndex] } )                  
+    
+                orderz.append(order)
+                
+                
+                        
+                
+                # LOOP
+                if b["loop"] == 'loop':
+                    orderz.append( { 'peer': peerName, 'event':  'loop', 'data': 1} )
+                elif b["loop"] == 'unloop':
+                    orderz.append( { 'peer': peerName, 'event':  'unloop'} )
+
+                # LIGHT
+                if b["light"] and b["light"] != '...':
+                    order = { 'peer': peerName, 'synchro':  True, 'event': 'esp'}
+                    
+                    if b["light"].startswith('light'):
+                        order["data"] = {
+                            'topic': 'leds/all',
+                            'data': b["light"].split('light ')[1]
+                        }
+                    
+                    elif b["light"].startswith('preset'):
+                        order["data"] = {
+                            'topic': 'leds/mem',
+                            'data': b["light"].split('preset ')[1]
+                        }
+                        
+                    elif b["light"].startswith('off'):
+                        order["data"] = {
+                            'topic': 'leds/stop',
+                            'data': ''
+                        }
+                        
+                    orderz.append(order)
+                    
+            self.emit('playingseq', sceneIndex, seqIndex)
+            self.emit('peers.triggers', orderz, 437)
+
+        except:
+            self.log('Error playing Scene', sceneIndex, 'Seq', seqIndex)
+            
+    
+ 
 
 #
 # Threaded HTTP Server
@@ -62,10 +171,10 @@ class ThreadedHTTPServer(object):
 
         interface_path = os.path.dirname(os.path.realpath(__file__))
 
-        localRegie = os.path.isdir(REGIE_PATH)
-
-        if localRegie:
-            www_path = os.path.join(REGIE_PATH, 'web')
+        if os.path.isdir(REGIE_PATH1):
+            www_path = os.path.join(REGIE_PATH1, 'web')
+        elif os.path.isdir(REGIE_PATH2):
+            www_path = os.path.join(REGIE_PATH2, 'web')
         else:
             www_path = os.path.join(interface_path, 'regie')
 
@@ -75,8 +184,9 @@ class ThreadedHTTPServer(object):
 
 
         #
-        # FLASK Routing
+        # FLASK Routing Static
         #
+
         @app.route('/')
         def index():
             # self.regieinterface.log('requesting index')
@@ -87,6 +197,14 @@ class ThreadedHTTPServer(object):
             # self.regieinterface.log('requesting '+path)
             return send_from_directory(www_path, path)
 
+        #
+        # FLASK Routing API
+        #
+        
+        # @app.route('/<path:path>')
+        # def send_static(path):
+        #     # self.regieinterface.log('requesting '+path)
+        #     return send_from_directory(www_path, path)
 
         #
         # SOCKETIO Routing
@@ -108,11 +226,20 @@ class ThreadedHTTPServer(object):
         @self.regieinterface.hplayer.on('files.dirlist-updated')
         def filetree_send(ev, *args):
             self.sendBuffer.put( ('data', {'fileTree': self.regieinterface.hplayer.files()}) )
+            
+        @self.regieinterface.hplayer.on('files.activedir-updated')
+        def activedir_send(ev, *args):
+            self.sendBuffer.put( ('data', {'scene': args[1]}) )
 
         @self.regieinterface.hplayer.on('*.peer.*')
         def peer_send(ev, *args):
-            args[0].update({'type': ev.split('.')[-1]})
-            self.sendBuffer.put( ('dispo', args[0]) )
+            event = ev.split('.')[-1]
+            if event == 'playingseq':
+                print(ev, args[0]['data'][1])
+                self.sendBuffer.put( ('data', {'sequence': args[0]['data'][1]}) )
+            else:
+                args[0].update({'type': event})
+                self.sendBuffer.put( ('peer', args[0]) )
 
 
         # !!! TODO: stop zyre monitoring when every client are disconnected
@@ -149,20 +276,23 @@ class ThreadedHTTPServer(object):
         def register(data):
             # enable peer monitoring
             self.regieinterface.emit('peers.getlink')
-            self.regieinterface.emit('peers.subscribe', ['status', 'settings'])
+            self.regieinterface.emit('peers.subscribe', ['status', 'settings', 'playingseq'])
 
 
         @socketio.on('event')
         def event(data):
-            self.regieinterface.emit('peers.triggers', data, 374)
+            self.regieinterface.emit('peers.triggers', data, 437)
 
 
         # prepare sub-thread
         self.server_thread = threading.Thread(target=lambda:socketio.run(app, host='0.0.0.0', port=port))
         self.server_thread.daemon = True
-
+        
         # watchdog project.json
         self.watcher()
+        
+        # internal load project
+        self.regieinterface.reload()
 
 
     def start(self):
@@ -181,35 +311,27 @@ class ThreadedHTTPServer(object):
 
     def __exit__(self, type, value, traceback):
         self.stop()
-
-
-    def projectPath(self):
-        return os.path.join(self.regieinterface._datapath, 'project.json')
-
-
+        
+    
     def projectData(self):
         data={
-            'fullproject':  '{"pool":[], "project":[[]]}',
+            'fullproject':  self.regieinterface.projectRaw(),
             'fileTree':     self.regieinterface.hplayer.files()
         }
-            
-        if os.path.isfile(self.projectPath()):
-            with open( self.projectPath(), 'r') as file:
-                data['fullproject'] = file.read()
-
         return data
-
-
+    
+    
     def watcher(self):
-
+    
         def onchange(e):
             self.regieinterface.log('project updated ! pushing it...')
+            self.regieinterface.reload()
             self.sendBuffer.put( ('data', self.projectData()) )
 
         handler = PatternMatchingEventHandler("*/project.json", None, False, True)
         handler.on_any_event = onchange
         self.projectObserver = Observer()
-        self.projectObserver.schedule(handler, os.path.dirname(self.projectPath()))
+        self.projectObserver.schedule(handler, os.path.dirname(self.regieinterface.projectPath()))
         try:
             self.projectObserver.start()
         except:

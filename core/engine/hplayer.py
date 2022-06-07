@@ -92,10 +92,17 @@ class HPlayer2(EventEmitterX):
             def flip(ev, value, settings):
                 p._applyFlip( settings['flip'] )
 
+            # Bind OneLoop
+            @self.settings.on('do-loop')
+            @self.playlist.on('updated')
+            def loop(ev, value, settings=None):
+                oneLoop = (self.settings.get('loop') == 1) or (self.settings.get('loop') == 2 and self.playlist.size() == 1)
+                p._applyOneLoop( oneLoop )
+
 
             # Bind playlist
-            p.on('end',              lambda ev: self.playlist.onMediaEnd())    # Media end    -> Playlist next
-            self.playlist.on('end',  lambda ev: p.stop())                      # Playlist end -> Stop player
+            p.on('media-end',        lambda ev, *args: self.playlist.onMediaEnd())    # Media end    -> Playlist next
+            self.playlist.on('end',  lambda ev, *args: p.stop())                      # Playlist end -> Stop player
 
             # Bind status (player update triggers hplayer emit)
             @p.on('status')
@@ -106,6 +113,7 @@ class HPlayer2(EventEmitterX):
             @p.on('hardreset')
             def reset(ev, *args):
                 self.log('HARD KILL FROM PLAYER')
+                os.system('pkill mpv')
                 os._exit(0)
 
             self.emit('player-added', p)
@@ -139,7 +147,7 @@ class HPlayer2(EventEmitterX):
             s = Sampler(self, ptype, poly)
             self._samplers[name] = s
 
-            # # Bind Volume
+            # Bind Volume
             # @self.settings.on('do-volume')
             # @self.settings.on('do-mute')
             # def vol(ev, value, settings):
@@ -156,6 +164,11 @@ class HPlayer2(EventEmitterX):
             # def flip(ev, value, settings):
             #     s.flip( settings['flip'] )
 
+            # Bind OneLoop
+            # @self.settings.on('do-loop')
+            # def loop(ev, value, settings):
+            #     s.oneloop( settings['loop'] == 1 )
+
             # Bind status (player update triggers hplayer emit)
             @s.on('status')
             def emitStatus(ev, *args):
@@ -165,6 +178,7 @@ class HPlayer2(EventEmitterX):
             @s.on('hardreset')
             def reset(ev, *args):
                 self.log('HARD KILL FROM PLAYER')
+                os.system('pkill mpv')
                 os._exit(0)
 
             self.emit('sampler-added', s)
@@ -279,7 +293,7 @@ class HPlayer2(EventEmitterX):
         #
         @module.on('hardreset')
         def hardreset(ev, *args): 
-            # os.system('systemctl restart NetworkManager')
+            os.system('systemctl restart NetworkManager')
             # global runningFlag
             # runningFlag = False
             # sleep(5.0)
@@ -328,6 +342,14 @@ class HPlayer2(EventEmitterX):
         def playindex(ev, *args):
             if len(args) > 0:
                 self.playlist.playindex(int(args[0]))
+                
+        # Play a list then trigger an event on media-end
+        @module.on('playthen')
+        def playindex(ev, *args):
+            if len(args) > 1:
+                self.playlist.playthen(args[0], args[1])
+            elif len(args) > 0:
+                self.playlist.playthen(args[0], None)
 
         @module.on('add')
         def add(ev, *args):
@@ -369,7 +391,10 @@ class HPlayer2(EventEmitterX):
         def stop(ev, *args):
             # TODO : double stop -> reset playlist index (-1)
             for p in self.players():
+                resetPlaylist = not p.isPlaying()
                 p.stop()
+                if resetPlaylist:
+                    self.playlist.rearm()
 
         @module.on('pause')
         def pause(ev, *args):
@@ -398,6 +423,14 @@ class HPlayer2(EventEmitterX):
                         p.skip(int(args[0]))
                 
 
+        # REGIE
+        #
+        
+        @module.on('do-playseq')
+        def doplayseq(ev, *args):
+            if len(args) > 1 and self.interface('regie'):
+                self.interface('regie').playseq(args[0], args[1])
+        
         # SETTINGS
         #
 
@@ -419,6 +452,25 @@ class HPlayer2(EventEmitterX):
                 if (vol < 0): vol = 0
                 if (vol > 100): vol = 100
                 self.settings.set('volume', vol)
+
+        @module.on('volinc')
+        def volume(ev, *args):
+            inc = 1
+            if len(args) > 0:
+                inc = int(args[0])
+            vol = self.settings.get('volume') + inc
+            if (vol > 100): vol = 100
+            self.settings.set('volume', vol)
+
+        @module.on('voldec')
+        def volume(ev, *args):
+            dec = 1
+            if len(args) > 0:
+                dec = int(args[0])
+            vol = self.settings.get('volume') - dec
+            if (vol < 0): vol = 0
+            self.settings.set('volume', vol)
+
 
         @module.on('mute')
         def mute(ev, *args):
