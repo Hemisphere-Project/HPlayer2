@@ -14,33 +14,26 @@ hplayer = HPlayer2('/data/media', '/data/hplayer2-gadagne21.cfg')
 
 # PLAYER
 player = hplayer.addPlayer('mpv', 'player')
-player.imagetime(15)
+player.imagetime(0)
 
 player.doLog['events'] = False
 # player.doLog['cmds'] = True
 
 
-# SAMPLER
-sampler = hplayer.addSampler('mpv', 'sampler', 6)
-
-
 # Interfaces
 hplayer.addInterface('http', 8080)
 hplayer.addInterface('http2', 80, {'playlist': False, 'loop': False, 'mute': False})
-hplayer.addInterface('serial', "^CP2102", 20)
 if hplayer.isRPi():
-    hplayer.addInterface('gpio', [21,20,16,26,14,15], 310)
-if "-sync" in network.get_hostname():
-    	hplayer.addInterface('zyre', 'eth0')
+    hplayer.addInterface('hcon', ['T1', 'T2'])
+    
 
 
-
-# PLAY action
+# PLAY action with debouncer and click protection
 
 debounceLastTime = 0
 debounceLastMedia = ""
 
-def doPlay(media, debounce=0):
+def doPlay(media, debounce=300):
     	
 	# DEBOUNCE media
 	global debounceLastTime, debounceLastMedia
@@ -50,21 +43,11 @@ def doPlay(media, debounce=0):
 	debounceLastTime = now
 	debounceLastMedia = media
 
-	# PLAY SYNC
-	if "-sync" in network.get_hostname():
-		if "-master" in network.get_hostname():
-			hplayer.getInterface('zyre').node.broadcast('/play', list(media), 200)
-			print('doPLay: master.. broadcast')
-		else:
-			print('doPLay: slave.. do nothing')
-
-	# PLAY SOLO
-	else:
-		hplayer.settings.set('mute', True)
-		time.sleep(0.1)
-		hplayer.playlist.play(media)
-		time.sleep(0.05)
-		hplayer.settings.set('mute', False)
+	hplayer.settings.set('mute', True)
+	time.sleep(0.1)
+	hplayer.playlist.play(media)
+	time.sleep(0.05)
+	hplayer.settings.set('mute', False)
 
 
 
@@ -73,50 +56,29 @@ def doPlay(media, debounce=0):
 @hplayer.on('playlist.end')
 def play0(ev, *args):
     doPlay("0_*.*")
-
-# BTN 1
-@hplayer.on('http.push1')
-@hplayer.on('gpio.21-on')
-def play1(ev, *args):
-    doPlay("1_*.*")
-
-# BTN 2
-@hplayer.on('http.push2')
-@hplayer.on('gpio.20-on')
-def play1(ev, *args):
-    doPlay("2_*.*")
-
-# BTN 3
-@hplayer.on('http.push3')
-@hplayer.on('gpio.16-on')
-def play1(ev, *args):
-    doPlay("3_*.*")
+    hplayer.interface('hcon').set('T5', True)
 
 # TURN 1
 @hplayer.on('http.turn1')
-@hplayer.on('gpio.26-on')
+@hplayer.on('hcon.T1-on')
+@hplayer.on('hcon.SW1-on')
 def play1(ev, *args):
-    doPlay("1_*.*", 1000)
+	doPlay("1_*.*", 1000)
+	hplayer.interface('hcon').set('T5', False)
+    
+# TURN 2
+@hplayer.on('http.turn2')
+@hplayer.on('hcon.T2-on')
+@hplayer.on('hcon.SW2-on')
+def play1(ev, *args):
+	doPlay("2_*.*", 1000)
+	hplayer.interface('hcon').set('T5', False)
 
-
-# GPIO RF Remote
-@hplayer.on('remote')
-@hplayer.on('gpio.14-on')
-@hplayer.on('gpio.15-on')
-def togglePlay(ev, *args): 
-	if player.isPlaying(): player.stop()
-	else: doPlay("0_*.*")
-
-
-# SERIAL events
-@hplayer.on('serial.playsample')
-def playsample(ev, *args):
-    sampler.play( args[0]+"_*.*" )
-
-@hplayer.on('serial.stopsample')
-def playsample(ev, *args):
-    sampler.stop( args[0]+"_*.*" )
-
+# TEST
+@hplayer.on('hcon.SW3-on')
+def play1(ev, *args):
+	doPlay("3_*.*", 1000)
+	hplayer.interface('hcon').set('T5', False)
 
 # DISABLE some manual settings
 @hplayer.on('settings.loaded')
@@ -134,6 +96,7 @@ def disableAuto(ev, *args):
 def http2_logs(ev, *args):
 	if ev.startswith('gpio') and ev.find('-') == -1: return 
 	hplayer.interface('http2').send('logs', [ev]+list(args))
+
 
 # RUN
 hplayer.run()

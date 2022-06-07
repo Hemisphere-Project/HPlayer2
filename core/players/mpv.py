@@ -241,11 +241,16 @@ class MpvPlayer(BasePlayer):
         command = ['mpv', '--input-ipc-server=' + self._mpv_socketpath + '',
                                 '--idle=yes', '-v', '--no-osc', '--msg-level=ipc=v', '--quiet', '--fs','--keep-open'
                                 ,'--window-scale=' + str(self._mpv_scale)
-                                ,'--image-display-duration=' + str(self._mpv_imagetime)
                                 ,'--hr-seek=yes'
                                 # ,'--af=rubberband'
                                 #,'--force-window=yes'
                                 ]
+
+        # image time (0 = still image)
+        if self._mpv_imagetime > 0:
+            command.append('--image-display-duration=' + str(self._mpv_imagetime))
+        else:
+            command.append('--image-display-duration=inf')
         
         # Special command for RockPro64
         if os.path.exists('/usr/local/bin/rkmpv'):
