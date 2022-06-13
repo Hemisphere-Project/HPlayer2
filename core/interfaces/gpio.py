@@ -1,26 +1,28 @@
 from .base import BaseInterface
 import RPi.GPIO as GPIO
+from threading import Timer
 
 class GpioInterface (BaseInterface):
     
     name = "GPIO"
 
-    def __init__(self, hplayer, pins_watch=[], debounce=50, pullupdown='PUP'):
+    def __init__(self, hplayer, pins_watch=[], debounce=200, antispike=100, pullupdown='PUP'):
         super().__init__(hplayer, self.name)
 
         self._state = {}
         self._pinsIN = []
         self._pinsOUT = []
+        self._antispike = antispike
         self._debounce = debounce
         self._pupdown = pullupdown
+        self._antispikeTimer = None
         GPIO.setmode(GPIO.BCM)
         
         for pin in pins_watch:
             self.watch(pin)
 
-    def onchange(self, pin):
-        #self.log("channel", pin, "triggered")
-        value = not GPIO.input(pin) if self._pupdown == 'PUP' else GPIO.input(pin)       
+
+    def postponedChange(self, pin, value):
         name = [p for p in self._pinsIN if p[0] == pin][0][1]
         
         if value:
@@ -28,13 +30,32 @@ class GpioInterface (BaseInterface):
                 self.emit(name+'-off')
             self.emit(name+'-on')
             self.emit(name, 1)
-            self._state[pin] = True
         else:
             if not self._state[pin]:
                 self.emit(name+'-on')
             self.emit(name+'-off')
             self.emit(name, 0)
-            self._state[pin] = False
+        
+        self._state[pin] = value
+        self._antispikeTimer = None
+
+
+    def onchange(self, pin):
+        #self.log("channel", pin, "triggered")
+        value = not GPIO.input(pin) if self._pupdown == 'PUP' else GPIO.input(pin)      
+        
+        # An event was almost triggered: cancel it and forget it
+        #
+        if self._antispikeTimer:
+            self._antispikeTimer.cancel()
+            self._antispikeTimer = None
+            if value == self._state[pin]:
+                self.log('event aborted by antispike (', self._antispike, ' ms)')
+                return
+            
+        # Postpone value change (prevent spike trigger)
+        self._antispikeTimer = Timer(self._antispike/1000, self.postponedChange, (pin, value))
+        self._antispikeTimer.start()
 
 
     # GPIO receiver THREAD

@@ -13,7 +13,7 @@ class HconInterface (GpioInterface):
              (22, 'SW3')]
     
 
-    def __init__(self, hplayer, pins_watch=[], debounce=1):
+    def __init__(self, hplayer, pins_watch=[], debounce=50):
         
         self.name = "Hcon"
         

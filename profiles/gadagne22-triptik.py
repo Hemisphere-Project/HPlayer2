@@ -24,7 +24,7 @@ player.doLog['events'] = False
 hplayer.addInterface('http', 8080)
 hplayer.addInterface('http2', 80, {'playlist': False, 'loop': False, 'mute': False})
 if hplayer.isRPi():
-    hplayer.addInterface('hcon', ['T1', 'T2'])
+    hplayer.addInterface('hcon', ['T1', 'T2'], 300)
     
 
 
