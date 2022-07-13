@@ -19,6 +19,7 @@ class KeypadInterface (BaseInterface):
     CHAR_VOL    = '\x02'
     CHAR_PLAY   = '\x03'
     CHAR_STOP   = '\x04'
+    CHAR_LOVE   = '\x05'
 
     def __init__(self, hplayer):
         super(KeypadInterface, self).__init__(hplayer, "KEYPAD")
@@ -28,6 +29,7 @@ class KeypadInterface (BaseInterface):
         except:
             self.log("LCD Keypad not found ...")
             self.lcd = None
+            return
         
         self.lcd.set_color(0, 0, 0)
         
@@ -37,6 +39,7 @@ class KeypadInterface (BaseInterface):
         self.lcd.create_char(2, [2,3,2,2,14,30,12,0])       #  CHAR_VOL
         self.lcd.create_char(3, [0,8,12,14,12,8,0,0])       #  CHAR_PLAY
         self.lcd.create_char(4, [0,0,14,14,14,0,0,0])     #  CHAR_STOP
+        self.lcd.create_char(5, [31,17,10,4,10,31,31,0])     #  CHAR_LOVE
 
     def update(self):
         lines = ["", ""]
@@ -56,6 +59,7 @@ class KeypadInterface (BaseInterface):
 
 
     def draw(self, forced=None):
+        if not self.lcd: return
         lines = self.update() if not forced else forced
         if lines[0] != self.display[0]:
             self.display[0] = lines[0]

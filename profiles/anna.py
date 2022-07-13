@@ -22,7 +22,8 @@ keypad 		= hplayer.addInterface('keypad')
 # http2		= hplayer.addInterface('http2', 8080)
 # keyboard 	= hplayer.addInterface('keyboard')
 
-keypad.draw( [".:: HPlayer2 ::.", "     Hello!     "] )
+keypad.draw( [".:: HPlayer2 ::.", "   Starting "+keypad.CHAR_LOVE+"   "] )
+time.sleep(2.0)  	# wait for USB to get ready
 
 # RSync USB (on start)
 #
