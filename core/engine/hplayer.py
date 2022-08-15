@@ -7,6 +7,7 @@ from core.engine.sampler import Sampler
 from core.engine.filemanager import FileManager
 from core.engine.playlist import Playlist
 from core.engine.settings import Settings
+from core.engine.imgen import ImGen
 
 from collections import OrderedDict
 from threading import Timer
@@ -42,6 +43,8 @@ class HPlayer2(EventEmitterX):
         self.settings       = Settings(self)
         self.files          = FileManager(self)
         self.playlist       = Playlist(self)
+        
+        self.imgen          = ImGen(self)
 
         self.autoBind(self.settings)
         self.autoBind(self.files)
@@ -345,12 +348,19 @@ class HPlayer2(EventEmitterX):
                 
         # Play a list then trigger an event on media-end
         @module.on('playthen')
-        def playindex(ev, *args):
+        def playthen(ev, *args):
             if len(args) > 1:
                 self.playlist.playthen(args[0], args[1])
             elif len(args) > 0:
                 self.playlist.playthen(args[0], None)
-
+                
+        # Generate and display text as image
+        @module.on('playtext')
+        def playtext(ev, *args):
+            file = self.imgen.txt2img(*args)
+            self.playlist.play(file)
+            self.settings.set('loop', 1)
+            
         @module.on('add')
         def add(ev, *args):
             if len(args) > 0:
