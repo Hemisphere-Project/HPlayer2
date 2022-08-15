@@ -26,13 +26,13 @@ class ImGen(Module):
       
       # font = ImageFont.truetype('/usr/share/fonts/noto/NotoColorEmoji.ttf', 109)
       
-      img = Image.new('RGB', (width, height), color = (0, 0, 0), fill=(255,255,255))
+      img = Image.new('RGB', (width, height), color = (0, 0, 0))
       d = ImageDraw.Draw(img)
       
       w, h = d.textsize(text, font=font)
       pos = (int((width-w)/2), int((height-h)/2))
       # w, h = 10, 10
-      d.text(pos, text, font=font)
+      d.text(pos, text, font=font, fill=(255,255,255))
       img.save('/tmp/hplayer_txt2img.png')
       return '/tmp/hplayer_txt2img.png'
     
