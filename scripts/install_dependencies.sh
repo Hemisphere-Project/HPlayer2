@@ -26,7 +26,7 @@ if [[ $(command -v apt) ]]; then
     apt install libdrm libmpg123 gstreamer1.0-plugins-ugly libgstreamer1.0-dev libgstreamer-plugins-base1.0-dev gstreamer1.0-pulseaudio gstreamer1.0-x gstreamer1.0-plugins-bad gstreamer1.0-alsa gstreamer1.0-plugins-base gstreamer1.0-plugins-good -y
 
     # hplayer2 dependencies
-    apt install python3 python3-pip
+    apt install python3 python3-pip rsync
     apt install python3-termcolor python3-evdev python3-eventlet -y
     apt install python3-watchdog python3-pillow python3-setuptools -y
     apt install ttf-dejavu-core python3-pyserial libjack-dev libtool autotools-dev automake liblo7 -y
@@ -45,7 +45,7 @@ elif [[ $(command -v pacman) ]]; then
     
     # hplayer2 dependencies
     pacman -S pkg-config python python-pip cython liblo libxcrypt python-termcolor python-evdev python-eventlet \
-        python-watchdog python-pillow python-setuptools ttf-dejavu python-pyserial --noconfirm --needed
+        python-watchdog python-pillow python-setuptools ttf-dejavu python-pyserial rsync --noconfirm --needed
 
     # RPi
     if [[ $(uname -m) = armv* || $(uname -m) = aarch64 ]]; then

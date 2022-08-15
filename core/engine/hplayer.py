@@ -296,7 +296,7 @@ class HPlayer2(EventEmitterX):
         #
         @module.on('hardreset')
         def hardreset(ev, *args): 
-            # os.system('systemctl restart NetworkManager')
+            os.system('systemctl restart NetworkManager')
             # global runningFlag
             # runningFlag = False
             # sleep(5.0)
@@ -401,7 +401,10 @@ class HPlayer2(EventEmitterX):
         def stop(ev, *args):
             # TODO : double stop -> reset playlist index (-1)
             for p in self.players():
+                resetPlaylist = not p.isPlaying()
                 p.stop()
+                if resetPlaylist:
+                    self.playlist.rearm()
 
         @module.on('pause')
         def pause(ev, *args):
