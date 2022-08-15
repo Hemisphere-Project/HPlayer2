@@ -2,6 +2,7 @@ from .base import BaseInterface
 from ..engine import network
 import paho.mqtt.client as mqtt
 from time import sleep
+from random import randrange
 
 class MqttInterface (BaseInterface):
 
@@ -19,9 +20,9 @@ class MqttInterface (BaseInterface):
         
         # Subscribing in on_connect() means that if we lose the connection and
         # reconnect then subscriptions will be renewed.
-        # self.client.subscribe("light/mem")
         self.client.subscribe("rpi/all/#")
         self.client.subscribe("rpi/"+devicename+"/#")
+        self.client.subscribe("rpi/random/#")
 
 
     def on_disconnect(self, client, userdata, msg):
@@ -31,6 +32,13 @@ class MqttInterface (BaseInterface):
 
     # The callback for when a PUBLISH message is received from the server.
     def on_message(self, client, userdata, msg):
+        
+        # Discard message randomly if dest is random based on zyre peer count
+        if msg.topic.split('/')[1] == 'random':
+            zyre = self.hplayer.interface('zyre')
+            if zyre and zyre.activeCount() > 1 and randrange(zyre.activeCount()) > 0:
+                return
+                        
         event = '.'.join(msg.topic.split('/')[2:])
         self.emit(event, *list(msg.payload.decode().split('§')) )
     

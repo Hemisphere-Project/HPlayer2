@@ -2,7 +2,7 @@ from core.engine.hplayer import HPlayer2
 from core.engine import network
 
 import os, sys, types, platform
-import json
+import json, glob
 
 
 # DIRECTORY / FILE
@@ -38,7 +38,7 @@ hplayer.addInterface('keyboard')
 hplayer.addInterface('osc', 1222, 3737)
 hplayer.addInterface('serial', 'M5')
 hplayer.addInterface('zyre')
-hplayer.addInterface('mqtt', '10.0.0.1')
+hplayer.addInterface('mqtt', '10.0.10.37')
 hplayer.addInterface('http2', 8080)
 hplayer.addInterface('teleco')
 hplayer.addInterface('regie', 9111, projectfolder)
@@ -65,6 +65,44 @@ def broadcast(path, *args):
 	else:
 		hplayer.interface('zyre').node.broadcast(path, list(args))
 
+
+# SMS
+#
+sms_counter = 0
+
+@hplayer.on('*.sms')
+def sms(ev, *args):
+    global sms_counter
+    
+    args = list(args)
+    if len(args) == 1: args.append(None)            #encoding
+    if len(args) == 2: args.append(sms_counter)     #suffix
+    file = hplayer.imgen.txt2img(*args)
+    
+    hplayer.settings.set('loop', 2)
+    hplayer.playlist.load(glob.glob('/tmp/txt2img*'))
+    
+    i = hplayer.playlist.findIndex(file)
+    if i > -1: hplayer.playlist.remove(i)
+    hplayer.playlist.randomize()
+    hplayer.playlist.add(file)
+    hplayer.playlist.last()
+    
+    sms_counter = (sms_counter+1)%5
+
+  
+@hplayer.on('*.smsclear')
+def smsclear(ev, *args):
+    global sms_counter
+    sms_counter = 0
+    for f in glob.glob('/tmp/txt2img*'):
+        os.remove(f)
+    if len(args) >= 1 and len(args[0]) >= 1:
+        txt = args[0].replace("+33", "0")
+        if txt.startswith("0") and len(txt) == 10:
+            txt = ' '.join(txt[i:i+2] for i in range(0, len(txt), 2))
+        sms(None, txt)
+        
 
 # PIR
 #
@@ -166,5 +204,9 @@ def init(ev, *args):
     hplayer.settings.set('volume', 100)
     hplayer.settings.set('loop', -1)
 
+
+# file = hplayer.imgen.txt2img("004F006B00200073007500700065007200202764FE0F", "UCS2")
+# hplayer.playlist.play(file)
+            
 # RUN
 hplayer.run()                               						# TODO: non blocking

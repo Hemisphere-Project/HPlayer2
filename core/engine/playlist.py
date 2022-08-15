@@ -1,7 +1,7 @@
 from ..module import Module
 import os
 import re
-from random import randrange
+from random import randrange, shuffle
 
 
 class Playlist(Module):
@@ -92,6 +92,11 @@ class Playlist(Module):
     # JUST SET INDEX TO -1
     def rearm(self):
         self._index = -1
+        
+    # RANDOMIZE CURRENT PLAYLIST
+    def randomize(self):
+        shuffle(self._playlist)
+        self.rearm()
 
     # PLAY a playlist
     def play(self, plist=None, index=-1):
