@@ -1,4 +1,5 @@
 from .base import BaseInterface
+from ..engine import network
 import paho.mqtt.client as mqtt
 from time import sleep
 
@@ -14,9 +15,13 @@ class MqttInterface (BaseInterface):
         self.log("Connected with broker at "+str(self.broker))
         self.isConnected = True
 
+        devicename = network.get_hostname().lower()
+        
         # Subscribing in on_connect() means that if we lose the connection and
         # reconnect then subscriptions will be renewed.
         # self.client.subscribe("light/mem")
+        self.client.subscribe("rpi/all/#")
+        self.client.subscribe("rpi/"+devicename+"/#")
 
 
     def on_disconnect(self, client, userdata, msg):
@@ -26,8 +31,8 @@ class MqttInterface (BaseInterface):
 
     # The callback for when a PUBLISH message is received from the server.
     def on_message(self, client, userdata, msg):
-        self.log(msg.topic+" "+str(msg.payload.decode()))
-    
+        event = '.'.join(msg.topic.split('/')[2:])
+        self.emit(event, *list(msg.payload.decode().split('§')) )
     
     def send(self, topic, data=None, QOS=1):
         self.client.publish(topic, payload=data, qos=QOS, retain=False)
