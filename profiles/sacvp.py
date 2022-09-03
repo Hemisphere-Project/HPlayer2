@@ -38,7 +38,7 @@ hplayer.addInterface('keyboard')
 hplayer.addInterface('osc', 1222, 3737)
 hplayer.addInterface('serial', 'M5')
 hplayer.addInterface('zyre')
-hplayer.addInterface('mqtt', '10.0.10.37')
+hplayer.addInterface('mqtt', '10.0.0.1')
 hplayer.addInterface('http2', 8080)
 hplayer.addInterface('teleco')
 hplayer.addInterface('regie', 9111, projectfolder)
@@ -69,7 +69,22 @@ def broadcast(path, *args):
 # SMS
 #
 sms_counter = 0
+peers_counter_dispatch = 0
 
+# SMS DISPATCHER (only CASA) MQTT -> ZYRE  
+@hplayer.on('mqtt.smsdispatch')
+def smsdispatch(ev, *args):
+    zyre = hplayer.interface('zyre')
+    peersList = list(zyre.peersList())
+    peersList.remove(zyre.node.zyre.uuid())
+    if len(peersList) == 0: return
+    
+    global peers_counter_dispatch
+    peers_counter_dispatch = (peers_counter_dispatch+1)%len(peersList)
+    hplayer.interface('zyre').node.whisper(peersList[peers_counter_dispatch], 'sms', [args[0]])
+    
+    
+# SMS DISPLAY
 @hplayer.on('*.sms')
 def sms(ev, *args):
     global sms_counter
