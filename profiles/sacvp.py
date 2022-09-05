@@ -70,10 +70,11 @@ def broadcast(path, *args):
 #
 sms_counter = 0
 peers_counter_dispatch = 0
+for f in glob.glob('/tmp/txt2img*'): os.remove(f)   # clear old msgs
 
 # SMS DISPATCHER (only CASA) MQTT -> ZYRE  
 @hplayer.on('mqtt.textdispatch')
-def smsdispatchM(ev, *args):
+def textdispatchM(ev, *args):
     zyre = hplayer.interface('zyre')
     peersList = list(zyre.peersList())
     peersList.remove(zyre.node.zyre.uuid())
@@ -81,30 +82,31 @@ def smsdispatchM(ev, *args):
     
     global peers_counter_dispatch
     peers_counter_dispatch = (peers_counter_dispatch+1)%len(peersList)
-    hplayer.interface('zyre').node.whisper(peersList[peers_counter_dispatch], 'text', [args[0]])
+    hplayer.interface('zyre').node.whisper(peersList[peers_counter_dispatch], 'text', args)
     
 
-# SMS DISPATCHER (only CASA) MQTT -> ZYRE  
+# SMS TEXT ALL (only CASA) MQTT -> ZYRE  
 @hplayer.on('mqtt.textall')
-def smsclearM(ev, *args):
-    zyre = hplayer.interface('zyre')
-    peersList = list(zyre.peersList())
-    peersList.remove(zyre.node.zyre.uuid())
-    if len(peersList) == 0: return
+def textclearM(ev, *args):
+    hplayer.interface('zyre').node.broadcast('textall', args)
     
-    global peers_counter_dispatch
-    peers_counter_dispatch = (peers_counter_dispatch+1)%len(peersList)
-    hplayer.interface('zyre').node.broadcast('smsclear', [args[0]])
+    
+# SMS STOP ALL (only CASA) MQTT -> ZYRE  
+@hplayer.on('mqtt.textstop')
+def textclearM(ev, *args):
+    hplayer.interface('zyre').node.broadcast('textstop')
     
     
 # SMS DISPLAY
 @hplayer.on('zyre.text')
-def sms(ev, *args):
+def text(ev, *args):
     global sms_counter
-    
-    args = list(args)
+
+    args = list(args[0])
     if len(args) == 1: args.append(None)            #encoding
     if len(args) == 2: args.append(sms_counter)     #suffix
+    
+    print(args)
     file = hplayer.imgen.txt2img(*args)
     
     hplayer.settings.set('loop', 2)
@@ -118,18 +120,24 @@ def sms(ev, *args):
     
     sms_counter = (sms_counter+1)%5
 
-  
-@hplayer.on('zyre.textall')
-def smsclear(ev, *args):
+
+@hplayer.on('zyre.textstop')
+def textstop(ev, *args):
+    hplayer.interface(ev.split('.')[0]).emit('stop')
     global sms_counter
     sms_counter = 0
-    for f in glob.glob('/tmp/txt2img*'):
-        os.remove(f)
-    if len(args) >= 1 and len(args[0]) >= 1:
-        txt = args[0].replace("+33", "0")
-        if txt.startswith("0") and len(txt) == 10:
-            txt = ' '.join(txt[i:i+2] for i in range(0, len(txt), 2))
-        sms(None, txt)
+    os.system('rm -Rf /tmp/txt2img*')
+        
+  
+@hplayer.on('zyre.textall')
+def textclear(ev, *args):
+    textstop(ev)
+    msg = args[0]
+    if len(msg) >= 1 and len(msg[0]) >= 1:
+        msg[0] = msg[0].replace("+33", "0")
+        if msg[0].startswith("0") and len(msg[0]) == 10:
+            msg[0] = ' '.join(msg[0][i:i+2] for i in range(0, len(msg[0]), 2))
+        text(None, msg)
         
 
 # PIR
