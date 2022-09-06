@@ -36,7 +36,7 @@ except: pass
 # INTERFACES
 hplayer.addInterface('keyboard')
 hplayer.addInterface('osc', 1222, 3737)
-hplayer.addInterface('serial', 'M5')
+hplayer.addInterface('serial', 'M5', 10)
 hplayer.addInterface('zyre')
 hplayer.addInterface('mqtt', '10.0.0.1')
 hplayer.addInterface('http2', 8080)
