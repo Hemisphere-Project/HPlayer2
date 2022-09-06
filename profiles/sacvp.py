@@ -118,7 +118,7 @@ def text(ev, *args):
     hplayer.playlist.add(file)
     hplayer.playlist.last()
     
-    sms_counter = (sms_counter+1)%5
+    sms_counter = (sms_counter+1)%10
 
 
 @hplayer.on('zyre.textstop')
