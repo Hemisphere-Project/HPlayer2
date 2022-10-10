@@ -16,7 +16,7 @@ player 	= hplayer.addPlayer('mpv','mpv')
 
 # Interfaces
 keypad 		= hplayer.addInterface('keypad')
-gpio		= hplayer.addInterface('gpio', [21], 310)
+gpio			= hplayer.addInterface('gpio', [21], 310, 100, 'PDOWN')
 # zyre		= hplayer.addInterface('zyre', 'wlan0')
 # osc		= hplayer.addInterface('osc', 4000).hostOut = '10.0.0.255'
 # http		= hplayer.addInterface('http', 8037)
@@ -89,10 +89,12 @@ def prev(ev, *args):
         hplayer.playlist.emit('playindex', hplayer.playlist.index())
     else:
         hplayer.playlist.emit('playindex', hplayer.playlist.prevIndex())
-        
+
+@hplayer.on('gpio.21-off')        
 @hplayer.on('keypad.right')
 @hplayer.on('keypad.right-hold')
 def next(ev, *args):
+    print(ev)
     hplayer.playlist.emit('playindex', hplayer.playlist.nextIndex())
 
 @hplayer.on('keypad.up')
