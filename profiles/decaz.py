@@ -130,7 +130,7 @@ def trig(ev, *args):
     
     a=args[-1]
     b=a.split('/')[-1].split('_')[-5:-1]
-    print('YOUU', b)
+    # print('YOUU', b)
     if len(b) < 2: return
     
     if b[-2] == event:
