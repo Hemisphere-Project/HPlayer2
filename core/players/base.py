@@ -116,8 +116,8 @@ class BasePlayer(Module):
 
     
     # Play Media
-    def play(self, media):
-        self._play(media)
+    def play(self, media, pause=False):
+        self._play(media, pause)
         self.update('isPaused', False)
         self.update('media', media)
         self.update('time', 0)
@@ -163,9 +163,10 @@ class BasePlayer(Module):
     def _quit(self):
         self.log("quit")
 
-    def _play(self, path):
+    def _play(self, path, pause=False):
         self.log("play", path)
         self.emit('playing', path)
+        if pause: self._pause()
 
     def _stop(self):
         self.log("stop")

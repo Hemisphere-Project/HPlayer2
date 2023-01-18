@@ -100,7 +100,7 @@ class OmxPlayer(BasePlayer):
         self.log("stopped")
 
 
-    def _play(self, path):
+    def _play(self, path, pause=False):
         self.log("play", path)
 
         if self.player:
@@ -111,7 +111,8 @@ class OmxPlayer(BasePlayer):
         self.player.pauseEvent += self._onPause
         # self.player.stopEvent += self._onStop
         self.player.exitEvent += self._onExit
-        self.player.play()
+        if pause: self._pause()
+        else: self._resume()
         # self.player.set_video_pos(0,0,100,100)
 
         # self.update('duration', round(self.player.duration(),2))

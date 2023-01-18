@@ -99,32 +99,32 @@ class Playlist(Module):
         self.rearm()
 
     # PLAY a playlist
-    def play(self, plist=None, index=-1):
+    def play(self, plist=None, index=-1, pause=False):
         self.onEnd = None
         
         if plist: 
             self.load(plist)
         
         if index >= 0:
-            self.playindex(index)
+            self.playindex(index, pause)
         elif self._index >= 0:
-            self.playindex(self._index)
+            self.playindex(self._index, pause)
         else:
-            self.playindex(0)
+            self.playindex(0, pause)
 
     # PLAY a playlist and execute event on end
-    def playthen(self, plist=None, then=None):
-        self.play(plist)
+    def playthen(self, plist=None, then=None, pause=False):
+        self.play(plist, pause=pause)
         if then:
             self.onEnd = lambda: self.emit(then['event'], *then['data'])
 
     # PLAY at index
-    def playindex(self, index):
+    def playindex(self, index, pause=False):
 
         # Emit play event
         if 0 <= index < self.size() and os.path.isfile(self._playlist[index]):
             self._index = index
-            self.emit('do-play', self._playlist[self._index], self._index)
+            self.emit('do-play', self._playlist[self._index], self._index, pause)
         
         # Handle error
         else:
