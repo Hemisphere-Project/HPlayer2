@@ -117,8 +117,8 @@ class BasePlayer(Module):
     
     # Play Media
     def play(self, media, pause=False):
-        self._play(media, pause)
         self.update('isPaused', False)
+        self._play(media, pause)
         self.update('media', media)
         self.update('time', 0)
 

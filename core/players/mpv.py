@@ -294,10 +294,11 @@ class MpvPlayer(BasePlayer):
     def _play(self, path, pause=False):
         event = "play"
         if pause: event += "pause"
-        self.log(event, path)
-        # self._mpv_send('{ "command": ["stop"] }')
+        # self.log(event, path, time.time()*1000000)
+        self._mpv_send('{ "command": ["stop"] }')
         
         self.update('isPaused', pause)
+        self.log("isPaused", self.status('isPaused'))
         self._mpv_send('{ "command": ["loadfile", "'+path+'"] }')
         
         if pause:

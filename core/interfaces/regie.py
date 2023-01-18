@@ -22,12 +22,12 @@ REGIE_PATH2 = '/data/RPi-Regie'
 
 class RegieInterface (BaseInterface):
 
-    def  __init__(self, hplayer, port, datapath):
+    def  __init__(self, hplayer, port, datapath, latency=437):
         super(RegieInterface, self).__init__(hplayer, "Regie")
         self._port = port
         self._datapath = datapath
         self._server = None
-        
+        self._latency = latency
         
 
     # HTTP receiver THREAD
@@ -153,7 +153,7 @@ class RegieInterface (BaseInterface):
                     orderz.append(order)
                     
             self.emit('playingseq', sceneIndex, seqIndex)
-            self.emit('peers.triggers', orderz, 437)
+            self.emit('peers.triggers', orderz, self._latency)
 
         except:
             self.log('Error playing Scene', sceneIndex, 'Seq', seqIndex)
@@ -281,7 +281,7 @@ class ThreadedHTTPServer(object):
 
         @socketio.on('event')
         def event(data):
-            self.regieinterface.emit('peers.triggers', data, 437)
+            self.regieinterface.emit('peers.triggers', data, self.regieinterface._latency)
 
 
         # prepare sub-thread

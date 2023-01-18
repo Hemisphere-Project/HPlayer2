@@ -678,7 +678,7 @@ class ZyreNode ():
             time.sleep(0.0005)
             # self.interface.log('busy loop', at-time.time())
         
-        # self.interface.log('zyre processor sync accuracy', (time.time()-at)*1000, 'ms')
+        self.interface.log('zyre processor sync accuracy', (time.time()-at)*1000, 'ms')
         self.interface.emit('event', *[data])
         self.interface.emit(data['event'], *data['args'])
 

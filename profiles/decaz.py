@@ -28,7 +28,7 @@ zyre        = hplayer.addInterface('zyre')
 #mqtt        = hplayer.addInterface('mqtt', '10.0.0.1')
 http2       = hplayer.addInterface('http2', 8080)
 teleco      = hplayer.addInterface('teleco')
-regie       = hplayer.addInterface('regie', 9111, projectfolder)
+regie       = hplayer.addInterface('regie', 9111, projectfolder, 837)
 
 # Overlay
 if hplayer.isRPi():
