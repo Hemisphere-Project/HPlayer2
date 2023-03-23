@@ -8,3 +8,4 @@ mido
 python-rtmidi
 paho-mqtt
 timecode
+pilmoji

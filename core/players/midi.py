@@ -115,12 +115,12 @@ class MidiPlayer(BasePlayer):
       self.log("done.")	
 
 
-   def _play(self, path):	
+   def _play(self, path, pause=False):	
       self.log("play", path)	
       self._runflag.clear()	
       self._midiFile = iter(mido.MidiFile(path))	
       self.update('isPlaying', True)	
-      self.update('isPaused', False)	
+      self.update('isPaused', pause)	
       self._runflag.set()	
 
    def _stop(self):	

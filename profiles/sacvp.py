@@ -2,7 +2,7 @@ from core.engine.hplayer import HPlayer2
 from core.engine import network
 
 import os, sys, types, platform
-import json
+import json, glob
 
 
 # DIRECTORY / FILE
@@ -36,6 +36,7 @@ except: pass
 # INTERFACES
 hplayer.addInterface('keyboard')
 hplayer.addInterface('osc', 1222, 3737)
+hplayer.addInterface('serial', 'M5', 10)
 hplayer.addInterface('zyre')
 hplayer.addInterface('mqtt', '10.0.0.1')
 hplayer.addInterface('http2', 8080)
@@ -63,6 +64,94 @@ def broadcast(path, *args):
 		hplayer.interface('zyre').node.broadcast(path, list(args), 500)   ## WARNING LATENCY !!
 	else:
 		hplayer.interface('zyre').node.broadcast(path, list(args))
+
+
+# SMS
+#
+sms_counter = 0
+peers_counter_dispatch = 0
+for f in glob.glob('/tmp/txt2img*'): os.remove(f)   # clear old msgs
+
+# SMS DISPATCHER (only CASA) MQTT -> ZYRE  
+@hplayer.on('mqtt.textdispatch')
+def textdispatchM(ev, *args):
+    zyre = hplayer.interface('zyre')
+    peersList = list(zyre.peersList())
+    peersList.remove(zyre.node.zyre.uuid())
+    if len(peersList) == 0: return
+    
+    global peers_counter_dispatch
+    peers_counter_dispatch = (peers_counter_dispatch+1)%len(peersList)
+    hplayer.interface('zyre').node.whisper(peersList[peers_counter_dispatch], 'text', args)
+    
+
+# SMS TEXT ALL (only CASA) MQTT -> ZYRE  
+@hplayer.on('mqtt.textall')
+def textclearM(ev, *args):
+    hplayer.interface('zyre').node.broadcast('textall', args)
+    
+    
+# SMS STOP ALL (only CASA) MQTT -> ZYRE  
+@hplayer.on('mqtt.textstop')
+def textclearM(ev, *args):
+    hplayer.interface('zyre').node.broadcast('textstop')
+    
+    
+# SMS DISPLAY
+@hplayer.on('zyre.text')
+def text(ev, *args):
+    global sms_counter
+
+    args = list(args[0])
+    if len(args) == 1: args.append(None)            #encoding
+    if len(args) == 2: args.append(sms_counter)     #suffix
+    
+    print(args)
+    file = hplayer.imgen.txt2img(*args)
+    
+    hplayer.settings.set('loop', 2)
+    hplayer.playlist.load(glob.glob('/tmp/txt2img*'))
+    
+    i = hplayer.playlist.findIndex(file)
+    if i > -1: hplayer.playlist.remove(i)
+    hplayer.playlist.randomize()
+    hplayer.playlist.add(file)
+    hplayer.playlist.last()
+    
+    sms_counter = (sms_counter+1)%10
+
+
+@hplayer.on('zyre.textstop')
+def textstop(ev, *args):
+    hplayer.interface(ev.split('.')[0]).emit('stop')
+    global sms_counter
+    sms_counter = 0
+    os.system('rm -Rf /tmp/txt2img*')
+        
+  
+@hplayer.on('zyre.textall')
+def textclear(ev, *args):
+    textstop(ev)
+    msg = args[0]
+    if len(msg) >= 1 and len(msg[0]) >= 1:
+        msg[0] = msg[0].replace("+33", "0")
+        if msg[0].startswith("0") and len(msg[0]) == 10:
+            msg[0] = ' '.join(msg[0][i:i+2] for i in range(0, len(msg[0]), 2))
+        text(None, msg)
+        
+
+# PIR
+#
+@hplayer.on('*.pir')
+def pir(ev, *args):
+    if len(args) > 0:
+        if args[0] == 'ON':
+             if not video.isPlaying():
+                hplayer.playlist.playindex(0)
+             hplayer.settings.set('loop', 2)
+        elif args[0] == 'OFF':
+             if video.isPlaying():
+                hplayer.settings.set('loop', 0)
 
 
 # Keyboard
@@ -193,5 +282,9 @@ def init(ev, *args):
     hplayer.settings.set('volume', 100)
     hplayer.settings.set('loop', -1)
 
+
+# file = hplayer.imgen.txt2img("004F006B00200073007500700065007200202764FE0F", "UCS2")
+# hplayer.playlist.play(file)
+            
 # RUN
 hplayer.run()                               						# TODO: non blocking

@@ -642,26 +642,43 @@ class ZyreNode ():
         if 'at' in data:
             if self.peer(data['from']):
                 data['at'] -= self.peer(data['from']).clockshift()
-            delay =  (data['at']) / PRECISION - time.time()
+            at = data['at'] / PRECISION
+            delay =  at - time.time()
 
-            if delay <= -10000:
+            if delay <= -10:
                 self.interface.log('WARNING event already passed by', delay, 's, its too late !! discarding... ')
-            elif delay <= 0:
+            elif delay <= 0.1:
                 self.interface.log('WARNING event already passed by', delay, 's, playing late... ')
                 self.preProcessor2(data)
-            elif delay > 3000:
+            elif delay > 3:
                 self.interface.log('WARNING event in', delay, 's, thats weird, playing now... ')
                 self.preProcessor2(data)
             else:
+                
+                # play event -> propagate now paused and timer to unpause
+                if data['event'].startswith('play'):
+                    dataNow = data.copy()
+                    dataNow['event'] = dataNow['event'].replace('play', 'playpause')
+                    self.preProcessor2(dataNow)
+                    data['event'] = 'resumesync'   
+                
+                # event is programmed in the future
                 self.interface.log('programmed event in', delay, 's')
-                t = Timer( delay, self.preProcessor2, args=[data])
+                t = Timer( delay-0.03, self.preProcessor2, args=[data, at])
                 t.start()
                 self.interface.emit('planned', data)
 
         else:
             self.preProcessor2(data)
 
-    def preProcessor2(self, data):
+    def preProcessor2(self, data, at=0):
+        
+        # busy loop until time is reached
+        while at > 0 and at-time.time() >= 0.0005:
+            time.sleep(0.0005)
+            # self.interface.log('busy loop', at-time.time())
+        
+        self.interface.log('zyre processor sync accuracy', (time.time()-at)*1000, 'ms')
         self.interface.emit('event', *[data])
         self.interface.emit(data['event'], *data['args'])
 

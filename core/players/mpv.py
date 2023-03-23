@@ -13,7 +13,12 @@ class MpvPlayer(BasePlayer):
     def __init__(self, hplayer, name):
         super().__init__(hplayer, name)
 
-        self._validExt = ['mp4', 'm4v', 'mkv', 'avi', 'mov', 'flv', 'mpg', 'wmv', '3gp', 'mp3', 'aac', 'wma', 'wav', 'flac', 'aif', 'aiff', 'm4a', 'ogg', 'opus', 'webm', 'jpg', 'jpeg', 'gif', 'png', 'tif', 'tiff']
+        self._videoExt = ['mp4', 'm4v', 'mkv', 'avi', 'mov', 'flv', 'mpg', 'wmv', '3gp', 'webm']
+        self._audioExt = ['mp3', 'aac', 'wma', 'wav', 'flac', 'aif', 'aiff', 'm4a', 'ogg', 'opus']
+        self._imageExt = ['jpg', 'jpeg', 'gif', 'png', 'tif', 'tiff']
+
+        self._validExt = self._videoExt + self._audioExt + self._imageExt
+        
 
         self._mpv_procThread = None
         self._mpv_sock = None
@@ -181,14 +186,15 @@ class MpvPlayer(BasePlayer):
                 except socket.timeout:
                     # print('-', end ="")
                     if self.status('isPlaying'):
-                        self.log('PLAYBACK LOCKED OUT', self._mpv_lockedout)
-                        self._mpv_send('{ "command": ["set_property", "pause", false] }')
-                        self._mpv_lockedout += 1
-                        if self._mpv_lockedout > 3:
-                            print("CRASH STOP")
-                            self._mpv_send('{ "command": ["stop"] }')
-                            os.system('pkill mpv')
-                            self.emit('hardreset')
+                        if not self.status('media').split('.')[-1] in self._imageExt:
+                            self.log('PLAYBACK LOCKED OUT', self._mpv_lockedout)
+                            self._mpv_send('{ "command": ["set_property", "pause", false] }')
+                            self._mpv_lockedout += 1
+                            if self._mpv_lockedout > 3:
+                                print("CRASH STOP")
+                                self._mpv_send('{ "command": ["stop"] }')
+                                os.system('pkill mpv')
+                                self.emit('hardreset')
                     pass
 
                 # Socket error: exit
@@ -235,11 +241,16 @@ class MpvPlayer(BasePlayer):
         command = ['mpv', '--input-ipc-server=' + self._mpv_socketpath + '',
                                 '--idle=yes', '-v', '--no-osc', '--msg-level=ipc=v', '--quiet', '--fs','--keep-open'
                                 ,'--window-scale=' + str(self._mpv_scale)
-                                ,'--image-display-duration=' + str(self._mpv_imagetime)
                                 ,'--hr-seek=yes'
                                 # ,'--af=rubberband'
                                 #,'--force-window=yes'
                                 ]
+
+        # image time (0 = still image)
+        if self._mpv_imagetime > 0:
+            command.append('--image-display-duration=' + str(self._mpv_imagetime))
+        else:
+            command.append('--image-display-duration=inf')
         
         # Special command for RockPro64
         if os.path.exists('/usr/local/bin/rkmpv'):
@@ -280,27 +291,33 @@ class MpvPlayer(BasePlayer):
         
         self.log("stopped")
 
-
-    def _play(self, path):
-        # self.log("play", path)
-        self.update('isPaused', False)
-        # self._mpv_send('{ "command": ["stop"] }')
+    def _play(self, path, pause=False):
+        event = "play"
+        if pause: event += "pause"
+        # self.log(event, path, time.time()*1000000)
+        self._mpv_send('{ "command": ["stop"] }')
+        
+        self.update('isPaused', pause)
+        self.log("isPaused", self.status('isPaused'))
         self._mpv_send('{ "command": ["loadfile", "'+path+'"] }')
-        self._mpv_send('{ "command": ["set_property", "pause", false] }')
+        
+        if pause:
+            self._mpv_send('{ "command": ["set_property", "pause", true] }')
+        else:
+            self._mpv_send('{ "command": ["set_property", "pause", false] }')
+        
 
     def _stop(self):
         wasPlaying = self.status('isPlaying')
-        self.update('isPaused', False)
         self._mpv_send('{ "command": ["stop"] }')
         # if not wasPlaying:
         #     self.emit('stopped')    # already stopped, so manually trigger event
 
     def _pause(self):
-        self.update('isPaused', True)
         self._mpv_send('{ "command": ["set_property", "pause", true] }')
 
     def _resume(self):
-        self.update('isPaused', False)
+        self.log("resume")
         self._mpv_send('{ "command": ["set_property", "pause", false] }')
 
     def _seekTo(self, milli):

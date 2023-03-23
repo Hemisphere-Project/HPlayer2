@@ -97,6 +97,6 @@ def get_essid(iface):
 def get_rssi(iface):
     rssi = int(subprocess.check_output("iw "+iface+" link | grep signal: | awk '{print $2}'", shell=True))
     minVal = -85
-    maxVal = -45
+    maxVal = -40
     return round(max(0, (rssi-minVal)*100/(maxVal-minVal)))
 

@@ -1,13 +1,14 @@
 from ..module import Module
 import os
 import re
+from random import randrange, shuffle
 
 
 class Playlist(Module):
     
     _playlist = []
     _index = 0
-    
+    _lastran = -1
     
     def __init__(self, hplayer):
         super().__init__(hplayer, 'Playlist', 'yellow')
@@ -88,34 +89,42 @@ class Playlist(Module):
         self._index = -1
         self.update()
 
+    # JUST SET INDEX TO -1
+    def rearm(self):
+        self._index = -1
+        
+    # RANDOMIZE CURRENT PLAYLIST
+    def randomize(self):
+        shuffle(self._playlist)
+        self.rearm()
 
     # PLAY a playlist
-    def play(self, plist=None, index=-1):
+    def play(self, plist=None, index=-1, pause=False):
         self.onEnd = None
         
         if plist: 
             self.load(plist)
         
         if index >= 0:
-            self.playindex(index)
+            self.playindex(index, pause)
         elif self._index >= 0:
-            self.playindex(self._index)
+            self.playindex(self._index, pause)
         else:
-            self.playindex(0)
+            self.playindex(0, pause)
 
     # PLAY a playlist and execute event on end
-    def playthen(self, plist=None, then=None):
-        self.play(plist)
+    def playthen(self, plist=None, then=None, pause=False):
+        self.play(plist, pause=pause)
         if then:
             self.onEnd = lambda: self.emit(then['event'], *then['data'])
 
     # PLAY at index
-    def playindex(self, index):
+    def playindex(self, index, pause=False):
 
         # Emit play event
         if 0 <= index < self.size() and os.path.isfile(self._playlist[index]):
             self._index = index
-            self.emit('do-play', self._playlist[self._index], self._index)
+            self.emit('do-play', self._playlist[self._index], self._index, pause)
         
         # Handle error
         else:
@@ -129,17 +138,11 @@ class Playlist(Module):
 
     # NEXT item in playlist
     def next(self):
-        i = self._index + 1
-        if i >= self.size():
-            i = 0
-        self.playindex(i)
+        self.playindex( self.nextIndex() )
 
     # PREVIOUS item in playlist
     def prev(self):
-        i = self._index - 1
-        if i < 0:
-            i = self.size()-1
-        self.playindex(i)
+        self.playindex( self.prevIndex() )
 
     # LAST item
     def last(self):
@@ -148,6 +151,17 @@ class Playlist(Module):
     # first item
     def first(self):
         self.playindex(0)
+        
+    # random item
+    def random(self):
+        if self.size() > 0:
+            ran = randrange(self.size())
+            if self.size() > 1:
+                while ran == self._lastran:
+                    ran = randrange(self.size())
+            self._lastran = ran
+            self.playindex( ran )
+        print('RAN', self.size())
 
     
     ## OBTAIN INDEX
@@ -156,11 +170,14 @@ class Playlist(Module):
 
     # PREVIOUS item in playlist
     def prevIndex(self):
-        return (self._index - 1) % self.size() if self.size() > 0 else 0
+        i = self._index - 1
+        if i < 0: i = self.size()-1
+        return i if i > 0 else 0
 
     # LAST item
     def lastIndex(self):
-        return self.size()-1
+        i = self._index + 1
+        return i if i < self.size() else 0
 
     # first item
     def firstIndex(self):
