@@ -16,7 +16,7 @@ base_path = ['/data/usb', projectfolder, devicefolder]
 
 
 # INIT HPLAYER
-hplayer = HPlayer2(base_path)
+hplayer = HPlayer2(base_path, "/data/hplayer2-"+profilename+".cfg")
 
 
 # PLAYERS
