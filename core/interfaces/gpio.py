@@ -42,7 +42,7 @@ class GpioInterface (BaseInterface):
 
     def onchange(self, pin):
         value = not GPIO.input(pin) if self._pupdown == 'PUP' else GPIO.input(pin)      
-        #self.log("channel", pin, "triggered", value)
+        # print("-- channel", pin, "triggered", value)
         
         # An event was almost triggered: cancel it and forget it
         #
@@ -52,11 +52,13 @@ class GpioInterface (BaseInterface):
             if value == self._state[pin]:
                 self.log('event aborted by antispike (', self._antispike, ' ms)')
                 return
-            
-        # Postpone value change (prevent spike trigger)
-        self._antispikeTimer = Timer(self._antispike/1000, self.postponedChange, (pin, value))
-        self._antispikeTimer.start()
-
+        
+        if self._antispike > 0:
+            # Postpone value change (prevent spike trigger)
+            self._antispikeTimer = Timer(self._antispike/1000, self.postponedChange, (pin, value))
+            self._antispikeTimer.start()
+        else:
+            self.postponedChange(pin, value)
 
     # GPIO receiver THREAD
     def listen(self):
