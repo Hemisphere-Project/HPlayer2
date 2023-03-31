@@ -2,7 +2,7 @@ from core.engine.hplayer import HPlayer2
 from core.engine import network
 
 import os, sys, types, platform
-import json
+import json, glob
 
 
 # DIRECTORY / FILE
@@ -16,7 +16,7 @@ base_path = ['/data/usb', projectfolder, devicefolder]
 
 
 # INIT HPLAYER
-hplayer = HPlayer2(base_path)
+hplayer = HPlayer2(base_path, "/data/hplayer2-"+profilename+".cfg")
 
 
 # PLAYERS
@@ -36,12 +36,14 @@ except: pass
 # INTERFACES
 hplayer.addInterface('keyboard')
 hplayer.addInterface('osc', 1222, 3737)
-hplayer.addInterface('serial', 'M5')
+hplayer.addInterface('serial', 'M5', 10)
 hplayer.addInterface('zyre')
 hplayer.addInterface('mqtt', '10.0.0.1')
 hplayer.addInterface('http2', 8080)
 hplayer.addInterface('teleco')
+hplayer.addInterface('serial', '^M5')
 hplayer.addInterface('regie', 9111, projectfolder)
+gpio = hplayer.addInterface('gpio', [16, 20, 21], 1, 0, 'PUP') # service tek debounce @ 1 ??
 if myESP:
     hplayer.addInterface('btserial', 'k32-'+str(myESP))
 
@@ -49,8 +51,6 @@ if myESP:
 # Overlay
 if hplayer.isRPi():
     video.addOverlay('rpifade')
-
-
 
 #
 # SYNC PLAY
@@ -65,6 +65,80 @@ def broadcast(path, *args):
 	else:
 		hplayer.interface('zyre').node.broadcast(path, list(args))
 
+
+# SMS
+#
+sms_counter = 0
+peers_counter_dispatch = 0
+for f in glob.glob('/tmp/txt2img*'): os.remove(f)   # clear old msgs
+
+# SMS DISPATCHER (only CASA) MQTT -> ZYRE  
+@hplayer.on('mqtt.textdispatch')
+def textdispatchM(ev, *args):
+    zyre = hplayer.interface('zyre')
+    peersList = list(zyre.peersList())
+    peersList.remove(zyre.node.zyre.uuid())
+    if len(peersList) == 0: return
+    
+    global peers_counter_dispatch
+    peers_counter_dispatch = (peers_counter_dispatch+1)%len(peersList)
+    hplayer.interface('zyre').node.whisper(peersList[peers_counter_dispatch], 'text', args)
+    
+
+# SMS TEXT ALL (only CASA) MQTT -> ZYRE  
+@hplayer.on('mqtt.textall')
+def textclearM(ev, *args):
+    hplayer.interface('zyre').node.broadcast('textall', args)
+    
+    
+# SMS STOP ALL (only CASA) MQTT -> ZYRE  
+@hplayer.on('mqtt.textstop')
+def textclearM(ev, *args):
+    hplayer.interface('zyre').node.broadcast('textstop')
+    
+    
+# SMS DISPLAY
+@hplayer.on('zyre.text')
+def text(ev, *args):
+    global sms_counter
+
+    args = list(args[0])
+    if len(args) == 1: args.append(None)            #encoding
+    if len(args) == 2: args.append(sms_counter)     #suffix
+    
+    print(args)
+    file = hplayer.imgen.txt2img(*args)
+    
+    hplayer.settings.set('loop', 2)
+    hplayer.playlist.load(glob.glob('/tmp/txt2img*'))
+    
+    i = hplayer.playlist.findIndex(file)
+    if i > -1: hplayer.playlist.remove(i)
+    hplayer.playlist.randomize()
+    hplayer.playlist.add(file)
+    hplayer.playlist.last()
+    
+    sms_counter = (sms_counter+1)%10
+
+
+@hplayer.on('zyre.textstop')
+def textstop(ev, *args):
+    hplayer.interface(ev.split('.')[0]).emit('stop')
+    global sms_counter
+    sms_counter = 0
+    os.system('rm -Rf /tmp/txt2img*')
+        
+  
+@hplayer.on('zyre.textall')
+def textclear(ev, *args):
+    textstop(ev)
+    msg = args[0]
+    if len(msg) >= 1 and len(msg[0]) >= 1:
+        msg[0] = msg[0].replace("+33", "0")
+        if msg[0].startswith("0") and len(msg[0]) == 10:
+            msg[0] = ' '.join(msg[0][i:i+2] for i in range(0, len(msg[0]), 2))
+        text(None, msg)
+        
 
 # PIR
 #
@@ -159,6 +233,48 @@ def espStop(ev, *args):
     if lastEspEvent == 'sacvp.esp':
         hplayer.emit('sacvp.esp', {'topic': 'leds/stop', 'data': ''})
 
+#
+# GPIO
+#
+
+# BTN 1
+@hplayer.on('gpio.16')
+def play1(ev, *args):
+    isAlreadyPlaying = hplayer.activePlayer().status()['media'] and hplayer.activePlayer().status()['media'].split('/')[-1].startswith("1_")
+    print("BTN1:", args[0] == 0, "isPlaying", isAlreadyPlaying )
+    if args[0] == 0:
+        if not isAlreadyPlaying:
+            hplayer.playlist.play("1_*.*")
+    elif isAlreadyPlaying:
+        hplayer.activePlayer().stop()
+  
+# BTN 2
+@hplayer.on('gpio.20')
+def play2(ev, *args):
+    isAlreadyPlaying = hplayer.activePlayer().status()['media'] and hplayer.activePlayer().status()['media'].split('/')[-1].startswith("2_")
+    print("BTN2:", args[0] == 0, "isPlaying", isAlreadyPlaying )
+    if args[0] == 0:
+        if not isAlreadyPlaying:
+            hplayer.playlist.play("2_*.*")
+    elif isAlreadyPlaying:
+        hplayer.activePlayer().stop()
+    
+    
+# BTN 3
+@hplayer.on('gpio.21')
+def play1(ev, *args):
+    isAlreadyPlaying = hplayer.activePlayer().status()['media'] and hplayer.activePlayer().status()['media'].split('/')[-1].startswith("3_")
+    print("BTN3:", args[0] == 0, "isPlaying", isAlreadyPlaying )
+    if args[0] == 0:
+        if not isAlreadyPlaying:
+            hplayer.playlist.play("3_*.*")
+    elif isAlreadyPlaying:
+        hplayer.activePlayer().stop()
+
+
+#
+# RUN
+#
 
 # default volume
 @video.on('ready')
@@ -166,5 +282,9 @@ def init(ev, *args):
     hplayer.settings.set('volume', 100)
     hplayer.settings.set('loop', -1)
 
+
+# file = hplayer.imgen.txt2img("004F006B00200073007500700065007200202764FE0F", "UCS2")
+# hplayer.playlist.play(file)
+            
 # RUN
 hplayer.run()                               						# TODO: non blocking

@@ -28,6 +28,8 @@ class Http2Interface (BaseInterface):
         super(Http2Interface, self).__init__(hplayer, "HTTP2")
         self._port = port
 
+        self.logQuietEvents.append('do-socketio')
+
         self.conf = {
             'name'      : hplayer.name(),
             'isRPi'     : hplayer.isRPi(),

@@ -241,11 +241,16 @@ class MpvPlayer(BasePlayer):
         command = ['mpv', '--input-ipc-server=' + self._mpv_socketpath + '',
                                 '--idle=yes', '-v', '--no-osc', '--msg-level=ipc=v', '--quiet', '--fs','--keep-open'
                                 ,'--window-scale=' + str(self._mpv_scale)
-                                ,'--image-display-duration=' + str(self._mpv_imagetime)
                                 ,'--hr-seek=yes'
                                 # ,'--af=rubberband'
                                 #,'--force-window=yes'
                                 ]
+
+        # image time (0 = still image)
+        if self._mpv_imagetime > 0:
+            command.append('--image-display-duration=' + str(self._mpv_imagetime))
+        else:
+            command.append('--image-display-duration=inf')
         
         # Special command for RockPro64
         if os.path.exists('/usr/local/bin/rkmpv'):
@@ -286,27 +291,33 @@ class MpvPlayer(BasePlayer):
         
         self.log("stopped")
 
-
-    def _play(self, path):
-        # self.log("play", path)
-        self.update('isPaused', False)
-        # self._mpv_send('{ "command": ["stop"] }')
+    def _play(self, path, pause=False):
+        event = "play"
+        if pause: event += "pause"
+        # self.log(event, path, time.time()*1000000)
+        self._mpv_send('{ "command": ["stop"] }')
+        
+        self.update('isPaused', pause)
+        self.log("isPaused", self.status('isPaused'))
         self._mpv_send('{ "command": ["loadfile", "'+path+'"] }')
-        self._mpv_send('{ "command": ["set_property", "pause", false] }')
+        
+        if pause:
+            self._mpv_send('{ "command": ["set_property", "pause", true] }')
+        else:
+            self._mpv_send('{ "command": ["set_property", "pause", false] }')
+        
 
     def _stop(self):
         wasPlaying = self.status('isPlaying')
-        self.update('isPaused', False)
         self._mpv_send('{ "command": ["stop"] }')
         # if not wasPlaying:
         #     self.emit('stopped')    # already stopped, so manually trigger event
 
     def _pause(self):
-        self.update('isPaused', True)
         self._mpv_send('{ "command": ["set_property", "pause", true] }')
 
     def _resume(self):
-        self.update('isPaused', False)
+        self.log("resume")
         self._mpv_send('{ "command": ["set_property", "pause", false] }')
 
     def _seekTo(self, milli):

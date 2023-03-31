@@ -15,7 +15,6 @@ class SerialInterface (BaseInterface):
         self.filter = filter
         self.maxRetry = maxRetry
         
-
     # SERIAL receiver THREAD
     def listen(self):
 
@@ -66,9 +65,10 @@ class SerialInterface (BaseInterface):
                     if data: 
                         data = data.decode("utf-8").split(' ')
                         data[0] = data[0].lower()
-                        if data[0][0] == '/': data[0] = data[0][1:]
-                        data[0].replace('/','.')
-                        self.emit(data[0], *data[1:])
+                        if data[0][0] == '/':  # Serial message must start with a slash 
+                            data[0] = data[0][1:]
+                            data[0].replace('/','.')
+                            self.emit(data[0], *data[1:])
                 except Exception as e:
                     print(e)
                     self.log("broken link..")

@@ -7,6 +7,7 @@ from core.engine.sampler import Sampler
 from core.engine.filemanager import FileManager
 from core.engine.playlist import Playlist
 from core.engine.settings import Settings
+from core.engine.imgen import ImGen
 
 from collections import OrderedDict
 from threading import Timer
@@ -42,6 +43,8 @@ class HPlayer2(EventEmitterX):
         self.settings       = Settings(self)
         self.files          = FileManager(self)
         self.playlist       = Playlist(self)
+        
+        self.imgen          = ImGen(self)
 
         self.autoBind(self.settings)
         self.autoBind(self.files)
@@ -313,43 +316,57 @@ class HPlayer2(EventEmitterX):
         #
 
         @module.on('play')
+        @module.on('playpause')
         def play(ev, *args):
+            pause = ev.startswith('playpause')
             if len(args) > 1:
-                self.playlist.play(args[0], int(args[1]))
+                self.playlist.play(args[0], int(args[1]), pause=pause)
             elif len(args) > 0:
-                self.playlist.play(args[0])
+                self.playlist.play(args[0], pause=pause)
             else:
-                self.playlist.play()
+                self.playlist.play(pause=pause)
 
         @module.on('playonce')
+        @module.on('playpauseonce')
         def playonce(ev, *args):
             if len(args) > 0:
                 loop(ev, 0)
                 play(ev, *args)
 
         @module.on('playloop')
+        @module.on('playpauseloop')
         def playloop(ev, *args):
             if len(args) > 0:
                 loop(ev, 2)
                 play(ev, *args)
+        
+        @module.on('playindex')
+        @module.on('playpauseindex')
+        def playindex(ev, *args):
+            if len(args) > 0:
+                self.playlist.playindex(int(args[0]), ev.startswith('playpause'))
+                
+        # Play a list then trigger an event on media-end
+        @module.on('playthen')
+        @module.on('playpausethen')
+        def playthen(ev, *args):
+            if len(args) > 1:
+                self.playlist.playthen(args[0], args[1], ev.startswith('playpause'))
+            elif len(args) > 0:
+                self.playlist.playthen(args[0], None, ev.startswith('playpause'))
 
+        # Generate and display text as image
+        @module.on('playtext')
+        @module.on('playpausetext')
+        def playtext(ev, *args):
+            file = self.imgen.txt2img(*args)
+            self.playlist.play(file, pause=pause)
+            self.settings.set('loop', 1)
+            
         @module.on('load')
         def load(ev, *args):
             if len(args) > 0:
                 self.playlist.load(args[0])
-        
-        @module.on('playindex')
-        def playindex(ev, *args):
-            if len(args) > 0:
-                self.playlist.playindex(int(args[0]))
-                
-        # Play a list then trigger an event on media-end
-        @module.on('playthen')
-        def playindex(ev, *args):
-            if len(args) > 1:
-                self.playlist.playthen(args[0], args[1])
-            elif len(args) > 0:
-                self.playlist.playthen(args[0], None)
 
         @module.on('add')
         def add(ev, *args):
@@ -383,7 +400,8 @@ class HPlayer2(EventEmitterX):
                 if p.validExt(args[0]):
                     if i != self._lastUsedPlayer:
                         self.activePlayer().stop()
-                    p.play(args[0])
+                    pause = args[2] if len(args) > 2 else False
+                    p.play(args[0], pause)
                     self._lastUsedPlayer = i
                     return
 
@@ -403,9 +421,10 @@ class HPlayer2(EventEmitterX):
                     p.pause()
 
         @module.on('resume')
+        @module.on('resumesync')
         def resume(ev, *args):
             for p in self.players(): 
-                if p.isPlaying():
+                if p.isPlaying() or ev.startswith('resumesync'):
                     p.resume()
 
         @module.on('seek')
