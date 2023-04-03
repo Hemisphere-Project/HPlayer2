@@ -238,36 +238,45 @@ def espStop(ev, *args):
 #
 
 # BTN 1
+playlist1 = Playlist(hplayer)
+playlist1.load("1_*.*")
 @hplayer.on('gpio.16')
 def play1(ev, *args):
     isAlreadyPlaying = hplayer.activePlayer().status()['media'] and hplayer.activePlayer().status()['media'].split('/')[-1].startswith("1_")
     print("BTN1:", args[0] == 0, "isPlaying", isAlreadyPlaying )
     if args[0] == 0:
         if not isAlreadyPlaying:
-            hplayer.playlist.play("1_*.*")
+            hplayer.playlist = playlist1
+            hplayer.playlist.next()
     elif isAlreadyPlaying:
         hplayer.activePlayer().stop()
   
 # BTN 2
+playlist2 = Playlist(hplayer)
+playlist2.load("2_*.*")
 @hplayer.on('gpio.20')
 def play2(ev, *args):
     isAlreadyPlaying = hplayer.activePlayer().status()['media'] and hplayer.activePlayer().status()['media'].split('/')[-1].startswith("2_")
     print("BTN2:", args[0] == 0, "isPlaying", isAlreadyPlaying )
     if args[0] == 0:
         if not isAlreadyPlaying:
-            hplayer.playlist.play("2_*.*")
+            hplayer.playlist = playlist2
+            hplayer.playlist.next()
     elif isAlreadyPlaying:
         hplayer.activePlayer().stop()
     
     
 # BTN 3
+playlist3 = Playlist(hplayer)
+playlist3.load("3_*.*")
 @hplayer.on('gpio.21')
 def play1(ev, *args):
     isAlreadyPlaying = hplayer.activePlayer().status()['media'] and hplayer.activePlayer().status()['media'].split('/')[-1].startswith("3_")
     print("BTN3:", args[0] == 0, "isPlaying", isAlreadyPlaying )
     if args[0] == 0:
         if not isAlreadyPlaying:
-            hplayer.playlist.play("3_*.*")
+            hplayer.playlist = playlist3
+            hplayer.playlist.next()
     elif isAlreadyPlaying:
         hplayer.activePlayer().stop()
 
