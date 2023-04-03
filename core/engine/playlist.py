@@ -20,6 +20,9 @@ class Playlist(Module):
         def _onEnd(ev, *args):
             if self.onEnd: self.onEnd()
             
+        # Autobind to player
+        hplayer.autoBind(self)
+            
 
     def __call__(self):
         return self.export()

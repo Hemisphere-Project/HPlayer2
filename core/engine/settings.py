@@ -18,6 +18,9 @@ class Settings(Module):
 
     def __init__(self, hplayer, persistent=None):
         super().__init__(hplayer, 'Settings', 'yellow')     
+        
+        # Autobind to player
+        hplayer.autoBind(self)
 
 
     def __call__(self, entry=None):

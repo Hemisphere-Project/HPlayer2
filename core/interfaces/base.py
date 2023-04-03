@@ -15,6 +15,9 @@ class BaseInterface(ABC, Module):
 
         # Listen thread
         self.recvThread = threading.Thread(target=self.listen)
+        
+        # Autobind to player
+        hplayer.autoBind(self)
 
 
     # Receiver THREAD (ABSTRACT)

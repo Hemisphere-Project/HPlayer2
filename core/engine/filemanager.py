@@ -30,6 +30,9 @@ class FileManager(Module):
             self.refreshTimer = Timer(.5, self.refresh)
             self.refreshTimer.start()
             
+        # Autobind to player
+        hplayer.autoBind(self)
+            
 
     def __call__(self, directory=None, fullpath=False):
         """

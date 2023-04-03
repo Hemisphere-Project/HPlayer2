@@ -46,10 +46,6 @@ class HPlayer2(EventEmitterX):
         
         self.imgen          = ImGen(self)
 
-        self.autoBind(self.settings)
-        self.autoBind(self.files)
-        self.autoBind(self.playlist)
-
         self.settings.load(settingspath)
         self.files.add(basepath)
 
@@ -208,7 +204,6 @@ class HPlayer2(EventEmitterX):
     def addInterface(self, iface, *argv):
         InterfaceClass = ifacelib.getInterface(iface)
         self._interfaces[iface] = InterfaceClass(self, *argv)
-        self.autoBind(self._interfaces[iface])
         return self._interfaces[iface]
 
 
