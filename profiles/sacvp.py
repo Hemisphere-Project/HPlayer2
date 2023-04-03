@@ -1,4 +1,5 @@
 from core.engine.hplayer import HPlayer2
+from core.engine.playlist import Playlist
 from core.engine import network
 
 import os, sys, types, platform
@@ -246,8 +247,8 @@ def play1(ev, *args):
     print("BTN1:", args[0] == 0, "isPlaying", isAlreadyPlaying )
     if args[0] == 0:
         if not isAlreadyPlaying:
-            hplayer.playlist = playlist1
-            hplayer.playlist.next()
+            hplayer.playlist.clear()
+            playlist1.next()
     elif isAlreadyPlaying:
         hplayer.activePlayer().stop()
   
@@ -260,8 +261,8 @@ def play2(ev, *args):
     print("BTN2:", args[0] == 0, "isPlaying", isAlreadyPlaying )
     if args[0] == 0:
         if not isAlreadyPlaying:
-            hplayer.playlist = playlist2
-            hplayer.playlist.next()
+            hplayer.playlist.clear()
+            playlist2.next()
     elif isAlreadyPlaying:
         hplayer.activePlayer().stop()
     
@@ -275,8 +276,8 @@ def play1(ev, *args):
     print("BTN3:", args[0] == 0, "isPlaying", isAlreadyPlaying )
     if args[0] == 0:
         if not isAlreadyPlaying:
-            hplayer.playlist = playlist3
-            hplayer.playlist.next()
+            hplayer.playlist.clear()
+            playlist3.next()
     elif isAlreadyPlaying:
         hplayer.activePlayer().stop()
 
