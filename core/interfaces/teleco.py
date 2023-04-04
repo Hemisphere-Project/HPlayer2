@@ -23,7 +23,7 @@ class TelecoInterface (BaseInterface):
         super().__init__(hplayer, "Teleco")
         self.port = None
         self.serial = None
-        self.filter = "Leonardo"
+        self.filter = "Leonardo|Pro Micro"
         self.nLines = 5
 
         self.activePage = PAGE_WELCOME
