@@ -17,10 +17,10 @@ player 	= hplayer.addPlayer('mpv','mpv')
 # Interfaces
 zyre		= hplayer.addInterface('zyre', 'wlan0')
 keypad 		= hplayer.addInterface('keypad')
-# osc		= hplayer.addInterface('osc', 4000).hostOut = '10.0.0.255'
 # http		= hplayer.addInterface('http', 8037)
 # http2		= hplayer.addInterface('http2', 8080)
 # keyboard 	= hplayer.addInterface('keyboard')
+# osc		= hplayer.addInterface('osc', 4000).hostOut = '10.0.0.255'
 
 keypad.lcd.set_color( 100, 0, 100)
 keypad.draw( [".:: HPlayer2 ::.", "   Starting "+keypad.CHAR_LOVE+"   "] )
@@ -64,7 +64,15 @@ if usbCount > 0:
 
 # No Loop, neither playlist
 hplayer.settings.set('loop', -1)
+masterLoopIndex = -1
 
+
+# Master loop (from track name)
+#
+@hplayer.on('playlist.end')
+def masterLoop(ev, *args):
+	if masterLoopIndex > -1:
+		broadcast('playindex', masterLoopIndex)
 
 # Build playlist
 #
@@ -74,10 +82,26 @@ def bulid_list(ev=None, *args):
 bulid_list()
 
 
-# Zyre play index
+# Zyre play X_*
 @hplayer.on('zyre.playz')
 def play_indexed(ev, *args):
     hplayer.playlist.emit('playindex', hplayer.playlist.findIndex(str(args[0])+"_*") )
+
+
+# Zyre play HTTP
+@hplayer.on('http.playh')
+def play_indexed(ev, *args):
+	print("HTTPD", ev, args)
+	if len(args) > 0:
+		index = int(args[0])
+		# Store master loop index
+		global masterLoopIndex
+		masterLoopIndex = -1
+		if hplayer.playlist.trackAtIndex(index).lower().find('_loop') > 0: 
+			masterLoopIndex = index
+		print(masterLoopIndex)
+		# Brodcast next track
+		broadcast('playindex', index)
 
 
 # Broadcast Order on OSC/Zyre to other Pi's
@@ -141,9 +165,18 @@ downHold = False
 def prev(ev, *args):
 	if keylock: 
 		return lockAlert()
+	
+	global masterLoopIndex
+	masterLoopIndex = -1
+
 	if player.isPlaying() and player.position() > introDuration:
+			# Brodcast rewind current track
 			broadcast('playindex', hplayer.playlist.index())
-	else:
+	else:	
+			# Store master loop index
+			if hplayer.playlist.prevTrack().lower().find('_loop') > 0: 
+				masterLoopIndex = hplayer.playlist.prevIndex()
+			# Brodcast prev track
 			broadcast('playindex', hplayer.playlist.prevIndex())
         
 @hplayer.on('keypad.right')
@@ -151,6 +184,12 @@ def prev(ev, *args):
 def next(ev, *args):
 	if keylock: 
 		return lockAlert()
+	# Store master loop index
+	global masterLoopIndex
+	masterLoopIndex = -1
+	if hplayer.playlist.nextTrack().lower().find('_loop') > 0: 
+		masterLoopIndex = hplayer.playlist.nextIndex()
+	# Brodcast next track
 	broadcast('playindex', hplayer.playlist.nextIndex())
 
 @hplayer.on('keypad.up')
@@ -193,6 +232,8 @@ def releasedown(ev, *args):
 def down(ev, *args):
 	if keylock: 
 		return lockAlert()
+	global masterLoopIndex
+	masterLoopIndex = -1
 	broadcast('stop')
     
 @hplayer.on('keypad.select-hold')
