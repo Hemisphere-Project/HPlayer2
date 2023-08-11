@@ -92,7 +92,9 @@ class KeypadInterface (BaseInterface):
                     self.emit(btn[1]+'-hold')
                 else:
                     pressed[btn[1]] -= 1
-            else:    
+            else:
+                if pressed[btn[1]] > 0:
+                    self.emit(btn[1]+'-release')        
                 pressed[btn[1]] = 0
                 
 

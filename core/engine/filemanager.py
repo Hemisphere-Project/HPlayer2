@@ -94,7 +94,7 @@ class FileManager(Module):
             self.refreshTimer = None
         listDirs = []
         for path in self.root_paths:
-            listDirs.extend([d for d in next(os.walk(path))[1] if not d.startswith('.')])
+            listDirs.extend([d for d in next(os.walk(path))[1] if not d.startswith('.') and d != "System Volume Information" ])
         listDirs = sorted(list(dict.fromkeys(listDirs)))
         # listDirs.insert(0,'')
         self.unified_dir = listDirs

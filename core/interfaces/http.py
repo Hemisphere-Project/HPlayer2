@@ -36,6 +36,7 @@ class HttpInterface (BaseInterface):
         # Start server
         self.log( "listening on port", self._port)
         with ThreadedHTTPServer(self._port, BasicHTTPServerHandler(self)) as server:
+            server.handler.httpinterface = self
             self.stopped.wait()
 
         # Unregister ZeroConf
@@ -50,6 +51,7 @@ class HttpInterface (BaseInterface):
 #
 class ThreadedHTTPServer(object):
     def __init__(self, port, handler):
+        self.handler = handler
         self.server = HTTPServer(('', port), handler)
         self.server_thread = threading.Thread(target=self.server.serve_forever)
         self.server_thread.daemon = True

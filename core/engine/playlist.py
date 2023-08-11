@@ -59,6 +59,10 @@ class Playlist(Module):
     def index(self):
         return self._index
 
+    # Playlist current item
+    def track(self):
+        return self.trackAtIndex(self._index)
+
     # CLEAR Playlist
     def clear(self):
         self._playlist = []
@@ -167,24 +171,40 @@ class Playlist(Module):
         print('RAN', self.size())
 
     
-    ## OBTAIN INDEX
+    ## NEXT index
     def nextIndex(self):
         return (self._index + 1) % self.size() if self.size() > 0 else 0
 
-    # PREVIOUS item in playlist
+    # Playlist NEXT item
+    def nextTrack(self):
+        return self.trackAtIndex( self.nextIndex() )
+
+    # PREVIOUS index in playlist
     def prevIndex(self):
         i = self._index - 1
         if i < 0: i = self.size()-1
         return i if i > 0 else 0
+
+    # Playlist PREVIOUS item
+    def prevTrack(self):
+        return self.trackAtIndex( self.prevIndex() )
 
     # LAST item
     def lastIndex(self):
         i = self._index + 1
         return i if i < self.size() else 0
 
+    # Playlist LAST item
+    def lastTrack(self):
+        return self.trackAtIndex(self.size()-1)
+
     # first item
     def firstIndex(self):
         return 0
+
+    # Playlist first item
+    def firstTrack(self):
+        return self.trackAtIndex(0)
 
     # find item
     def findIndex(self, pattern):
@@ -194,3 +214,9 @@ class Playlist(Module):
             if re.search(pattern, media):
                 return k
         return -1
+
+    # Playlist item at index
+    def trackAtIndex(self, index):
+        if index < 0 or index >= len(self._playlist):
+            return None
+        return self._playlist[index]
