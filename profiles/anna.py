@@ -17,7 +17,7 @@ player 	= hplayer.addPlayer('mpv','mpv')
 # Interfaces
 zyre		= hplayer.addInterface('zyre', 'wlan0')
 keypad 		= hplayer.addInterface('keypad')
-# http		= hplayer.addInterface('http', 8037)
+http		= hplayer.addInterface('http', 8037)
 # http2		= hplayer.addInterface('http2', 8080)
 # keyboard 	= hplayer.addInterface('keyboard')
 # osc		= hplayer.addInterface('osc', 4000).hostOut = '10.0.0.255'
@@ -72,6 +72,7 @@ masterLoopIndex = -1
 @hplayer.on('playlist.end')
 def masterLoop(ev, *args):
 	if masterLoopIndex > -1:
+		# broadcast('stop')
 		broadcast('playindex', masterLoopIndex)
 
 # Build playlist
