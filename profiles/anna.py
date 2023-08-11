@@ -110,9 +110,14 @@ def play_indexed(ev, *args):
 def broadcast(path, *args):
 	# print(path, list(args))
 	if path.startswith('play'):
-		zyre.node.broadcast(path, list(args), 300)   ## WARNING LATENCY !!
+		zyre.node.broadcast('unbuf_'+path, list(args), 300)   ## WARNING LATENCY !!   unbuf_ prevents prefix play/pause/resume on zyre sync
 	else:
 		zyre.node.broadcast(path, list(args))
+
+
+@hplayer.on('zyre.unbuf_playindex')
+def unprep_play(ev, *args):
+	hplayer.playlist.emit('playindex', args[0] )
 
 
 # Keyboard
