@@ -95,8 +95,14 @@ def get_essid(iface):
     return subprocess.check_output("iw "+iface+" link | grep SSID: | awk '{print $2}'", shell=True).decode('ascii').strip()
 
 def get_rssi(iface):
-    rssi = int(subprocess.check_output("iw "+iface+" link | grep signal: | awk '{print $2}'", shell=True))
-    minVal = -85
-    maxVal = -40
-    return round(max(0, (rssi-minVal)*100/(maxVal-minVal)))
+    try:
+        output = subprocess.check_output("iw "+iface+" link | grep signal: | awk '{print $2}'", shell=True).decode('ascii').strip()
+        if not output:
+            return 0  # Return 0% signal strength if no signal found
+        rssi = int(output)
+        minVal = -85
+        maxVal = -40
+        return round(max(0, (rssi-minVal)*100/(maxVal-minVal)))
+    except (subprocess.CalledProcessError, ValueError):
+        return 0  # Return 0% signal strength on any error
 
