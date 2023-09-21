@@ -1,6 +1,6 @@
 from __future__ import print_function
 from . import network
-from ..module import EventEmitterX
+from ..module import Module
 import core.players as playerlib
 import core.interfaces as ifacelib
 from core.engine.sampler import Sampler
@@ -28,10 +28,11 @@ def signal_handler(signal, frame):
 signal.signal(signal.SIGINT, signal_handler)
 
 
-class HPlayer2(EventEmitterX):
+class HPlayer2(Module):
 
     def __init__(self, basepath=None, settingspath=None):
-        super().__init__(wildcard=True, delimiter=".")
+        # super().__init__(wildcard=True, delimiter=".")
+        super().__init__(None, 'HPlayer2', 'green')
         self.nameP = colored(('[HPlayer2]').ljust(10, ' ')+' ', 'green')
 
         self._lastUsedPlayer = 0
@@ -48,6 +49,9 @@ class HPlayer2(EventEmitterX):
 
         self.settings.load(settingspath)
         self.files.add(basepath)
+
+        self.autoBind(self)
+        self.logQuietEvents = ['status']
 
 
     def log(self, *argv):

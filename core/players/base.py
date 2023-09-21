@@ -9,6 +9,7 @@ class BasePlayer(Module):
 
     def __init__(self, hplayer, name):
         super().__init__(hplayer, name, 'magenta')
+        self.hplayer = hplayer
 
         self._running = threading.Event()
         self._running.set()
@@ -37,9 +38,9 @@ class BasePlayer(Module):
         }
 
 
-    def addOverlay(self, olay, args=[]):
+    def addOverlay(self, olay, *argv):
         OverlayClass = overlays.getOverlay(olay)
-        self._overlays[olay] = OverlayClass()
+        self._overlays[olay] = OverlayClass(self.hplayer, *argv)
         return self._overlays[olay]
 
     def getOverlay(self, name):

@@ -1,5 +1,3 @@
-from __future__ import print_function
-from termcolor import colored
 from time import sleep
 from .base import BaseOverlay
 import copy
@@ -12,11 +10,8 @@ class RpifadeOverlay (BaseOverlay):
     nextFader = {'red': 0.0, 'green': 0.0, 'blue': 0.0, 'alpha': 0.0}
     currentFader = copy.deepcopy(nextFader)
 
-    def __init__(self):
-        super(RpifadeOverlay, self).__init__()
-
-        self.name = "RPI Fade"
-        self.nameP = colored(self.name,'cyan')
+    def __init__(self, hplayer):
+        super().__init__(hplayer, 'Rpifade', 'cyan')
         self.workit = False
 
 
@@ -24,21 +19,20 @@ class RpifadeOverlay (BaseOverlay):
     def receive(self):
 
         texture = rpiopengles.colortexture()
-        print(self.nameP, "texture created")
+        self.log("texture created")
 
         while self.isRunning():
             if not self.queue.empty():
                 goalFader = self.queue.get()
                 self.workit = True
                 while self.workit:
-                    # print (self.currentFader)
                     self.workit = False
                     self.currentFader['red'] += self._diff( goalFader['red'], self.currentFader['red'])
                     self.currentFader['green'] += self._diff( goalFader['green'], self.currentFader['green'])
                     self.currentFader['blue'] += self._diff( goalFader['blue'], self.currentFader['blue'])
                     self.currentFader['alpha'] += self._diff( goalFader['alpha'], self.currentFader['alpha'])
 
-                    print(self.currentFader)
+                    self.log("fader", self.currentFader)
                     
                     texture.draw(   red=self.currentFader['red'],
                                     green=self.currentFader['green'],
