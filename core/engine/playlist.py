@@ -10,8 +10,8 @@ class Playlist(Module):
     _index = 0
     _lastran = -1
     
-    def __init__(self, hplayer):
-        super().__init__(hplayer, 'Playlist', 'yellow')
+    def __init__(self, hplayer, name='Playlist'):
+        super().__init__(hplayer, name, 'yellow')
         self.hplayer = hplayer
         
         # Custom action to do on playlist end

@@ -32,11 +32,13 @@ class BaseInterface(ABC, Module):
         return self
 
     # Stop
-    def quit(self):
-        self.log("stopping...")
-        self.stopped.set()
-        self.recvThread.join()
-        self.log("stopped")
+    def quit(self, join=True):
+        if self.isRunning(): 
+            self.log("stopping...")
+            self.stopped.set()
+        if join:
+            self.recvThread.join()
+            self.log("stopped")
 
 	# is Running
     def isRunning(self, state=None):

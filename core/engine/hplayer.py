@@ -62,7 +62,7 @@ class HPlayer2(Module):
         return platform.machine().startswith('armv')
 
     @staticmethod
-    def name():
+    def hostname():
         return network.get_hostname()
 
     #
@@ -271,12 +271,14 @@ class HPlayer2(Module):
         self.log()
         self.log("is closing..")
         self.emit('app-closing')
-        for p in self.players():
-            p.quit()
-        for s in self.samplers():
-            s.quit()
-        for iface in self.interfaces():
-            iface.quit()
+
+        # Trigger QUIT
+        for iface in self.interfaces(): iface.quit(False)
+        for p in self.players(): p.quit()
+        for s in self.samplers(): s.quit()
+
+        # Wait for interface threads to finish
+        for iface in self.interfaces(): iface.quit(True)
 
         # os.system('ps faux | pgrep mpv | xargs kill')
         self.emit('app-quit')

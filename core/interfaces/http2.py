@@ -31,7 +31,7 @@ class Http2Interface (BaseInterface):
         self.logQuietEvents.append('do-socketio')
 
         self.conf = {
-            'name'      : hplayer.name(),
+            'name'      : hplayer.hostname(),
             'isRPi'     : hplayer.isRPi(),
             'playlist'  : True,
             'loop'      : True,

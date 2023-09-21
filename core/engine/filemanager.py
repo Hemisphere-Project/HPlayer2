@@ -21,14 +21,21 @@ class FileManager(Module):
         
         self.logQuietEvents.append('file-changed')
         
+        # Defered update (file change might trigger multiple events)
         @self.on('file-changed')                # file changed on disk -> trigger full refresh
-        @self.parent.on('player-added')        # new player means new authorized extension -> trigger list refresh
-        @self.parent.on('sampler-added')        # new player means new authorized extension -> trigger list refresh
         def deferredUpdate(ev, *args):
             if self.refreshTimer:
                 self.refreshTimer.cancel()
             self.refreshTimer = Timer(.5, self.refresh)
             self.refreshTimer.start()
+
+        # Instant update: new player means new authorized extension -> trigger list refresh
+        @self.parent.on('player-added')        # new player means new authorized extension -> trigger list refresh
+        @self.parent.on('sampler-added')        # new player means new authorized extension -> trigger list refresh
+        def instantUpdate(ev, *args):
+            if self.refreshTimer:
+                self.refreshTimer.cancel()
+            self.refresh()
             
         # Autobind to player
         hplayer.autoBind(self)
@@ -57,7 +64,6 @@ class FileManager(Module):
         """
         Set root directories with attached watchdogs 
         """
-
         # filter .tmp changes
         def onChange(e):
             if not e.src_path.endswith('.tmp'):
@@ -67,6 +73,7 @@ class FileManager(Module):
         if not isinstance(path, list): 
             path = [path]
 
+        doRefresh = False
         for p in path:
             if not os.path.isdir(p):
                 self.log("Basepath "+p+" not found... ignoring")
@@ -82,8 +89,8 @@ class FileManager(Module):
             my_observer.schedule(handler, p, recursive=True)
             my_observer.start()
             self.pathObservers.append(my_observer)
-        self.refresh()
-
+            doRefresh = True
+        
 
     def refresh(self):
         """
@@ -96,11 +103,11 @@ class FileManager(Module):
         for path in self.root_paths:
             listDirs.extend([d for d in next(os.walk(path))[1] if not d.startswith('.') and d != "System Volume Information" ])
         listDirs = sorted(list(dict.fromkeys(listDirs)))
-        # listDirs.insert(0,'')
+        listDirs = [d for i,d in enumerate(listDirs) if d not in listDirs[:i]]
+        listDirs.insert(0,'/')
         self.unified_dir = listDirs
-        # self.log('directory list updated', self.unified_dir)
-        self.selectDir( self.active_dir )   
         self.emit('dirlist-updated', self.unified_dir)
+        self.selectDir( self.active_dir )   
 
     
     def listDir(self):
@@ -128,8 +135,8 @@ class FileManager(Module):
         
         self.active_list = self.listFiles( self.currentDir() )
         
-        self.emit('filelist-updated', self.active_list)
         self.emit('activedir-updated', self.currentDir(), self.currentIndex())
+        self.emit('filelist-updated', self.active_list)
 
         return self.currentDir()
 
@@ -224,7 +231,7 @@ class FileManager(Module):
         return False
 
 
-    def listFiles(self, entries):
+    def listFiles(self, entries, origin=None):
         """
         Create recursive list of files based on source (can be files, folders, ...)
         """
@@ -234,16 +241,20 @@ class FileManager(Module):
 
         for entry in entries:
 
+            # PREVENT ROOT
+            if entry == '/': entry = ''
+
             # ABSOLUTE PATH
 
             # full path directory -> add content recursively
-            if os.path.isdir(entry):
+            if entry.startswith('/') and os.path.isdir(entry):
                 dirContent = [os.path.join(entry, f) for f in os.listdir(entry) if not f.startswith('.')]
                 dirContent.sort()
+                if origin == '':  dirContent = [f for f in dirContent if os.path.isfile(f)] # prevent subfolders digging if scanning 'root' directory
                 liste.extend(self.listFiles( dirContent ))
 
             # full path file -> add it
-            elif os.path.isfile(entry):
+            elif entry.startswith('/') and os.path.isfile(entry):
                 if self.validExt(entry):
                     liste.append(entry)
                 # else:
@@ -263,9 +274,9 @@ class FileManager(Module):
                 for base in self.root_paths:
                     if os.path.isdir(base):
                         fullpath = os.path.join(base, entry)
-                        # relative path directory -> add content recursively
+                        # relative path directory -> add content recursively (if not root path !)
                         if os.path.isdir(fullpath):
-                            liste.extend(self.listFiles(fullpath))
+                            liste.extend(self.listFiles(fullpath, entry))
                             break
                         # relative path file -> add content recursively
                         elif os.path.isfile(fullpath):

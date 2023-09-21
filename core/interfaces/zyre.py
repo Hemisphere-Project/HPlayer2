@@ -1,4 +1,5 @@
 from .base import BaseInterface
+from ..module import safe_print
 from zyre import Zyre, ZyreEvent
 from czmq import *
 import time, random
@@ -15,7 +16,7 @@ from binascii import hexlify
 
 def get_port(sock):
     if not sock: 
-        print('ERROR while binding socket')
+        safe_print('ERROR while binding socket')
         return 0
     return sock.endpoint().decode().split(':')[2]
 
@@ -101,7 +102,7 @@ class TimeClient():
         internal_pipe.signal(0)
         retry = 0
 
-        # print("TimeClient: Starts sampling", self.client_ip)
+        # safe_print("TimeClient: Starts sampling", self.client_ip)
 
         sampler = []
         sample = TimeSample(req_sock)
@@ -119,7 +120,7 @@ class TimeClient():
                 retry = 0
                 sample.recv()
                 sampler.append( sample )
-                # print("Pong", sample.RTT, sample.CS)
+                # safe_print("Pong", sample.RTT, sample.CS)
                 if len(sampler) >= SAMPLER_SIZE:
                     break
                 sample = TimeSample(req_sock)   # next Sample
@@ -131,7 +132,7 @@ class TimeClient():
                     # print("Timeclient terminated")
                     break
 
-        # print("TimeClient: Sampling done", self.client_ip)
+        # safe_print("TimeClient: Sampling done", self.client_ip)
         self.compute(sampler)
         req_sock.__del__()
         self.done = True
@@ -155,14 +156,17 @@ class TimeClient():
             if cs_count > 0:
                 cs = int(cs/cs_count)
 
-            print(self.client_ip, "clock shift", str(cs)+"ns", "using", len(sampler), "samples")
+            # safe_print("\t", "["+self.client_ip+"]", "clock shift", str(cs)+"ns", "using", len(sampler), "samples")
             if self.clockshift:
-                print('\t correction =', str(self.clockshift-cs)+"ns" )
+                safe_print("\t", "["+self.client_ip+"]", "correction =", str(self.clockshift-cs)+"ns")
+            else:
+                safe_print("\t", "["+self.client_ip+"]", "clock sync")
+
             self.clockshift = cs
             self.status = 1
         else:
             self.status = 0
-            print(self.client_ip, "ERROR: sampler not full.. something might be broken")
+            safe_print("\t", "["+self.client_ip+"]", "ERROR: sampler not full.. something might be broken")
 
 
 
@@ -235,10 +239,10 @@ class Subscriber():
                     self.cache[topic] = arg
                     self.node.interface.emit(topic, arg)
                 else:
-                    print('INVALID message received: Unknown Publisher !')
+                    safe_print('INVALID message received: Unknown Publisher !')
                 
 
-        print("Subscriber terminated")
+        safe_print("Subscriber terminated")
         self.done = True
 
 
@@ -283,19 +287,19 @@ class Peer():
         self.subscriber = None
 
     def stop(self):
-        # print('stopping peer')
+        # safe_print('stopping peer')
         self.active = False
 
         if self.timerLink:
-            # print(' - cancel timelink')
+            # safe_print(' - cancel timelink')
             self.timerLink.cancel()
 
         if self.timeclient: 
-            # print(' - stop timeclient')
+            # safe_print(' - stop timeclient')
             self.timeclient.stop()
 
         if self.subscriber: 
-            # print(' - stop subscriptions')
+            # safe_print(' - stop subscriptions')
             self.subscriber.stop()
             
 
@@ -362,7 +366,7 @@ class ZyreNode ():
             self.zyre.set_interface( str(netiface).encode() )
             self.interface.log("ZYRE Node forced netiface: ", str(netiface).encode() )
 
-        self.zyre.set_name(str(self.interface.hplayer.name()).encode())
+        self.zyre.set_name(str(self.interface.hplayer.hostname()).encode())
         self.zyre.set_header(b"TS-PORT",  str(get_port(self.timereply)).encode())
         self.zyre.set_header(b"PUB-PORT", str(get_port(self.publisher)).encode())
 
@@ -522,7 +526,7 @@ class ZyreNode ():
             elif sock == internal_pipe:
                 msg = Zmsg.recv(internal_pipe)
                 if not msg or msg.popstr() == b"$TERM":
-                    # print('ZYRE Node TERM')
+                    # safe_print('ZYRE Node TERM')
                     break
                     
         internal_pipe.__del__()
@@ -697,7 +701,7 @@ class ZyreInterface (BaseInterface):
         @self.hplayer.on('*.paused')
         @self.hplayer.on('*.stopped')
         def st(ev, *args):
-            # print('peer.status', self.hplayer.statusPlayers())
+            # safe_print('peer.status', self.hplayer.statusPlayers())
             self.node.publish('peer.status', self.hplayer.statusPlayers())
 
         # Publish self settings

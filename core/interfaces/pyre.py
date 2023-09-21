@@ -26,7 +26,7 @@ class ZyreNode ():
             self.zyre.set_interface( string_at(netiface) )
             print("ZYRE Node forced netiface: ", string_at(netiface) )
 
-        self.zyre.set_name(str(self.interface.hplayer.name()).encode())
+        self.zyre.set_name(str(self.interface.hplayer.hostname()).encode())
         self.zyre.set_header(b"TS-PORT",  str(get_port(self.timereply)).encode())
         self.zyre.set_header(b"PUB-PORT", str(get_port(self.publisher)).encode())
 
@@ -42,7 +42,7 @@ class ZyreNode ():
         # Add self to book
         self.book[self.zyre.uuid()] = Peer(self, {
             'uuid':         self.zyre.uuid(),
-            'name':         self.zyre.name().decode(),
+            'name':         self.zyre.hostname().decode(),
             'ip':           '127.0.0.1',
             'ts_port':      get_port(self.timereply),
             'pub_port':     get_port(self.publisher)

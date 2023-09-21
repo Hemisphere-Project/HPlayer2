@@ -52,12 +52,12 @@ def leadSequencer(*data):
 def doPlay(*data):
 	# print(data)
 	s = data[0]
-	hplayer.playlist.play( hplayer.files.selectDir(s)+'/'+HPlayer2.name()+'*' )
+	hplayer.playlist.play( hplayer.files.selectDir(s)+'/'+HPlayer2.hostname()+'*' )
 
 # Receive an exit command -> last seq
 @hplayer.on('zyre.end')
 def doExit():
-	hplayer.playlist.play( hplayer.files.selectDir(2)+'/'+HPlayer2.name()+'*' )
+	hplayer.playlist.play( hplayer.files.selectDir(2)+'/'+HPlayer2.hostname()+'*' )
 
 
 # Media end: next dir / or loop (based on directory name)
