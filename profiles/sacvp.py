@@ -19,10 +19,11 @@ base_path = ['/data/usb', projectfolder, devicefolder]
 # INIT HPLAYER
 hplayer = HPlayer2(base_path, "/data/hplayer2-"+profilename+".cfg")
 
-
 # PLAYERS
 video = hplayer.addPlayer('mpv', 'video')
-# audio = hplayer.addPlayer('mpv', 'audio')
+
+# LOAD ROOT FOLDER AS PLAYLIST
+hplayer.playlist.load( hplayer.files.currentList() )
 
 # ATTACHED ESP 
 myESP = 0
@@ -36,18 +37,16 @@ except: pass
 
 # INTERFACES
 hplayer.addInterface('keyboard')
-hplayer.addInterface('osc', 1222, 3737)
-hplayer.addInterface('serial', 'M5', 10)
 hplayer.addInterface('zyre')
+hplayer.addInterface('osc', 1222, 3737)
 hplayer.addInterface('mqtt', '10.0.0.1')
 hplayer.addInterface('http2', 8080)
 hplayer.addInterface('teleco')
-hplayer.addInterface('serial', '^M5')
+hplayer.addInterface('serial', '^M5', 10)
 hplayer.addInterface('regie', 9111, projectfolder)
 gpio = hplayer.addInterface('gpio', [16, 20, 21], 1, 0, 'PUP') # service tek debounce @ 1 ??
 if myESP:
     hplayer.addInterface('btserial', 'k32-'+str(myESP))
-
 
 # Overlay
 if hplayer.isRPi():
@@ -159,6 +158,10 @@ def pir(ev, *args):
 #
 dotHold = False
 
+keyboardMode = 'solo' # 'regie' / 'solo' / 'all'
+
+# KEYBOARD: MODE PILOTAGE REGIE
+#
 @hplayer.on('keyboard.*')
 def keyboard(ev, *args):
     global dotHold
@@ -175,14 +178,29 @@ def keyboard(ev, *args):
         if dotHold:
             # select folder (locally only)
             hplayer.files.selectDir(numk)
+
+            # load folder into playlist
+            if keyboardMode == 'solo':
+                hplayer.playlist.load( hplayer.files.currentDir() ) 
+            elif keyboardMode == 'all':
+                broadcast('load', hplayer.files.currentDir())
                 
         else:
             # play sequence regie
-            hplayer.interface('regie').playseq(hplayer.files.currentIndex(), numk-1)
+            if keyboardMode == 'regie':
+                hplayer.interface('regie').playseq(hplayer.files.currentIndex(), numk-1)
+
+            # playlist index all
+            elif keyboardMode == 'all':
+                broadcast('playindex', numk)
+
+            # playlist index solo
+            elif keyboardMode == 'solo':
+                hplayer.playlist.playindex(numk)
             
         
     elif key == 'ENTER' and mode == 'down':
-        broadcast('stop')
+        hplayer.emit('stop') if keyboardMode == 'solo' else broadcast('stop')
     
     elif key == 'DOT':
         dotHold = (mode != 'up')
@@ -194,9 +212,11 @@ def keyboard(ev, *args):
     
     # volume
     elif key == 'PLUS' and (mode == 'down' or mode == 'hold'):
-        broadcast('volume', hplayer.settings.get('volume')+1)
+        v = hplayer.settings.get('volume')+1
+        hplayer.emit('volume', v) if keyboardMode == 'solo' else broadcast('volume', v)
     elif key == 'MINUS' and (mode == 'down' or mode == 'hold'):
-        broadcast('volume', hplayer.settings.get('volume')-1)	
+        v = hplayer.settings.get('volume')-1
+        hplayer.emit('volume', v) if keyboardMode == 'solo' else broadcast('volume', v)
 
 
 #
@@ -239,7 +259,7 @@ def espStop(ev, *args):
 #
 
 # BTN 1
-playlist1 = Playlist(hplayer)
+playlist1 = Playlist(hplayer, 'Playlist-btn1')
 playlist1.load("1_*.*")
 @hplayer.on('gpio.16')
 def play1(ev, *args):
@@ -253,7 +273,7 @@ def play1(ev, *args):
         hplayer.activePlayer().stop()
   
 # BTN 2
-playlist2 = Playlist(hplayer)
+playlist2 = Playlist(hplayer, 'Playlist-btn2')
 playlist2.load("2_*.*")
 @hplayer.on('gpio.20')
 def play2(ev, *args):
@@ -268,7 +288,7 @@ def play2(ev, *args):
     
     
 # BTN 3
-playlist3 = Playlist(hplayer)
+playlist3 = Playlist(hplayer, 'Playlist-btn3')
 playlist3.load("3_*.*")
 @hplayer.on('gpio.21')
 def play1(ev, *args):

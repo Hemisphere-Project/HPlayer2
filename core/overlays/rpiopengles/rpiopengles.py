@@ -77,8 +77,8 @@ class EGL(object):
         assert r
         r = openegl.eglBindAPI(EGL_OPENGL_ES_API)
         assert r
-        if verbose:
-            print ('numconfig=',numconfig)
+        # if verbose:
+        #     print ('numconfig=',numconfig)
         context_attribs = eglints( (EGL_CONTEXT_CLIENT_VERSION, 2, EGL_NONE) )
         self.context = openegl.eglCreateContext(self.display, config,
                                         EGL_NO_CONTEXT,

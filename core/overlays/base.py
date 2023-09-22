@@ -1,14 +1,13 @@
-from __future__ import print_function
-from termcolor import colored
+from ..module import Module
 import threading
 from time import sleep
 
-class BaseOverlay(object):
+class BaseOverlay(Module):
 
-    def  __init__(self):
+    def  __init__(self, hplayer, name="OVERLAY", color="cyan"):
 
-        self.name = "OVERLAY"
-        self.nameP = colored(self.name,'cyan')
+        super().__init__(hplayer, name, color)
+        self.hplayer = hplayer
 
         # running flag
         self.running = threading.Event()
@@ -32,7 +31,7 @@ class BaseOverlay(object):
     def quit(self):
         self.isRunning(False)
         self.recvThread.join()
-        print(self.nameP, "stopped")
+        self.log("stopped")
 
 	# is Running
     def isRunning(self, state=None):

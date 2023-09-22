@@ -18,8 +18,8 @@ player 	= hplayer.addPlayer('mpv','mpv')
 zyre		= hplayer.addInterface('zyre', 'wlan0')
 keypad 		= hplayer.addInterface('keypad')
 http		= hplayer.addInterface('http', 8037)
+keyboard 	= hplayer.addInterface('keyboard')
 # http2		= hplayer.addInterface('http2', 8080)
-# keyboard 	= hplayer.addInterface('keyboard')
 # osc		= hplayer.addInterface('osc', 4000).hostOut = '10.0.0.255'
 
 keypad.lcd.set_color( 100, 0, 100)
@@ -51,7 +51,7 @@ if usbCount > 0:
 	ellapsed = time.time()
  
 	hplayer.log("USB detected: syncing !")
-	cmd = "rsync -rtv --delete /data/usb/ "+base_path[0]
+	cmd = "rsync -rtv --exclude=\".*\" --delete /data/usb/ "+base_path[0]
 	hplayer.log(cmd)
 	os.system(cmd)
 
@@ -84,7 +84,7 @@ bulid_list()
 
 
 # Zyre play X_*
-@hplayer.on('zyre.playz')
+@hplayer.on('zyre.unbuf_playz')
 def play_indexed(ev, *args):
     hplayer.playlist.emit('playindex', hplayer.playlist.findIndex(str(args[0])+"_*") )
 
@@ -110,9 +110,14 @@ def play_indexed(ev, *args):
 def broadcast(path, *args):
 	# print(path, list(args))
 	if path.startswith('play'):
-		zyre.node.broadcast(path, list(args), 300)   ## WARNING LATENCY !!
+		zyre.node.broadcast('unbuf_'+path, list(args), 300)   ## WARNING LATENCY !!   unbuf_ prevents prefix play/pause/resume on zyre sync
 	else:
 		zyre.node.broadcast(path, list(args))
+
+
+@hplayer.on('zyre.unbuf_playindex')
+def unprep_play(ev, *args):
+	hplayer.playlist.emit('playindex', args[0] )
 
 
 # Keyboard

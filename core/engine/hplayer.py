@@ -1,6 +1,6 @@
 from __future__ import print_function
 from . import network
-from ..module import EventEmitterX
+from ..module import Module
 import core.players as playerlib
 import core.interfaces as ifacelib
 from core.engine.sampler import Sampler
@@ -28,10 +28,11 @@ def signal_handler(signal, frame):
 signal.signal(signal.SIGINT, signal_handler)
 
 
-class HPlayer2(EventEmitterX):
+class HPlayer2(Module):
 
     def __init__(self, basepath=None, settingspath=None):
-        super().__init__(wildcard=True, delimiter=".")
+        # super().__init__(wildcard=True, delimiter=".")
+        super().__init__(None, 'HPlayer2', 'green')
         self.nameP = colored(('[HPlayer2]').ljust(10, ' ')+' ', 'green')
 
         self._lastUsedPlayer = 0
@@ -49,6 +50,9 @@ class HPlayer2(EventEmitterX):
         self.settings.load(settingspath)
         self.files.add(basepath)
 
+        self.autoBind(self)
+        self.logQuietEvents = ['status']
+
 
     def log(self, *argv):
         print(self.nameP, *argv)
@@ -58,7 +62,7 @@ class HPlayer2(EventEmitterX):
         return platform.machine().startswith('armv')
 
     @staticmethod
-    def name():
+    def hostname():
         return network.get_hostname()
 
     #
@@ -267,12 +271,14 @@ class HPlayer2(EventEmitterX):
         self.log()
         self.log("is closing..")
         self.emit('app-closing')
-        for p in self.players():
-            p.quit()
-        for s in self.samplers():
-            s.quit()
-        for iface in self.interfaces():
-            iface.quit()
+
+        # Trigger QUIT
+        for iface in self.interfaces(): iface.quit(False)
+        for p in self.players(): p.quit()
+        for s in self.samplers(): s.quit()
+
+        # Wait for interface threads to finish
+        for iface in self.interfaces(): iface.quit(True)
 
         # os.system('ps faux | pgrep mpv | xargs kill')
         self.emit('app-quit')
