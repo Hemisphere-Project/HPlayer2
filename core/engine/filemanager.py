@@ -99,12 +99,14 @@ class FileManager(Module):
         if self.refreshTimer:
             self.refreshTimer.cancel()
             self.refreshTimer = None
+        addRoot = False
         listDirs = []
         for path in self.root_paths:
+            if len(self.listFiles(path, '')) > 0: addRoot = True
             listDirs.extend([d for d in next(os.walk(path))[1] if not d.startswith('.') and d != "System Volume Information" ])
         listDirs = sorted(list(dict.fromkeys(listDirs)))
         listDirs = [d for i,d in enumerate(listDirs) if d not in listDirs[:i]]
-        listDirs.insert(0,'/')
+        if addRoot: listDirs.insert(0,'/')
         self.unified_dir = listDirs
         self.emit('dirlist-updated', self.unified_dir)
         self.selectDir( self.active_dir )   
@@ -210,9 +212,11 @@ class FileManager(Module):
         liste = self.active_list.copy()
         if relative:
             c = self.currentDir()
+            if c == '/': c = ''
             relativeliste = []
             for path in self.root_paths:
                 p = os.path.join(path,c)+'/'
+                p = p.replace('//','/')
                 relativeliste.extend([ l[len(p):] for l in liste if l.startswith(p)])
             return relativeliste
         return liste 
@@ -277,14 +281,14 @@ class FileManager(Module):
                         # relative path directory -> add content recursively (if not root path !)
                         if os.path.isdir(fullpath):
                             liste.extend(self.listFiles(fullpath, entry))
-                            break
-                        # relative path file -> add content recursively
+                            continue
+                        # relative path file -> add content
                         elif os.path.isfile(fullpath):
                             if self.validExt(entry):
                                 liste.append(fullpath)
                             # else:
                             #     self.log('invalid ext', fullpath)
-                            break
+                            continue
 
                         # relative path file with WILDCARD
                         else:

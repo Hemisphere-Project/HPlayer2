@@ -236,13 +236,13 @@ class TelecoInterface (BaseInterface):
         elif self.microOffset > 0:
             self.microOffset -= 1
         else:
-            self.microIndex  = 3
+            self.microIndex  = min(3, len(self.hplayer.files.currentList())-1)
             self.microOffset = len(self.hplayer.files.currentList())-4 
         self.microList = self.hplayer.files.currentList(True)[self.microOffset:][:4]
         
 
     def scrollDown(self):
-        if self.microIndex < 3:
+        if self.microIndex < min(3, len(self.hplayer.files.currentList())-1):
             self.microIndex += 1
         elif self.microOffset < len(self.hplayer.files.currentList())-4:
             self.microOffset += 1

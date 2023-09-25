@@ -47,7 +47,7 @@ class BtserialInterface (BaseInterface):
         
         # SCAN devices to find ADDR
         self.log("looking for ", self.device_name)
-        while True:
+        while self.isRunning():
             try:
                 nearby_devices = bluetooth.discover_devices()
                 for bdaddr in nearby_devices:
@@ -59,12 +59,15 @@ class BtserialInterface (BaseInterface):
                     break
                 else:
                     self.log("can't find ", self.device_name, ", retrying...")
-                    sleep(retry)
+                    for i in range(retry*10):
+                        sleep(0.1)
+                        if not self.isRunning():
+                            return
                     retry = min(30, retry+1)
             except:
                 self.log("BT error...")
-                for i in range(2):
-                    sleep(0.5)
+                for i in range(10):
+                    sleep(0.1)
                     if not self.isRunning(): 
                         return
                 
@@ -75,8 +78,8 @@ class BtserialInterface (BaseInterface):
             # # CONNECT device
             while not self.connect():
                 self.log("can't connect to ", self.device_name, ", retrying...")
-                for i in range(5):
-                    sleep(0.5)
+                for i in range(25):
+                    sleep(0.1)
                     if not self.isRunning(): 
                         return
 
