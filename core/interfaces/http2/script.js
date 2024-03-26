@@ -295,7 +295,7 @@
   };
 
   /* INTERFACES */
-  $('#advancedLink').click( () => { window.location.href = '/'; });
+  $('#advancedLink').click( () => { window.location.href = '/advanced'; });
   $('#simpleLink').click( () => { window.location.href = '/simple'; });
   $('#playerLink').click( () => { window.location.href = '/player'; });
 

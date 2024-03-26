@@ -76,7 +76,10 @@ class ThreadedHTTPServer(object):
         #
         @app.route('/')
         def index():
-            # return render_template('index.html', async_mode=socketio.async_mode)
+            return send_from_directory(www_path, 'player.html')
+        
+        @app.route('/advanced')
+        def advanced():
             return send_from_directory(www_path, 'index.html')
             
         @app.route('/simple')
