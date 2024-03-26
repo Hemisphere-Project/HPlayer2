@@ -14,8 +14,10 @@ player.loop(1)
 
 # INTERFACES
 player.addInterface('zyre', 'wlan0')
+# player.addInterface('zyre', 'eth0')
 player.addInterface('osc', 4000).hostOut = '10.0.0.255'
 player.addInterface('http', 8037)
+player.addInterface('http2', 80)
 player.addInterface('keyboard')
 
 is_RPi = platform.machine().startswith('armv')
@@ -102,6 +104,8 @@ my_observer.start()
 
 player.setBasePath(base_path)
 
+def playsync(path):
+	broadcast('/play', path) 
 
 def play_activedir(index):
 	broadcast('/playlist', current_dir(), index)
@@ -154,6 +158,8 @@ def change_scene(dir):
 #
 refresh_filelist()
 #set_activedir(0)
+
+player.on(['playsync'], playsync)
 
 player.on(['/scene'], change_scene)
 

@@ -5,7 +5,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
 
-  <title>HPlayer2 - simple</title>
+  <title>HPlayer2 - player</title>
 
   <script type="text/javascript" src="/res/jquery-3.3.1.min.js"></script>
   <script type="text/javascript" src="/res/socket.io.slim.js"></script>
@@ -25,6 +25,7 @@
   <script type="text/javascript" src="/res/uploader-profile.js"></script>
 
   <link rel="stylesheet" href="/style.css?6">
+  
 </head>
 
 <body>
@@ -59,62 +60,63 @@
       </div>
       <hr />
 
-      <div class="row">
-        <div class="col-12 col-sm-5">
-            <div id="drag-and-drop-zone" class="dm-uploader p-2 text-center" style="height: 54px;">
-                <!-- <h3 class="mb-5 mt-5 text-muted d-none d-xl-block">Drag &amp; drop Files here</h3> -->
-                <div class="btn btn-primary btn-block mb-5">
-                  <span>Add media</span>
-                  <input type="file" title='Click to add Files' />
-                </div><!-- /uploader -->
-            </div>
-        </div>
-        <div class="col-12 col-sm-7">
-            <div class="card" style="height:60px;margin-bottom: 10px;" id="upload-list">
-                <ul class="list-unstyled p-2 d-flex flex-column col" id="files" style="margin-bottom: 0">
-                <li class="text-muted text-center empty"></li>
-                </ul>
-            </div>
+      <div class="row mt-2">
+        <div class="col-12 mb-4">
+          <div id="playlist" class=""></div>
         </div>
       </div>
     
       <div class="row mt-2">
         <div class="col-12 mb-4">
-          <div class="card-header text-white bg-dark">
-            Playlist
-            <button type="button" class="btn btn-warning btn-sm float-right" id="clear_btn">clear</button>
-          </div>
-          <div id="playlist" class=""></div>
+              <div id="trees" class="row mt-2"></div>
+            </div>
+
+            <hr /><br />
+            <button type="button" class="btn btn-outlined-secondary" id="advancedLink">Advanced interface</button>
         </div>
       </div>
 
-      <hr />
-
-      <!-- File item template -->
-      <script type="text/html" id="files-template">
-        <li class="media">
-            <div class="media-body mb-1">
-              <p class="mb-2">
-                <strong>%%filename%%</strong> - Status: <span class="text-muted">Waiting</span>
-              </p>
-              <div class="progress mb-2">
-                <div class="progress-bar progress-bar-striped progress-bar-animated bg-primary"
-                  role="progressbar"
-                  style="width: 0%"
-                  aria-valuenow="0" aria-valuemin="0" aria-valuemax="100">
-                </div>
-              </div>
-              <hr class="mt-1 mb-1" />
-            </div>
-          </li>
-        </script>
-
-      <hr />
-      <button type="button" class="btn btn-outlined-secondary" id="advancedLink">Advanced interface</button>
     </div>
   </div>
-
+  
   <script type="text/javascript" src="/script.js"></script>
+  <script>
+
+    /* Monkey patch script.js */
+    
+    // Selecting becomes PLAYING
+    //
+    socket.on('files', function(msg) {
+      var tree = $('#filestree')
+      console.log('custom files tree !')
+      tree.on('nodeSelected', function(event, data) {
+          playsync(data.path)
+          tree.treeview('unselectAll')
+          // tree.treeview('selectNode', [ data.nodeId, { silent: true } ])
+       });
+       tree.treeview('collapseAll')
+      // $.each( $('#filestree').data('treeview').getNodes(), (i, node) => {
+      //   node.selectable = false
+      // })
+    })
+
+
+    // Clear playlist on media end
+    //
+    // socket.on('status', function(msg) {
+    //   if (!msg['isPlaying'] && !msg['isPaused']) {
+    //     var playlist = $('#playlist>ul').children()
+    //     if (playlist.length > 0) socket.emit('clear')
+    //   }
+    // })
+
+  </script>
+
+  <style>
+    .media-edit, .filesBar {
+      display: none;
+    }
+  </style>
 </body>
 
 </html>

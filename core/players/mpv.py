@@ -29,6 +29,8 @@ class MpvPlayer(BasePlayer):
         self._mpv_scale = 1                 # % image scale
         self._mpv_imagetime = 5             # diaporama transition time   
 
+        # self.doLog['events'] = True
+
 
     ############
     ## public METHODS

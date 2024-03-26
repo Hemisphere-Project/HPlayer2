@@ -82,6 +82,10 @@ class ThreadedHTTPServer(object):
         @app.route('/simple')
         def simple():
             return send_from_directory(www_path, 'simple.html')
+        
+        @app.route('/player')
+        def player():
+            return send_from_directory(www_path, 'player.html')
 
         @app.route('/upload', methods=['POST'])
         def files_upload():
@@ -169,6 +173,10 @@ class ThreadedHTTPServer(object):
                 self.player.play(int(message['index']))
             else:
                 self.player.play()
+
+        @socketio.on('playsync')
+        def playsync_message(path):
+            self.player.trigger('playsync', path['path']) 
 
         @socketio.on('stop')
         def stop_message():
@@ -291,7 +299,8 @@ class ThreadedHTTPServer(object):
                 else:
                     d['selectable'] = True
                     d['text'] += ' <div class="media-edit float-right">';
-                    d['text'] += '  <span class="badge badge-success" onClick="playlistAdd(\''+path+'\'); event.stopPropagation();"> <i class="fas fa-plus"></i> </span>';
+                    d['text'] += '  <span class="badge badge-success" onClick="playlistAdd(\''+path+'\'); event.stopPropagation();"> <i class="fas fa-plus"></i> </span>';  # add to playlist
+                    d['text'] += '  <span class="badge badge-warning ml-2" onClick="play(\''+path+'\'); event.stopPropagation();"> <i class="fas fa-play"></i> </span>';  # play now
                     # d['text'] += '  <span class="badge badge-danger ml-2"><i class="far fa-trash-alt"></i> </span>';
                     d['text'] += ' </div>';
                 return d
