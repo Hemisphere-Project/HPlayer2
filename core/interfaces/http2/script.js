@@ -289,11 +289,6 @@
     socket.emit('play', {path: path});
   };
 
-   /* Direct Playsync */
-  playsync = function(path) { 
-    socket.emit('playsync', {path: path});
-  };
-
   /* INTERFACES */
   $('#advancedLink').click( () => { window.location.href = '/advanced'; });
   $('#simpleLink').click( () => { window.location.href = '/simple'; });

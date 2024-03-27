@@ -43,10 +43,7 @@
       <div class="row">
         <div class="col-12 col-sm-5">
           <div class="form-group">
-            <button type="button" class="btn btn-outlined-success" id="play_btn"><i class="fas fa-play"></i></button>
             <button type="button" class="btn btn-outlined-warning" id="pause_btn"><i class="fas fa-pause"></i></button>
-            <button type="button" class="btn btn-outlined-secondary" id="prev_btn"><i class="fas fa-step-backward"></i></button>
-            <button type="button" class="btn btn-outlined-secondary" id="next_btn"><i class="fas fa-step-forward"></i></button>
             <button type="button" class="btn btn-outlined-danger" id="stop_btn"><i class="fas fa-stop"></i></button>
           </div>
         </div>
@@ -71,8 +68,6 @@
               <div id="trees" class="row mt-2"></div>
             </div>
 
-            <hr /><br />
-            <button type="button" class="btn btn-outlined-secondary" id="advancedLink">Advanced interface</button>
         </div>
       </div>
 
@@ -84,13 +79,13 @@
 
     /* Monkey patch script.js */
     
-    // Selecting becomes PLAYING
+    // Selecting becomes PLAYSYNC
     //
-    socket.on('files', function(msg) {
+    socket.on('files', function(msg) 
+    {
       var tree = $('#filestree')
-      console.log('custom files tree !')
       tree.on('nodeSelected', function(event, data) {
-          playsync(data.path)
+          socket.emit('user', 'playsync', data.path)
           tree.treeview('unselectAll')
           // tree.treeview('selectNode', [ data.nodeId, { silent: true } ])
        });
@@ -100,6 +95,25 @@
       // })
     })
 
+    // Make command sync
+    //
+    $('#volume_range').unbind('input').on('input', function() {
+      socket.emit('user', 'volumesync', this.value)
+    })
+
+    $('#pause_btn').unbind('click').on('click', function() {
+      if(!last_status['isPaused']) socket.emit('user', 'pausesync');
+      else socket.emit('user', 'resumesync');
+    });
+
+    $('#play_btn').unbind('click').on('click', function() {
+      socket.emit('user', 'playsync');
+    });
+
+    $('#stop_btn').unbind('click').on('click', function() {
+      socket.emit('user', 'stopsync');
+    });
+    
 
     // Clear playlist on media end
     //

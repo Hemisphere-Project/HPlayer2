@@ -177,9 +177,9 @@ class ThreadedHTTPServer(object):
             else:
                 self.player.play()
 
-        @socketio.on('playsync')
-        def playsync_message(path):
-            self.player.trigger('playsync', path['path']) 
+        @socketio.on('user')
+        def user_message(event, *args):
+            self.player.trigger(event, args) 
 
         @socketio.on('stop')
         def stop_message():

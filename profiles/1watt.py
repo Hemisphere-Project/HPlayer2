@@ -104,8 +104,6 @@ my_observer.start()
 
 player.setBasePath(base_path)
 
-def playsync(path):
-	broadcast('/play', path) 
 
 def play_activedir(index):
 	broadcast('/playlist', current_dir(), index)
@@ -159,7 +157,12 @@ def change_scene(dir):
 refresh_filelist()
 #set_activedir(0)
 
-player.on(['playsync'], playsync)
+player.on(['playsync'], 		lambda args: broadcast('/play', 	args[0]))
+player.on(['volumesync'], 		lambda args:  broadcast('/volume', 	int(args[0])))
+player.on(['stopsync'], 		lambda args: broadcast('/stop'))
+player.on(['pausesync'], 		lambda args: broadcast('/pause'))
+player.on(['resumesync'], 		lambda args: broadcast('/resume'))
+
 
 player.on(['/scene'], change_scene)
 
