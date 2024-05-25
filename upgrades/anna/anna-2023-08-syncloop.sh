@@ -11,7 +11,8 @@ scp 0_loop.mp4 root@10.0.0.231:/data/media/ && scp 1_jellyfish.mp4 root@10.0.0.2
  8 = 239 - OK xx
  9 = 198 - OK x 
 10 = 190 - OK xx
-
+11 =  - OK xx
+12 =  - OK xx
 
 when other play media reset masterloopindex
 
