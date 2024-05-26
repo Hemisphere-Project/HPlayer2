@@ -244,6 +244,7 @@ class FileManager(Module):
             entries = [entries]
 
         for entry in entries:
+            if not entry: continue
 
             # PREVENT ROOT
             if entry == '/': entry = ''

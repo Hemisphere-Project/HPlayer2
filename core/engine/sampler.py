@@ -66,6 +66,8 @@ class Sampler(Module):
     def isPaused(self):
         return any( [p.isPaused() for p in self.players()] )
 
+    def isReady(self):
+        return all( [p.isReady() for p in self.players()] )
 
     #
     # Sampler CONTROLS

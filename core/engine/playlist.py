@@ -22,7 +22,7 @@ class Playlist(Module):
             
         # Autobind to player
         hplayer.autoBind(self)
-            
+           
 
     def __call__(self):
         return self.export()
@@ -49,7 +49,11 @@ class Playlist(Module):
 
     # SET Playlist
     def update(self):
-        self.emit('updated', self._playlist)        # TODO => save playlist !  // # TODO => if playlist > 0 and not isPlaying: trig autoplay !
+        self.hplayer.settings.set('playlist', self._playlist)
+        self.emit('updated', self._playlist)
+        # autoplay
+        if self.hplayer.settings.get('autoplay') and self.size() > 0 and not self.hplayer.activePlayer().isPlaying():
+            self.playindex(0)
 
     # Playlist length
     def size(self):

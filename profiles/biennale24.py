@@ -6,7 +6,6 @@ import time
 import tempfile
 tempfile.tempdir = '/data/var/tmp'
 
-
 # MEDIA PATH
 mediaPath = '/data/media'
 # if SYNC:
@@ -21,12 +20,12 @@ player = hplayer.addPlayer('mpv', 'player')
 player.imagetime(15)
 
 player.doLog['events'] = True
-player.doLog['cmds'] = True
+player.doLog['cmds'] = False
 
 
 # Interfaces
 hplayer.addInterface('http', 8080)
-hplayer.addInterface('http2', 80, {'playlist': True, 'loop': True, 'mute': True})
+hplayer.addInterface('http2', 80, {'playlist': False, 'loop': False, 'mute': True})
 # hplayer.addInterface('serial', "^CP2102", 20)
 if hplayer.isRPi():
     hplayer.addInterface('gpio', [21,20,16,26,14,15], 310)
@@ -59,11 +58,7 @@ def doPlay(media, debounce=0):
 
 	# PLAY SOLO
 	else:
-		# hplayer.settings.set('mute', True)
-		# time.sleep(0.1)
 		hplayer.playlist.play(media)
-		# time.sleep(0.05)
-		# hplayer.settings.set('mute', False)
 
 
 # PLAY sync on peer 
@@ -71,36 +66,44 @@ def doPlay(media, debounce=0):
 def playZ(ev, *args):
 	media = args[0]
 	# media = args[0].replace('*.*', network.get_hostname().split('-sync')[0]+'*.*')
-	# hplayer.settings.set('mute', True)
-	# time.sleep(0.1)
 	hplayer.playlist.play(media)
-	# time.sleep(0.05)
-	# hplayer.settings.set('mute', False)
 
 
-# # DEFAULT File
-# @hplayer.on('player.ready')
-# @hplayer.on('playlist.end')
-# def play0(ev, *args):
-#     doPlay("0_*.*")
+# DEFAULT File
+@hplayer.on('app-run')
+@hplayer.on('files.filelist-updated')
+@hplayer.on('playlist.end')
+def play0(ev, *args):
+    doPlay("[^1-9_]*.*")
+    if not "-sync" in network.get_hostname():
+    	hplayer.settings.set('loop', 2)
 
 # # BTN 1
-# @hplayer.on('http.push1')
-# @hplayer.on('gpio.21-on')
-# def play1(ev, *args):
-#     doPlay("1_*.*")
+@hplayer.on('http.push1')
+@hplayer.on('gpio.21-on')
+def play1(ev, *args):
+	hplayer.settings.set('loop', 0)
+	doPlay("1_*.*")
 
 # # BTN 2
-# @hplayer.on('http.push2')
-# @hplayer.on('gpio.20-on')
-# def play1(ev, *args):
-#     doPlay("2_*.*")
+@hplayer.on('http.push2')
+@hplayer.on('gpio.20-on')
+def play1(ev, *args):
+	hplayer.settings.set('loop', 0)
+	doPlay("2_*.*")
 
 # # BTN 3
-# @hplayer.on('http.push3')
-# @hplayer.on('gpio.16-on')
-# def play1(ev, *args):
-#     doPlay("3_*.*")
+@hplayer.on('http.push3')
+@hplayer.on('gpio.16-on')
+def play1(ev, *args):
+	hplayer.settings.set('loop', 0)
+	doPlay("3_*.*")
+
+# HTTP2 Play -> disable loop && propagate
+@hplayer.on('http2.play')
+def play2(ev, *args):
+	hplayer.settings.set('loop', 0)
+	doPlay(args[0])
 
 # HTTP2 Logs
 @hplayer.on('player.*')
@@ -109,7 +112,7 @@ def playZ(ev, *args):
 @hplayer.on('serial.*')
 def http2_logs(ev, *args):
 	if ev.startswith('gpio') and ev.find('-') == -1: return 
-	if args[0] == 'time': return
+	if len(args) and args[0] == 'time': return
 	hplayer.interface('http2').send('logs', [ev]+list(args))
 
 # RUN
