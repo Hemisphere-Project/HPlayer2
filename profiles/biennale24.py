@@ -34,9 +34,10 @@ if hplayer.isRPi():
 SYNC = False
 SYNC_MASTER = False
 if os.path.isfile('/boot/wifi/wlan1-sync-AP.nmconnection') or os.path.isfile('/boot/wifi/wlan1-sync-STA.nmconnection'):
-	hplayer.addInterface('zyre', 'wlan1')
-	SYNC = True
-	SYNC_MASTER = os.path.isfile('/boot/wifi/wlan1-sync-AP.nmconnection')
+	if network.has_interface('wlan1'):
+		hplayer.addInterface('zyre', 'wlan1')
+		SYNC = True
+		SYNC_MASTER = os.path.isfile('/boot/wifi/wlan1-sync-AP.nmconnection')
 
 
 # PLAY action
@@ -56,7 +57,7 @@ def doPlay(media, debounce=0):
 	# PLAY SYNC -> forward to peers
 	if SYNC:
 		if SYNC_MASTER:
-			hplayer.interface('zyre').node.broadcast('playzinc', media, 200)
+			hplayer.interface('zyre').node.broadcast('play', media, 200)
 			print('doPLay: sync master.. broadcast')
 		else:
 			print('doPLay: sync slave.. do nothing')
@@ -64,14 +65,6 @@ def doPlay(media, debounce=0):
 	# PLAY SOLO
 	else:
 		hplayer.playlist.play(media)
-
-
-# PLAY sync on peer 
-@hplayer.on('zyre.playzinc')
-def playZ(ev, *args):
-	media = args[0]
-	# media = args[0].replace('*.*', network.get_hostname().split('-sync')[0]+'*.*')
-	hplayer.playlist.play(media)
 
 
 # DEFAULT File
