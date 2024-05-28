@@ -1,15 +1,15 @@
 from core.engine.hplayer import HPlayer2
 from core.engine import network
+import os
 import time
 
 # EXTRA TMP UPLOAD
 import tempfile
 tempfile.tempdir = '/data/var/tmp'
 
+
 # MEDIA PATH
 mediaPath = '/data/media'
-# if SYNC:
-#     mediaPath = '/data/sync'
 
 # INIT HPLAYER
 hplayer = HPlayer2(mediaPath, '/data/hplayer2-biennale24.cfg')
@@ -29,9 +29,14 @@ hplayer.addInterface('http2', 80, {'playlist': False, 'loop': False, 'mute': Tru
 # hplayer.addInterface('serial', "^CP2102", 20)
 if hplayer.isRPi():
     hplayer.addInterface('gpio', [21,20,16,26,14,15], 310)
-if "-sync" in network.get_hostname():
-    	hplayer.addInterface('zyre')
 
+# Zyre SYNC
+SYNC = False
+SYNC_MASTER = False
+if os.path.isfile('/boot/wifi/wlan1-sync-AP.nmconnection') or os.path.isfile('/boot/wifi/wlan1-sync-STA.nmconnection'):
+	hplayer.addInterface('zyre', 'wlan1')
+	SYNC = True
+	SYNC_MASTER = os.path.isfile('/boot/wifi/wlan1-sync-AP.nmconnection')
 
 
 # PLAY action
@@ -49,12 +54,12 @@ def doPlay(media, debounce=0):
 	debounceLastMedia = media
 
 	# PLAY SYNC -> forward to peers
-	if "-sync" in network.get_hostname():
-		if "-master" in network.get_hostname():
+	if SYNC:
+		if SYNC_MASTER:
 			hplayer.interface('zyre').node.broadcast('playzinc', media, 200)
-			print('doPLay: master.. broadcast')
+			print('doPLay: sync master.. broadcast')
 		else:
-			print('doPLay: slave.. do nothing')
+			print('doPLay: sync slave.. do nothing')
 
 	# PLAY SOLO
 	else:
@@ -75,31 +80,31 @@ def playZ(ev, *args):
 @hplayer.on('playlist.end')
 def play0(ev, *args):
     doPlay("[^1-9_]*.*")
-    if not "-sync" in network.get_hostname():
-    	hplayer.settings.set('loop', 2)
+    if not SYNC:
+    	hplayer.settings.set('loop', 2) # allow blackless loop on solo mode
 
-# # BTN 1
+# BTN 1
 @hplayer.on('http.push1')
 @hplayer.on('gpio.21-on')
 def play1(ev, *args):
 	hplayer.settings.set('loop', 0)
 	doPlay("1_*.*")
 
-# # BTN 2
+# BTN 2
 @hplayer.on('http.push2')
 @hplayer.on('gpio.20-on')
 def play1(ev, *args):
 	hplayer.settings.set('loop', 0)
 	doPlay("2_*.*")
 
-# # BTN 3
+# BTN 3
 @hplayer.on('http.push3')
 @hplayer.on('gpio.16-on')
 def play1(ev, *args):
 	hplayer.settings.set('loop', 0)
 	doPlay("3_*.*")
 
-# HTTP2 Play -> disable loop && propagate
+# HTTP2 Play -> disable loop && do propagate
 @hplayer.on('http2.play')
 def play2(ev, *args):
 	hplayer.settings.set('loop', 0)

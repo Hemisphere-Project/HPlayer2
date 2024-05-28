@@ -100,5 +100,5 @@ def get_rssi(iface):
     maxVal = -40
     return round(max(0, (rssi-minVal)*100/(maxVal-minVal)))
 
-def hasWlan1():
-    return "wlan1" in ni.interfaces()
+def has_interface(iface):
+    return iface in ni.interfaces()
