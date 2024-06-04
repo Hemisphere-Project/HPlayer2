@@ -33,12 +33,11 @@ if hplayer.isRPi():
 # Zyre SYNC
 SYNC = False
 SYNC_MASTER = False
-if os.path.isfile('/boot/wifi/wlan1-sync-AP.nmconnection') or os.path.isfile('/boot/wifi/wlan1-sync-STA.nmconnection'):
-	if network.has_interface('wlan1'):
-		hplayer.addInterface('zyre', 'wlan1')
+if os.path.isfile('/boot/wifi/wlan0-sync-AP.nmconnection') or os.path.isfile('/boot/wifi/wlan0-sync-STA.nmconnection'):
+	if network.has_interface('wlan0'):
+		hplayer.addInterface('zyre', 'wlan0')
 		SYNC = True
-		SYNC_MASTER = os.path.isfile('/boot/wifi/wlan1-sync-AP.nmconnection')
-
+		SYNC_MASTER = os.path.isfile('/boot/wifi/wlan0-sync-AP.nmconnection')
 
 # PLAY action
 debounceLastTime = 0
@@ -72,9 +71,11 @@ def doPlay(media, debounce=0):
 @hplayer.on('files.filelist-updated')
 @hplayer.on('playlist.end')
 def play0(ev, *args):
-    doPlay("[^1-9_]*.*")
-    if not SYNC:
-    	hplayer.settings.set('loop', 2) # allow blackless loop on solo mode
+	doPlay("[^1-9_]*.*")
+	if not SYNC:
+		hplayer.settings.set('loop', 2) # allow blackless loop on solo mode
+	else:
+		hplayer.settings.set('loop', 0)
 
 # BTN 1
 @hplayer.on('http.push1')
