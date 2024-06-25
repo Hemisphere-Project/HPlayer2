@@ -9,7 +9,7 @@ tempfile.tempdir = '/data/var/tmp'
 
 
 # MEDIA PATH
-mediaPath = '/data/media'
+mediaPath = ['/data/media', '/data/usb']
 
 # INIT HPLAYER
 hplayer = HPlayer2(mediaPath, '/data/hplayer2-biennale24.cfg')
@@ -26,14 +26,20 @@ player.doLog['cmds'] = False
 # Interfaces
 hplayer.addInterface('http', 8080)
 hplayer.addInterface('http2', 80, {'playlist': False, 'loop': False, 'mute': True})
-# hplayer.addInterface('serial', "^CP2102", 20)
-if hplayer.isRPi():
-    hplayer.addInterface('gpio', [21,20,16,26,14,15], 310)
+hplayer.addInterface('serial', '^M5', 10)
+#if hplayer.isRPi():
+#    hplayer.addInterface('gpio', [21,20,16,26,14,15], 310)
 
 # Zyre SYNC
 SYNC = False
 SYNC_MASTER = False
-if os.path.isfile('/boot/wifi/wlan0-sync-AP.nmconnection') or os.path.isfile('/boot/wifi/wlan0-sync-STA.nmconnection'):
+if os.path.isfile('/boot/wifi/eth0-sync-AP.nmconnection') or os.path.isfile('/boot/wifi/eth0-sync-STA.nmconnection'):
+	if network.has_interface('eth0'):
+		hplayer.addInterface('zyre', 'eth0')
+		SYNC = True
+		SYNC_MASTER = os.path.isfile('/boot/wifi/eth0-sync-AP.nmconnection')
+
+elif os.path.isfile('/boot/wifi/wlan0-sync-AP.nmconnection') or os.path.isfile('/boot/wifi/wlan0-sync-STA.nmconnection'):
 	if network.has_interface('wlan0'):
 		hplayer.addInterface('zyre', 'wlan0')
 		SYNC = True
