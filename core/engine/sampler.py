@@ -64,13 +64,19 @@ class Sampler(Module):
     def isPlaying(self, media=None):
         if not media: 
             return any( [p.isPlaying() for p in self.players()] )
-        _media = self.parent.files.listFiles(media)[0]
+        try:
+            _media = self.parent.files.listFiles(media)[0]  # find first matching media
+        except:
+            return False
         return any( [p.isPlaying() and p.status('media') == _media for p in self.players()] )
 
     def isPaused(self, media=None):
         if not media:
             return any( [p.isPaused() for p in self.players()] )
-        _media = self.parent.files.listFiles(media)[0]
+        try:
+            _media = self.parent.files.listFiles(media)[0]  # find first matching media
+        except:
+            return False
         return any( [p.isPaused() and p.status('media') == _media for p in self.players()] )
 
     def isReady(self):
@@ -93,9 +99,11 @@ class Sampler(Module):
     # Play Media
     def play(self, media, oneloop=False):
         freeP = None
-        _media = self.parent.files.listFiles(media)[0]  # find first matching media
-        if not _media:
+        try:
+            _media = self.parent.files.listFiles(media)[0]  # find first matching media
+        except:
             self.log('media not found: ', media)
+            return
 
         for p in self.players():   # media already played somewhere
             if p.status('media') == _media:
@@ -122,21 +130,30 @@ class Sampler(Module):
 
     # STOP Playback
     def stop(self, media=None):
-        _media = self.parent.files.listFiles(media)[0]  # find first matching media
+        try:
+            _media = self.parent.files.listFiles(media)[0]  # find first matching media
+        except:
+            return
         for p in self.players(): 
             if not _media or p.status('media') == _media:
                 p.stop()
 
     # PAUSE Playback
     def pause(self, media=None):
-        _media = self.parent.files.listFiles(media)[0]  # find first matching media
+        try:
+            _media = self.parent.files.listFiles(media)[0]  # find first matching media
+        except:
+            return
         for p in self.players(): 
             if not _media or p.status('media') == _media:
                 p.pause()
 
     # RESUME Playback
     def resume(self, media=None):
-        _media = self.parent.files.listFiles(media)[0]  # find first matching media
+        try:
+            _media = self.parent.files.listFiles(media)[0]  # find first matching media
+        except:
+            return
         for p in self.players(): 
             if not _media or p.status('media') == _media:
                 p.resume()
