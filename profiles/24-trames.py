@@ -66,23 +66,20 @@ def makePlaylist():
 ready = False
 @hplayer.on('files.filelist-updated')
 @hplayer.on('app-run')
-def resetState(ev, *args):
+def resetState(ev=None, *args):
 	global state, ready
 	if ev == 'app-run': ready = True
 	if not ready: return
 
 	state = "WAIT"
 	sampler.stop()
-	hplayer.interface('serial').send('/relay/0')
+	hplayer.interface('serial').send('/relay/1')
 	makePlaylist()
 	makePlaylistOFF()
 
 	# Wait loop
 	sampler.play("00_*.*", oneloop = True, index = 0)
 	sampler.play("WAIT_*.*", oneloop = True, index = 1)
-
-
-
 
 # State: WAIT / ON // OFF 
 
@@ -92,41 +89,41 @@ def prox(ev, *args):
 
 	global state, mediaIndex, mediaList, mediaOFF, offIndex
 
+	# ON detected
 	if args[0] == 'ON':
-		sampler.playerAt(2).play(mediaOFF[offIndex])
-	else:
-		sampler.stop(index = 2)
-
-	# # ON detected
-	# if args[0] == 'ON':
-	# 	# sampler.stop("OFF_*.*")	# stop OFF
+		sampler.play("00_*.*", oneloop = True, index = 0)
 		
-	# 	# PLAY or RESUME
-	# 	if state == "WAIT" or not sampler.isPlaying(index = 1): 
-	# 		mediaIndex = 0
-	# 		sampler.play(mediaList[mediaIndex], oneloop = False, index = 1)
-	# 	else:
-	# 		sampler.resume(index = 1)
+		# PLAY or RESUME
+		if state == "WAIT" or not sampler.isPlaying(index = 1): 
+			mediaIndex = 0
+			sampler.play(mediaList[mediaIndex], oneloop = False, index = 1)
+		else:
+			sampler.resume(index = 1)
 
-	# 	state = "ON"
-	# 	hplayer.interface('serial').send('/relay/1')
+		state = "ON"
+		hplayer.interface('serial').send('/relay/1')
 
-	# # OFF detected
-	# elif args[0] == 'OFF' and state == "ON":
-	# 	# if sampler.isPlaying(index = 1): 
-	# 	# 	sampler.pause(index = 1)
+	# OFF detected
+	elif args[0] == 'OFF' and state == "ON":
+		if sampler.isPlaying(index = 1): 
+			sampler.pause(index = 1)
 
-	# 	print("OFF", offIndex, mediaOFF[offIndex])
-	# 	sampler.play(mediaOFF[offIndex], oneloop = False, index = 2)
-	# 	offIndex = (offIndex + 1) % len(mediaOFF)
+		print("OFF", offIndex, mediaOFF[offIndex])
+		sampler.play(mediaOFF[offIndex], oneloop = False, index = 0)
+		offIndex = (offIndex + 1) % len(mediaOFF)
 		
-	# 	state = "OFF"
-	# 	hplayer.interface('serial').send('/relay/0')
+		state = "OFF"
+		hplayer.interface('serial').send('/relay/0')
 
 
 @hplayer.on('sampler.player0.media-end')
 def loop0(ev, *args):
-	sampler.play("00_*.*", oneloop = True, index = 0)
+	print("END0", ev, args)
+	if len(args) > 0 and args[0].split('/')[-1].startswith("OFF_"):
+		print("END0: reset")
+		resetState()
+	else:	
+		sampler.play("00_*.*", oneloop = True, index = 0)
 
 @hplayer.on('sampler.player1.media-end')
 def nextMedia(ev, *args):
@@ -138,34 +135,6 @@ def nextMedia(ev, *args):
 			sampler.play(mediaList[mediaIndex], index = 1)
 		else:
 			resetState()
-
-@hplayer.on('sampler.player2.media-end')
-def end2(ev, *args):
-	resetState()
-
-
-# @hplayer.on('sampler.player0.media-end')
-# @hplayer.on('sampler.player1.media-end')
-# @hplayer.on('sampler.player2.media-end')
-# def player1(ev, *args):
-# 	global state, onIndex, mediaON, mediaOFF
-
-# 	if not args[0]: return
-# 	media = args[0].split('/')[-1]
-
-# 	# START END -> ON
-# 	if media.startswith('START_'):
-# 		state = "ON"
-# 		sampler.stop("START_*.*")
-# 		sampler.play(mediaON[onIndex], oneloop = True)
-# 		onIndex = (onIndex + 1) % len(mediaON)
-# 		print("ON END")
-
-
-# 	if media.startswith('ON_'):
-# 		print("ON END")
-# 	elif media.startswith('OFF_'):
-# 		print("OFF END")
 
 
 
