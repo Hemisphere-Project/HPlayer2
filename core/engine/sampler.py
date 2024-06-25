@@ -17,6 +17,7 @@ class Sampler(Module):
             name = 'player'+str(i)
             p = PlayerClass(self, name)
             self._players[name] = p
+            self.logQuietEvents.append(name+'.status')
 
             # Players stopped (remove from in-use list)
             @p.on('stopped')
@@ -60,11 +61,17 @@ class Sampler(Module):
     def status(self):
         return [p.status() for p in self.players()]
 
-    def isPlaying(self):
-        return any( [p.isPlaying() for p in self.players()] )
+    def isPlaying(self, media=None):
+        if not media: 
+            return any( [p.isPlaying() for p in self.players()] )
+        _media = self.parent.files.listFiles(media)[0]
+        return any( [p.isPlaying() and p.status('media') == _media for p in self.players()] )
 
-    def isPaused(self):
-        return any( [p.isPaused() for p in self.players()] )
+    def isPaused(self, media=None):
+        if not media:
+            return any( [p.isPaused() for p in self.players()] )
+        _media = self.parent.files.listFiles(media)[0]
+        return any( [p.isPaused() and p.status('media') == _media for p in self.players()] )
 
     def isReady(self):
         return all( [p.isReady() for p in self.players()] )
@@ -119,6 +126,22 @@ class Sampler(Module):
         for p in self.players(): 
             if not _media or p.status('media') == _media:
                 p.stop()
+
+    # PAUSE Playback
+    def pause(self, media=None):
+        _media = self.parent.files.listFiles(media)[0]  # find first matching media
+        for p in self.players(): 
+            if not _media or p.status('media') == _media:
+                p.pause()
+
+    # RESUME Playback
+    def resume(self, media=None):
+        _media = self.parent.files.listFiles(media)[0]  # find first matching media
+        for p in self.players(): 
+            if not _media or p.status('media') == _media:
+                p.resume()
+
+    
 
     
     
