@@ -23,7 +23,7 @@ sampler = hplayer.addSampler('mpv', 'sampler', 4)
 # Interfaces
 hplayer.addInterface('http', 8080)
 hplayer.addInterface('http2', 80, {'playlist': False, 'loop': False, 'mute': False})
-hplayer.addInterface('serial', "^USB Single Serial")
+hplayer.addInterface('serial', "^(USB Single Serial|CP2104)")
 
 
 # LIST OFF MEDIA
@@ -115,6 +115,9 @@ def prox(ev, *args):
 		state = "OFF"
 		hplayer.interface('serial').send('/relay/0')
 
+@hplayer.on('serial.connected')
+def serialConnected(ev, *args):
+	hplayer.interface('serial').send('/relay/1')
 
 @hplayer.on('sampler.player0.media-end')
 def loop0(ev, *args):
