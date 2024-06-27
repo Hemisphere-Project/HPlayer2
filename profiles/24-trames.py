@@ -47,6 +47,9 @@ def makePlaylist():
 	mediaList = hplayer.files.listFiles("ON_*.*")
 	random.shuffle( mediaList )
 
+	# reduce to 6 max
+	if len(mediaList) > 6: mediaList = mediaList[:6]
+
 	# prepend one START_ media
 	startMedia = hplayer.files.listFiles("START_*.*")
 	random.shuffle( startMedia )
