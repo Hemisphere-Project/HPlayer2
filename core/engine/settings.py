@@ -13,12 +13,15 @@ class Settings(Module):
         'mute':         False,
         'audioout':     'jack',
         'audiomode':    'stereo',
-        'pan':          [100,100]
+        'pan':          [100,100],
+        'playlist':     None
     }
 
     def __init__(self, hplayer, persistent=None):
         super().__init__(hplayer, 'Settings', 'yellow')     
         
+        self._settingspath = persistent
+
         # Autobind to player
         hplayer.autoBind(self)
 
@@ -31,7 +34,14 @@ class Settings(Module):
 
 
     def load(self, persistent=None):
-        self._settingspath = persistent
+
+        if persistent:
+            self._settingspath = persistent
+
+        if not self._settingspath:
+            self.log('no settings file defined')
+            return
+        
         if self._settingspath and os.path.isfile(self._settingspath):
             try:
                 with open(self._settingspath, 'r') as fd:
@@ -39,6 +49,7 @@ class Settings(Module):
                     for key in loaded:
                         if key in self._settings:
                             self._settings[key] = loaded[key]
+                self.emit('loading')
                 for key in self._settings:
                     self.emit('do-'+key, self._settings[key], self.export())
                 self.emit('updated', self.export())
@@ -59,6 +70,8 @@ class Settings(Module):
 
 
     def set(self, key, val):
+        if not key in self._settings:
+            self._settings[key] = None
         if self._settings[key] != val:
             self._settings[key] = val
             self.emit('do-'+key, val, self.export())

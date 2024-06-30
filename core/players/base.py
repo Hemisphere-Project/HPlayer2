@@ -96,6 +96,9 @@ class BasePlayer(Module):
 
     def position(self):
         return self._status['time']
+    
+    def isReady(self):
+        return self._status['isReady']
 
     #
     # Player CONTROLS

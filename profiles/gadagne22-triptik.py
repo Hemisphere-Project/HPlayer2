@@ -81,7 +81,7 @@ def play1(ev, *args):
 	hplayer.interface('hcon').set('T5', False)
 
 # DISABLE some manual settings
-@hplayer.on('settings.loaded')
+@hplayer.on('settings.loading')
 def disableAuto(ev, *args):
 	hplayer.settings.set('loop', False)
 	hplayer.settings.set('autoplay', False)

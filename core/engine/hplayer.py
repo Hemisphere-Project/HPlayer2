@@ -41,13 +41,12 @@ class HPlayer2(Module):
         self._samplers      = OrderedDict()
         self._interfaces    = OrderedDict()
 
-        self.settings       = Settings(self)
+        self.settings       = Settings(self, settingspath)
         self.files          = FileManager(self)
         self.playlist       = Playlist(self)
         
         self.imgen          = ImGen(self)
 
-        self.settings.load(settingspath)
         self.files.add(basepath)
 
         self.autoBind(self)
@@ -261,6 +260,16 @@ class HPlayer2(Module):
         for iface in self.interfaces():
             iface.start()
 
+        # WAIT for players an samplers to be ready
+        for p in self.players() + self.samplers():
+            while not p.isReady():
+                sleep(0.1)
+
+        self.emit('app-ready')
+
+        # LOAD persistent settings
+        self.settings.load()
+
         self.emit('app-run')
 
         while runningFlag and self.running():
@@ -391,6 +400,9 @@ class HPlayer2(Module):
         def prev(ev, *args):
             self.playlist.prev()
 
+        @module.on('do-playlist')
+        def doplaylist(ev, *args):
+            self.playlist.load(args[0] if len(args) > 0 else None)
 
         # PLAYERS
         #
@@ -553,3 +565,10 @@ class HPlayer2(Module):
             if len(args) > 0:
                 doAP = int(args[0]) > 0
             self.settings.set('autoplay', doAP)
+
+        @module.on('do-autoplay')
+        def doautoplay(ev, *args):
+            if args[0] and not self.activePlayer().isPlaying():
+                self.playlist.play()
+            elif not args[0] and self.activePlayer().isPlaying():
+                self.activePlayer().stop()
