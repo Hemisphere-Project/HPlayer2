@@ -32,7 +32,7 @@ class VideonetPlayer(BasePlayer):
         self._runflag = threading.Event()	
 
         # ARTNET
-        self._output = StupidArtnet("192.168.1.12")
+        self._output = StupidArtnet("10.0.12.1")
 
 
     ############
@@ -128,6 +128,7 @@ class VideonetPlayer(BasePlayer):
     # VNET THREAD
     def _vnet_thread(self):
         
+        self._blackout()
         self.update('isReady', True)
         self.emit('ready')	
         self.emit('status', self.status())
@@ -136,7 +137,9 @@ class VideonetPlayer(BasePlayer):
 
         while self.isRunning():	
             
-            if not self._cap or not self._runflag.isSet():     # not playing or paused           
+            if not self._cap or not self._runflag.isSet():     # not playing or paused    
+                if not self._cap:
+                    self._blackout()       
                 time.sleep(0.01)
             
             else:
@@ -170,7 +173,10 @@ class VideonetPlayer(BasePlayer):
                 self._drawArtnet(artnet)
 
                 self._last_frame_time = cv.getTickCount()
-                self.update('time', round(self._cap.get(cv.CAP_PROP_POS_MSEC)/1000,2))
+                try:
+                    self.update('time', round(self._cap.get(cv.CAP_PROP_POS_MSEC)/1000,2))
+                except:
+                    pass
 
         self.isRunning(False)	
         return	        
