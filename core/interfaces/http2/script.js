@@ -319,13 +319,15 @@ $(document).ready(function() {
     // JACK
     var jackBtn = new Button('#jack_btn', 'info')
     jackBtn.btn.click(event => {
-        trigger('audioout', 'jack');
+        if (confirm("Switch to Jack ?\nHplayer2 might need a restart..."))
+            trigger('audioout', 'jack');
     });
 
     // HDMI
     var hdmiBtn = new Button('#hdmi_btn', 'info')
     hdmiBtn.btn.click(event => {
-        trigger('audioout', 'hdmi');
+        if (confirm("Switch to HDMI ?\nHplayer2 might need a restart..."))
+            trigger('audioout', 'hdmi');
     });
 
     // REBOOT

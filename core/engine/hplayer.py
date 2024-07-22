@@ -318,9 +318,20 @@ class HPlayer2(Module):
         def doaudioout(ev, *args):
             if len(args) > 0:
                 if args[0] == 'hdmi':
-                    os.system('amixer cset numid=3 2')
+                    if not 'pcm.!default hdmi0' in open('/etc/asound.conf').read():
+                        os.system('rw && \
+                                  sed -i "s/pcm.!default .*/pcm.!default hdmi0/g" /etc/asound.conf && \
+                                  sed -i "s/ctl.!default .*/ctl.!default hdmi0/g" /etc/asound.conf && \
+                                  amixer sset PCM 96% \
+                                  sync && ro')
+                        
                 elif args[0] == 'jack':
-                    os.system('amixer cset numid=3 1')
+                    if not 'pcm.!default jack' in open('/etc/asound.conf').read():
+                        os.system('rw && \
+                                  sed -i "s/pcm.!default .*/pcm.!default jack/g" /etc/asound.conf && \
+                                  sed -i "s/ctl.!default .*/ctl.!default jack/g" /etc/asound.conf && \
+                                  amixer sset PCM 96% \
+                                  sync && ro')
 
         # PLAYLIST
         #
