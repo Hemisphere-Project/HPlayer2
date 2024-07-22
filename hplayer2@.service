@@ -3,6 +3,7 @@ Description=HPlayer
            
 [Service]
 Type=simple
+WorkingDirectory=/opt/HPlayer2
 ExecStartPre=-hplayer2-kill
 ExecStart=/usr/local/bin/hplayer2 %i
 ExecStop=/usr/local/bin/hplayer2-kill

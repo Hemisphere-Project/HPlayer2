@@ -9,6 +9,10 @@ mpv-build
 .DS_Store
 ._.DS_Store
 
+# LIBS
+scripts/czmq
+scripts/zyre
+
 # Byte-compiled / optimized / DLL files
 __pycache__/
 *.py[cod]

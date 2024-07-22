@@ -26,10 +26,8 @@ if [[ $(command -v apt) ]]; then
     apt install libdrm libmpg123 gstreamer1.0-plugins-ugly libgstreamer1.0-dev libgstreamer-plugins-base1.0-dev gstreamer1.0-pulseaudio gstreamer1.0-x gstreamer1.0-plugins-bad gstreamer1.0-alsa gstreamer1.0-plugins-base gstreamer1.0-plugins-good -y
 
     # hplayer2 dependencies
-    apt install python3 python3-pip rsync
-    apt install python3-termcolor python3-evdev python3-eventlet -y
-    apt install python3-watchdog python3-pillow python3-setuptools -y
-    apt install ttf-dejavu-core python3-pyserial libjack-dev libtool autotools-dev automake liblo7 -y
+    apt install python3 rsync python-pipenv
+    apt install ttf-dejavu-core libjack-dev libtool autotools-dev automake liblo7 -y
 
     # RPi
     if [[ $(uname -m) = armv* ]]; then
@@ -44,12 +42,11 @@ elif [[ $(command -v pacman) ]]; then
     pacman -S gst-python libdrm mpg123 gst-plugins-ugly gst-libav gst-plugins-base-libs gstreamer gst-plugins-bad gst-plugins-base gst-plugins-good --noconfirm --needed
     
     # hplayer2 dependencies
-    pacman -S pkg-config python python-pip cython liblo libxcrypt python-termcolor python-evdev python-eventlet \
-        python-watchdog python-pillow python-setuptools ttf-dejavu python-pyserial rsync --noconfirm --needed
+    pacman -S pkg-config python cython liblo libxcrypt ttf-dejavu rsync python-pipenv mesa --noconfirm --needed
 
     # RPi
     if [[ $(uname -m) = armv* || $(uname -m) = aarch64 ]]; then
-      pacman -S python-queuelib i2c-tools --noconfirm --needed
+      pacman -S i2c-tools --noconfirm --needed
     fi
 
 ## Plateform not detected ...
@@ -66,40 +63,39 @@ fi
 ####
 
 # PIP
-pip3 install -r requirements.txt
+cd "$(dirname "$(readlink -f "$0")")/.."
+pipenv install -r scripts/requirements.txt
 
 # RPi
 if [[ $(uname -m) = armv* || $(uname -m) = aarch64 ]]; then
-    /usr/bin/yes | pip install --upgrade RPi.GPIO
-
-    git clone https://github.com/adafruit/Adafruit_Python_CharLCD.git
-    cd Adafruit_Python_CharLCD
-    python setup.py install
-    cd .. && rm -Rf Adafruit_Python_CharLCD
+    cd "$(dirname "$(readlink -f "$0")")/.."
+    pipenv install RPi.GPIO
+    pipenv install queuelib
+    pipenv install Adafruit-CharLCD
 fi
-
-exit 0
 
 # ZYRE
 cd /tmp
-git clone git://github.com/zeromq/libzmq.git && cd libzmq
+git clone https://github.com/zeromq/libzmq.git --depth=1 && cd libzmq
 ./autogen.sh && ./configure && make check -j4
 make install && ldconfig
 
-cd /tmp
-git clone git://github.com/zeromq/czmq.git && cd czmq
+cd "$(dirname "$(readlink -f "$0")")"
+git clone https://github.com/zeromq/czmq.git --depth=1 && cd czmq
 ./autogen.sh && ./configure && make check -j4
 make install && ldconfig
 ln -s /usr/local/lib/libczmq.so.4 /usr/lib/
-cd bindings/python/ && python setup.py build && python setup.py install
+# cd bindings/python/ && python setup.py build && python setup.py install
+cd "$(dirname "$(readlink -f "$0")")/.."
+pipenv install -e "$(dirname "$(readlink -f "$0")")/czmq/bindings/python"
 
-cd /tmp
-git clone git://github.com/zeromq/zyre.git && cd zyre
+cd "$(dirname "$(readlink -f "$0")")"
+git clone https://github.com/zeromq/zyre.git --depth=1 && cd zyre
 ./autogen.sh && ./configure && make check -j4
 make install && ldconfig
 ln -s /usr/local/lib/libzyre.so.2 /usr/lib/
-cd bindings/python/ && python setup.py build && python setup.py install
-
-
+# cd bindings/python/ && python setup.py build && python setup.py install
+cd "$(dirname "$(readlink -f "$0")")/.."
+pipenv install -e "$(dirname "$(readlink -f "$0")")/zyre/bindings/python"
 
 exit 0

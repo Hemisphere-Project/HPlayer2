@@ -25,6 +25,7 @@ class SerialInterface (BaseInterface):
             if not self.port:
                 retryCount += 1 
                 if self.maxRetry == 0 or retryCount <= self.maxRetry:
+                    self.log([dev.device+' '+dev.name+' '+dev.description for dev in list_ports.grep('')])
                     for dev in list_ports.grep(self.filter):
                         self.port = dev.device
                         break
@@ -50,9 +51,11 @@ class SerialInterface (BaseInterface):
                     # Connect
                     self.serial = serial.Serial(self.port, 115200, timeout=.1)
                     self.log("connected to", self.port, "!")
+                    self.emit('connected')
 
                 except:
                     self.log("connection failed on", self.port)
+                    self.emit('disconnected')
                     self.port = None
                     self.serial = None
                     time.sleep(0.5)
@@ -74,3 +77,11 @@ class SerialInterface (BaseInterface):
                     self.log("broken link..")
                     self.serial = None
                     time.sleep(0.5)
+
+    # Serial SEND
+    def send(self, msg):
+        if not self.serial: 
+            self.log("no serial connection")
+            return
+        self.serial.write( (msg+'\n').encode() )
+        self.log("send >", msg)
