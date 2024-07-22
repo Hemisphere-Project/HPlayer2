@@ -34,21 +34,14 @@ hplayer.addInterface('serial', '^M5', 10)
 SYNC = False
 SYNC_MASTER = False
 if os.path.isfile('/boot/wifi/eth0-sync-AP.nmconnection') or os.path.isfile('/boot/wifi/eth0-sync-STA.nmconnection'):
-	if network.has_interface('eth0'):
-		hplayer.addInterface('zyre', 'eth0')
-		SYNC = True
-		SYNC_MASTER = os.path.isfile('/boot/wifi/eth0-sync-AP.nmconnection')
+	SYNC = True
+	SYNC_MASTER = os.path.isfile('/boot/wifi/eth0-sync-AP.nmconnection')
+	hplayer.addInterface('zyre', 'eth0')
 
 elif os.path.isfile('/boot/wifi/wlan0-sync-AP.nmconnection') or os.path.isfile('/boot/wifi/wlan0-sync-STA.nmconnection'):
-	if network.has_interface('wlan0'):
-		hplayer.addInterface('zyre', 'wlan0')
-		SYNC = True
-		SYNC_MASTER = os.path.isfile('/boot/wifi/wlan0-sync-AP.nmconnection')
-
-	elif network.has_interface('wlan1'):
-		hplayer.addInterface('zyre', 'wlan1')
-		SYNC = True
-		SYNC_MASTER = os.path.isfile('/boot/wifi/wlan0-sync-AP.nmconnection')
+	SYNC = True
+	SYNC_MASTER = os.path.isfile('/boot/wifi/wlan0-sync-AP.nmconnection')
+	hplayer.addInterface('zyre', 'wlan0')
 
 # PLAY action
 debounceLastTime = 0
