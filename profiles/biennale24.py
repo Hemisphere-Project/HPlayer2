@@ -45,6 +45,11 @@ elif os.path.isfile('/boot/wifi/wlan0-sync-AP.nmconnection') or os.path.isfile('
 		SYNC = True
 		SYNC_MASTER = os.path.isfile('/boot/wifi/wlan0-sync-AP.nmconnection')
 
+	elif network.has_interface('wlan1'):
+		hplayer.addInterface('zyre', 'wlan1')
+		SYNC = True
+		SYNC_MASTER = os.path.isfile('/boot/wifi/wlan0-sync-AP.nmconnection')
+
 # PLAY action
 debounceLastTime = 0
 debounceLastMedia = ""
