@@ -41,7 +41,10 @@ if os.path.isfile('/boot/wifi/eth0-sync-AP.nmconnection') or os.path.isfile('/bo
 elif os.path.isfile('/boot/wifi/wlan0-sync-AP.nmconnection') or os.path.isfile('/boot/wifi/wlan0-sync-STA.nmconnection'):
 	SYNC = True
 	SYNC_MASTER = os.path.isfile('/boot/wifi/wlan0-sync-AP.nmconnection')
-	hplayer.addInterface('zyre', 'wlan0')
+	if network.has_interface('wlan0'):
+		hplayer.addInterface('zyre', 'wlan0')
+	elif network.has_interface('wlan1'):
+		hplayer.addInterface('zyre', 'wlan1')
 
 # PLAY action
 debounceLastTime = 0
@@ -69,6 +72,11 @@ def doPlay(media, debounce=0):
 	else:
 		hplayer.playlist.play(media)
 
+# SYNC_MASTER INIT
+@hplayer.on('app-run')
+def sync_init(ev, *args):
+	if SYNC_MASTER:
+		time.sleep(10)
 
 # DEFAULT File
 @hplayer.on('app-run')
