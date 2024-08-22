@@ -1,9 +1,6 @@
 # Raspberry Pi 3
 #
 
-# define internal
-#
-
 pcm.jack { 
     type hw
     card Headphones
@@ -24,6 +21,15 @@ ctl.hdmi0 {
     card b1
 }
 
+pcm.usb { 
+    type hw
+    card Device
+}
+
+ctl.usb {
+    type hw
+    card Device
+}
 
 # sets the default output device to the "pcm.both" device 
 pcm.!default jack
