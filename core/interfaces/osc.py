@@ -1,6 +1,12 @@
 from .base import BaseInterface
 from core.engine import network
-import pyliblo3
+
+try:
+	import pyliblo3
+except:
+	import liblo
+	pyliblo3 = liblo
+
 import random, time
 from sys import getsizeof
 import socket
