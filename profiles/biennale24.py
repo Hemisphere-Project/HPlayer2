@@ -27,9 +27,9 @@ player.doLog['cmds'] = False
 
 
 # Interfaces
-hplayer.addInterface('http', 8080)
+# hplayer.addInterface('http', 8080)
 hplayer.addInterface('http2', 80, {'playlist': False, 'loop': False, 'mute': True})
-hplayer.addInterface('serial', '^M5', 10)
+# hplayer.addInterface('serial', '^M5', 10)
 #if hplayer.isRPi():
 #    hplayer.addInterface('gpio', [21,20,16,26,14,15], 310)
 
@@ -92,32 +92,46 @@ def play0(ev, *args):
 	else:
 		hplayer.settings.set('loop', 0)
 
-# BTN 1
-@hplayer.on('http.push1')
-@hplayer.on('gpio.21-on')
-def play1(ev, *args):
-	hplayer.settings.set('loop', 0)
-	doPlay("1_*.*")
+# # BTN 1
+# @hplayer.on('http.push1')
+# @hplayer.on('gpio.21-on')
+# def play1(ev, *args):
+# 	hplayer.settings.set('loop', 0)
+# 	doPlay("1_*.*")
 
-# BTN 2
-@hplayer.on('http.push2')
-@hplayer.on('gpio.20-on')
-def play1(ev, *args):
-	hplayer.settings.set('loop', 0)
-	doPlay("2_*.*")
+# # BTN 2
+# @hplayer.on('http.push2')
+# @hplayer.on('gpio.20-on')
+# def play1(ev, *args):
+# 	hplayer.settings.set('loop', 0)
+# 	doPlay("2_*.*")
 
-# BTN 3
-@hplayer.on('http.push3')
-@hplayer.on('gpio.16-on')
-def play1(ev, *args):
-	hplayer.settings.set('loop', 0)
-	doPlay("3_*.*")
+# # BTN 3
+# @hplayer.on('http.push3')
+# @hplayer.on('gpio.16-on')
+# def play1(ev, *args):
+# 	hplayer.settings.set('loop', 0)
+# 	doPlay("3_*.*")
 
-# HTTP2 Play -> disable loop && do propagate
-@hplayer.on('http2.play')
-def play2(ev, *args):
-	hplayer.settings.set('loop', 0)
-	doPlay(args[0])
+if SYNC:
+	# HTTP2 Ctrl unbind
+	uev = ['play', 'pause', 'resume', 'stop']
+	for ev in uev:
+		for func in hplayer.interface('http2').listeners(ev):
+			hplayer.interface('http2').off(ev, func)
+
+	# HTTP2 Ctrl re-bind with Zyre
+	@hplayer.on('http2.play')
+	@hplayer.on('http2.pause')
+	@hplayer.on('http2.resume')
+	@hplayer.on('http2.stop')
+	def ctrl2(ev, *args):
+		ev = ev.replace('http2.', '')
+		hplayer.interface('zyre').node.broadcast(ev, args, 200)
+		if ev == 'play':
+			hplayer.interface('zyre').node.broadcast('loop', [0], 200)
+		
+
 
 # HTTP2 Logs
 @hplayer.on('player.*')
