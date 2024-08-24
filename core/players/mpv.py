@@ -122,7 +122,8 @@ class MpvPlayer(BasePlayer):
                     self.doLog['recv'] = False
                     self.doLog['cmds'] = False
 
-                    # self.log("IPC says:", msg.rstrip())
+                    if self.name == 'player2':
+                        self.log("IPC says:", msg.rstrip())
                     
                     # Message received
                     for event in msg.rstrip().split( b"\n" ):
@@ -133,7 +134,8 @@ class MpvPlayer(BasePlayer):
                             pass
                         
                         if 'name' in mpvsays:
-                            # print(mpvsays)
+                            if self.name == 'player2':
+                                print(mpvsays)
                             
                             if mpvsays['name'] == 'idle':
                                 self.emit('idle')

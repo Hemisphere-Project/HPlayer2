@@ -7,4 +7,10 @@ else
  	profile=$1
 fi
 
-python3 -u "$DIR/launcher.py" "$profile"
+# if pipenv is installed, use it
+if command -v pipenv &> /dev/null; then
+    pipenv run python -u "$DIR/launcher.py" "$profile" 
+else
+    python3 -u "$DIR/launcher.py" "$profile"
+fi
+

@@ -123,6 +123,7 @@ $(document).ready(function() {
         monoBtn.setState((msg['audiomode'] == 'mono'))
         jackBtn.setState((msg['audioout'] == 'jack'))
         hdmiBtn.setState((msg['audioout'] == 'hdmi'))
+        usbBtn.setState((msg['audioout'] == 'usb'))
 
         $('#volume_range').val(msg['volume'])
         $('#volumeMain').html(msg['volume'])
@@ -319,13 +320,22 @@ $(document).ready(function() {
     // JACK
     var jackBtn = new Button('#jack_btn', 'info')
     jackBtn.btn.click(event => {
-        trigger('audioout', 'jack');
+        if (confirm("Switch audio to Jack ?\nHplayer2 will restart ... (~15s) "))
+            trigger('audioout', 'jack');
     });
 
     // HDMI
     var hdmiBtn = new Button('#hdmi_btn', 'info')
     hdmiBtn.btn.click(event => {
-        trigger('audioout', 'hdmi');
+        if (confirm("Switch audio to HDMI ?\nHplayer2 will restart ... (~15s) "))
+            trigger('audioout', 'hdmi');
+    });
+
+    // USB
+    var usbBtn = new Button('#usb_btn', 'info')
+    usbBtn.btn.click(event => {
+        if (confirm("Switch audio to USB ?\nHplayer2 will restart ... (~15s) "))
+            trigger('audioout', 'usb');
     });
 
     // REBOOT

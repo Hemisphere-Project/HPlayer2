@@ -307,20 +307,50 @@ class HPlayer2(Module):
         @module.on('hardreset')
         def hardreset(ev, *args): 
             os.system('systemctl restart NetworkManager')
-            # global runningFlag
-            # runningFlag = False
+            # set timer to exit
+            Timer(5.0, os._exit, [0]).start()
+            global runningFlag
+            runningFlag = False
             # sleep(5.0)
-            # sleep(1.0)
-            self.log('HARD KILL')
-            os._exit(0)
+            os.system('pkill mpv')
+            self.log('HARD KILL in 5s')
+            # os._exit(0)
 
         @module.on('do-audioout')
         def doaudioout(ev, *args):
             if len(args) > 0:
+                doreset = False
                 if args[0] == 'hdmi':
-                    os.system('amixer cset numid=3 2')
+                    if not 'pcm.!default hdmi0' in open('/etc/asound.conf').read():
+                        os.system('rw && \
+                                  sed -i "s/pcm.!default .*/pcm.!default hdmi0/g" /etc/asound.conf && \
+                                  sed -i "s/ctl.!default .*/ctl.!default hdmi0/g" /etc/asound.conf && \
+                                  sync && ro')
+                        doreset = True
+                    os.system('amixer sset PCM 96%')
+                    
+                    
+                        
                 elif args[0] == 'jack':
-                    os.system('amixer cset numid=3 1')
+                    if not 'pcm.!default jack' in open('/etc/asound.conf').read():
+                        os.system('rw && \
+                                  sed -i "s/pcm.!default .*/pcm.!default jack/g" /etc/asound.conf && \
+                                  sed -i "s/ctl.!default .*/ctl.!default jack/g" /etc/asound.conf && \
+                                  sync && ro')
+                        doreset = True
+                    os.system('amixer sset PCM 96%')
+                        
+                elif args[0] == 'usb':
+                    if not 'pcm.!default usb' in open('/etc/asound.conf').read():
+                        os.system('rw && \
+                                  sed -i "s/pcm.!default .*/pcm.!default usb/g" /etc/asound.conf && \
+                                  sed -i "s/ctl.!default .*/ctl.!default usb/g" /etc/asound.conf && \
+                                  sync && ro')
+                        doreset = True
+                    os.system('amixer sset Speaker 96%')
+                
+                if doreset:
+                    module.emit('hardreset')
 
         # PLAYLIST
         #
@@ -541,19 +571,22 @@ class HPlayer2(Module):
 
         @module.on('fade')
         def fade(ev, *args):
+            o = self.players()[0].getOverlay('rpifade')
+            if not o: return
             if len(args) == 1 and args[0][0] == '#':
                 color = tuple(int(args[0][i:i+2], 16)/255.0 for i in (1, 3, 5))
-                self.players()[0].getOverlay('rpifade').set(color[0], color[1], color[2], 1.0)
+                o.set(color[0], color[1], color[2], 1.0)
             elif len(args) > 3:
-                self.players()[0].getOverlay('rpifade').set(float(args[0]),float(args[1]), float(args[2]), float(args[3]))
+                o.set(float(args[0]),float(args[1]), float(args[2]), float(args[3]))
             elif len(args) > 2:
-                self.players()[0].getOverlay('rpifade').set(float(args[0]),float(args[1]), float(args[2]), 1.0)
+                o.set(float(args[0]),float(args[1]), float(args[2]), 1.0)
             else:
-                self.players()[0].getOverlay('rpifade').set(0.0, 0.0, 0.0, 1.0)
+                o.set(0.0, 0.0, 0.0, 1.0)
 
         @module.on('unfade')
         def unfade(ev, *args):
-            self.players()[0].getOverlay('rpifade').set(0.0, 0.0, 0.0, 0.0)
+            o = self.players()[0].getOverlay('rpifade')
+            if o: o.set(0.0, 0.0, 0.0, 0.0)
 
         @module.on('unflip')
         def unflip(ev, *args):

@@ -14,6 +14,7 @@
     <link href="/res/css/fontawesome.min.css" rel="stylesheet">
     <link href="/res/css/solid.min.css" rel="stylesheet">
     <link href="/res/css/regular.min.css" rel="stylesheet">
+    <link href="/res/css/brands.min.css" rel="stylesheet">
 
     <link rel="stylesheet" href="/res/bootstrap.min.css">
     <script type="text/javascript" src="/res/bootstrap.bundle.min.js"></script>
@@ -47,8 +48,8 @@
                     <div class="form-group">
                         <button type="button" class="btn" id="play_btn"><i class="fas fa-play"></i></button>
                         <button type="button" class="btn" id="pause_btn"><i class="fas fa-pause"></i></button>
-                        <button type="button" class="btn" id="prev_btn"><i class="fas fa-step-backward"></i></button>
-                        <button type="button" class="btn" id="next_btn"><i class="fas fa-step-forward"></i></button>
+                        <button type="button" class="btn playlist-element" id="prev_btn"><i class="fas fa-step-backward"></i></button>
+                        <button type="button" class="btn playlist-element" id="next_btn"><i class="fas fa-step-forward"></i></button>
                         <button type="button" class="btn" id="stop_btn"><i class="fas fa-stop"></i></button>
                     </div>
                 </div>
@@ -62,9 +63,10 @@
 
                 <div class="col-lg-4 col-12 text-lg-right">
                     <div class="form-group">
-                        <button type="button" class="btn audio-element" id="hdmi_btn"><i class="fas fa-desktop"></i> HDMI</button>
                         <button type="button" class="btn audio-element" id="jack_btn"><i class="fas fa-headphones"></i> Jack</button>
-                        <button type="button" class="btn mute-element" id="mute_btn"><i class="fas fa-volume-mute"></i> Mute</button>
+                        <button type="button" class="btn audio-element" id="usb_btn"><i class="fab fa-usb"></i> USB</button>
+                        <button type="button" class="btn audio-element" id="hdmi_btn"><i class="fas fa-desktop"></i> HDMI</button>
+                        <button type="button" class="btn mute-element"  id="mute_btn"><i class="fas fa-volume-mute"></i> Mute</button>
                         <button type="button" class="btn audio-element" id="mono_btn"><i class="fas fa-rss"></i> Mono</button>
                     </div>
                 </div>
