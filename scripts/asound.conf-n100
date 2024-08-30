@@ -1,0 +1,40 @@
+# Raspberry Pi 3
+#
+
+pcm.jack { 
+    type hw
+    card PCH
+    device 0
+}
+
+ctl.jack {
+    type hw
+    card PCH
+    device 0
+}
+
+pcm.hdmi0 { 
+    type hw
+    card PCH
+    device 3
+}
+
+ctl.hdmi0 {
+    type hw
+    card PCH
+    device 3
+}
+
+pcm.usb { 
+    type hw
+    card Device
+}
+
+ctl.usb {
+    type hw
+    card Device
+}
+
+# sets the default output device to the "pcm.both" device 
+pcm.!default hdmi0
+ctl.!default hdmi0

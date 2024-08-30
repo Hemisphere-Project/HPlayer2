@@ -23,10 +23,10 @@ pyserial = "*"
 eventlet = "*"
 evdev = "*"
 termcolor = "*"
-czmq = {file = "scripts/czmq/bindings/python", editable = true}
 zyre = {file = "scripts/zyre/bindings/python", editable = true}
+czmq = {file = "scripts/czmq/bindings/python", editable = true}
 
 [dev-packages]
 
 [requires]
-python_version = "3.11"
+python_version = "3"

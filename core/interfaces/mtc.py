@@ -3,38 +3,68 @@ import mido
 
 class MtcInterface (BaseInterface):
 
-    def __init__(self, hplayer, port_name):
-        super().__init__(hplayer, "MTC")
+	def __init__(self, hplayer, port_name):
+		super().__init__(hplayer, "MTC")
 
-        self.logQuietEvents.extend(['qf', 'ff'])  # Do not log tc
+		self.logQuietEvents.extend(['qf', 'ff'])  # Do not log tc
 
-        self.port = None
-        self.port_name = port_name
+		self.port = None
+		self.port_name = port_name
 
-        # create a global accumulator for quarter_frames
-        self.quarter_frames = [0,0,0,0,0,0,0,0]
+		# create a global accumulator for quarter_frames
+		self.quarter_frames = [0,0,0,0,0,0,0,0]
 
-    # MTC receiver THREAD
-    def listen(self):
-        self.log("starting MTC listener")
+	# MTC receiver THREAD
+	def listen(self):
+		self.log("starting MTC listener")
 
-        def clbck(message):
-            if message.type == 'quarter_frame':
-                self.quarter_frames[message.frame_type] = message.frame_value
-                if message.frame_type == 7:
-                    tc = mtc_decode_quarter_frames(self.quarter_frames)
-                    self.emit('qf', tc)
-            elif message.type == 'sysex':
-                if len(message.data) == 8 and message.data[0:4] == (127,127,1,1):
-                    data = message.data[4:]
-                    tc = mtc_decode(data)
-                    self.emit('ff', tc)
+		def clbck(message):
+			if message.type == 'quarter_frame':
+				self.quarter_frames[message.frame_type] = message.frame_value
+				if message.frame_type == 7:
+					tc = mtc_decode_quarter_frames(self.quarter_frames)
+					self.emit('qf', tc)
+			elif message.type == 'sysex':
+				if len(message.data) == 8 and message.data[0:4] == (127,127,1,1):
+					data = message.data[4:]
+					tc = mtc_decode(data)
+					self.emit('ff', tc)
+			elif message.type == 'clock':
+				pass
+			elif message.type == 'start':
+				self.emit('play')
+			elif message.type == 'continue':
+				self.emit('resume')
+			elif message.type == 'stop':
+				self.emit('pause')
+			elif message.type == 'songpos':
+				self.emit('seek', message.pos)
+			else:
+				print(message)
 
-        try:
-            self.port = mido.open_input(self.port_name, callback=clbck)
-            self.stopped.wait()
-        except:
-            self.quit()
+		try:
+			available_ports = mido.get_output_names()
+			# remove port containing 'Network Export'
+			available_ports = [port for port in available_ports if 'Network Export' not in port]
+
+			# find port containing self.port_name
+			matching_ports = [port for port in available_ports if self.port_name in port]
+
+			if len(matching_ports) == 0:
+				self.log("No MTC port found. looking for: " + self.port_name + " in " + str(available_ports))
+				self.quit()
+				return
+
+			if len(matching_ports) > 1:
+				self.log("Multiple MTC ports found. using first one: " + matching_ports[0])
+			else:
+				self.log("MTC port found: " + matching_ports[0])
+
+			self.port_fullname = matching_ports[0]
+			self.port = mido.open_input(self.port_fullname, callback=clbck)
+			self.stopped.wait()
+		except:
+			self.quit()
             
 
 

@@ -13,7 +13,7 @@ class MpvPlayer(BasePlayer):
     def __init__(self, hplayer, name):
         super().__init__(hplayer, name)
 
-        self._videoExt = ['mp4', 'm4v', 'mkv', 'avi', 'mov', 'flv', 'mpg', 'wmv', '3gp', 'webm']
+        self._videoExt = ['mp4', 'm4v', 'mkv', 'avi', 'mov', 'flv', 'mpg', 'wmv', '3gp', 'webm', 'ts']
         self._audioExt = ['mp3', 'aac', 'wma', 'wav', 'flac', 'aif', 'aiff', 'm4a', 'ogg', 'opus']
         self._imageExt = ['jpg', 'jpeg', 'gif', 'png', 'tif', 'tiff']
 
@@ -134,6 +134,9 @@ class MpvPlayer(BasePlayer):
                             pass
                         
                         if 'name' in mpvsays:
+                            if not 'data' in mpvsays:
+                                mpvsays['data'] = None
+
                             if self.name == 'player2':
                                 print(mpvsays)
                             

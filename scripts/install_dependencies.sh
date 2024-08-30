@@ -26,8 +26,8 @@ if [[ $(command -v apt) ]]; then
     apt install libdrm libmpg123 gstreamer1.0-plugins-ugly libgstreamer1.0-dev libgstreamer-plugins-base1.0-dev gstreamer1.0-pulseaudio gstreamer1.0-x gstreamer1.0-plugins-bad gstreamer1.0-alsa gstreamer1.0-plugins-base gstreamer1.0-plugins-good -y
 
     # hplayer2 dependencies
-    apt install python3 rsync python-pipenv
-    apt install ttf-dejavu-core libjack-dev libtool autotools-dev automake liblo7 -y
+    apt install python3 rsync pipenv python-is-python3 -y
+    apt install libtool autotools-dev automake pkg-config m4 autoconf -y
 
     # RPi
     if [[ $(uname -m) = armv* ]]; then
@@ -68,17 +68,7 @@ fi
 # COMMON PARTS
 ####
 
-# PIP
-cd "$(dirname "$(readlink -f "$0")")/.."
-pipenv install -r scripts/requirements.txt
 
-# RPi
-if [[ $(uname -m) = armv* || $(uname -m) = aarch64 ]]; then
-    cd "$(dirname "$(readlink -f "$0")")/.."
-    pipenv install RPi.GPIO
-    pipenv install queuelib
-    pipenv install Adafruit-CharLCD
-fi
 
 # ZYRE
 cd /tmp
@@ -91,17 +81,30 @@ git clone https://github.com/zeromq/czmq.git --depth=1 && cd czmq
 ./autogen.sh && ./configure && make check -j4
 make install && ldconfig
 ln -s /usr/local/lib/libczmq.so.4 /usr/lib/
-# cd bindings/python/ && python setup.py build && python setup.py install
-cd "$(dirname "$(readlink -f "$0")")/.."
-pipenv install -e "$(dirname "$(readlink -f "$0")")/czmq/bindings/python"
 
+# cd bindings/python/ && python setup.py build && python setup.py install
 cd "$(dirname "$(readlink -f "$0")")"
 git clone https://github.com/zeromq/zyre.git --depth=1 && cd zyre
 ./autogen.sh && ./configure && make check -j4
 make install && ldconfig
 ln -s /usr/local/lib/libzyre.so.2 /usr/lib/
 # cd bindings/python/ && python setup.py build && python setup.py install
+
+
+
+# PIP
 cd "$(dirname "$(readlink -f "$0")")/.."
-pipenv install -e "$(dirname "$(readlink -f "$0")")/zyre/bindings/python"
+# pipenv install -r scripts/requirements.txt
+# pipenv install -e "$(dirname "$(readlink -f "$0")")/czmq/bindings/python"
+# pipenv install -e "$(dirname "$(readlink -f "$0")")/zyre/bindings/python"
+pipenv install
+
+# RPi
+if [[ $(uname -m) = armv* || $(uname -m) = aarch64 ]]; then
+    cd "$(dirname "$(readlink -f "$0")")/.."
+    pipenv install RPi.GPIO
+    pipenv install queuelib
+    pipenv install Adafruit-CharLCD
+fi
 
 exit 0
