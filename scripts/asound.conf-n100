@@ -36,5 +36,5 @@ ctl.usb {
 }
 
 # sets the default output device to the "pcm.both" device 
-pcm.!default hdmi0
-ctl.!default hdmi0
+pcm.!default jack
+ctl.!default jack
