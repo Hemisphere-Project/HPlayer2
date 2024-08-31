@@ -1,15 +1,18 @@
 from .base import BaseInterface
 import mido
+import time
 
 class MtcInterface (BaseInterface):
 
-	def __init__(self, hplayer, port_name):
+	def __init__(self, hplayer, filter, maxRetry=0):
 		super().__init__(hplayer, "MTC")
 
 		self.logQuietEvents.extend(['qf', 'ff'])  # Do not log tc
 
-		self.port = None
-		self.port_name = port_name
+		self.port 		= None
+		self.port_name 	= None
+		self.filter 	= filter
+		self.maxRetry = maxRetry
 
 		# create a global accumulator for quarter_frames
 		self.quarter_frames = [0,0,0,0,0,0,0,0]
@@ -39,32 +42,56 @@ class MtcInterface (BaseInterface):
 				self.emit('pause')
 			elif message.type == 'songpos':
 				self.emit('seek', message.pos)
+				print("songpos", message.pos)
 			else:
 				print(message)
 
-		try:
-			available_ports = mido.get_output_names()
-			# remove port containing 'Network Export'
-			available_ports = [port for port in available_ports if 'Network Export' not in port]
+		retryCount = 0
+		while self.isRunning():
+			# find port
+			if not self.port_name:
+				retryCount += 1 
+				if self.maxRetry == 0 or retryCount <= self.maxRetry:
+					available_ports = mido.get_output_names()
+					self.log("Available ports: " + str(available_ports))
+					# remove port containing 'Network Export'
+					available_ports = [port for port in available_ports if 'Network Export' not in port]
 
-			# find port containing self.port_name
-			matching_ports = [port for port in available_ports if self.port_name in port]
+					# find port containing self.filter
+					matching_ports = [port for port in available_ports if self.filter in port]
 
-			if len(matching_ports) == 0:
-				self.log("No MTC port found. looking for: " + self.port_name + " in " + str(available_ports))
-				self.quit()
-				return
+					if len(matching_ports) > 1:
+						self.log("Multiple MTC ports found. using first one: " + matching_ports[0])
+					elif len(matching_ports) > 0:
+						self.log("MTC port found: " + matching_ports[0])
 
-			if len(matching_ports) > 1:
-				self.log("Multiple MTC ports found. using first one: " + matching_ports[0])
+					if len(matching_ports) > 0:
+						self.port_name = matching_ports[0]	
+					else:
+						self.log("No MTC port found. looking for: " + self.filter + " in " + str(available_ports))
+						for i in range(10):
+							time.sleep(0.5)
+							if not self.isRunning(): 
+								return
+
+			# connect to port
+			elif not self.port:
+				try:				
+					# Connect
+					self.port = mido.open_input(self.port_name, callback=clbck)
+					self.log("connected to", self.port_name, "!")
+					self.emit('connected')
+
+				except:
+					self.log("connection failed on", self.port_name)
+					self.emit('disconnected')
+					self.port 		= None
+					self.port_name 	= None
+					time.sleep(0.5)
+
+			# wait
 			else:
-				self.log("MTC port found: " + matching_ports[0])
-
-			self.port_fullname = matching_ports[0]
-			self.port = mido.open_input(self.port_fullname, callback=clbck)
-			self.stopped.wait()
-		except:
-			self.quit()
+				time.sleep(0.5)
             
 
 

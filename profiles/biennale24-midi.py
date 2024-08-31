@@ -2,6 +2,7 @@ from core.engine.hplayer import HPlayer2
 from core.engine import network
 import os
 import time
+from termcolor import colored
 
 # EXTRA TMP UPLOAD
 import tempfile
@@ -80,37 +81,17 @@ def sync_init(ev, *args):
 		time.sleep(10)
 
 # DEFAULT File
-# @hplayer.on('app-run')
+@hplayer.on('app-run')
 # @hplayer.on('files.filelist-updated')
-# @hplayer.on('playlist.end')
+@hplayer.on('playlist.end')
 def play0(ev, *args):
 	doPlay("[^1-9_]*.*")
-	# if not SYNC:
-	# 	hplayer.settings.set('loop', 2) # allow blackless loop on solo mode
-	# else:
-	# 	hplayer.settings.set('loop', 0)
+	if not SYNC:
+		hplayer.settings.set('loop', 2) # allow blackless loop on solo mode
+	else:
+		hplayer.settings.set('loop', 0)
 	print('play0')
 
-# # BTN 1
-# @hplayer.on('http.push1')
-# @hplayer.on('gpio.21-on')
-# def play1(ev, *args):
-# 	hplayer.settings.set('loop', 0)
-# 	doPlay("1_*.*")
-
-# # BTN 2
-# @hplayer.on('http.push2')
-# @hplayer.on('gpio.20-on')
-# def play1(ev, *args):
-# 	hplayer.settings.set('loop', 0)
-# 	doPlay("2_*.*")
-
-# # BTN 3
-# @hplayer.on('http.push3')
-# @hplayer.on('gpio.16-on')
-# def play1(ev, *args):
-# 	hplayer.settings.set('loop', 0)
-# 	doPlay("3_*.*")
 
 if SYNC:
 	# HTTP2 Ctrl unbind
