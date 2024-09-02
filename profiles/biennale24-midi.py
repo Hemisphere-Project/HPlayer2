@@ -38,7 +38,7 @@ SYNC_MASTER = False
 if os.path.isfile('/boot/wifi/eth0-sync-AP.nmconnection') or os.path.isfile('/boot/wifi/eth0-sync-STA.nmconnection'):
 	SYNC = True
 	SYNC_MASTER = os.path.isfile('/boot/wifi/eth0-sync-AP.nmconnection')
-	hplayer.addInterface('zyre', 'eth0')
+	hplayer.addInterface('zyre', 'eth0', 0)
 
 elif os.path.isfile('/boot/wifi/wlan0-sync-AP.nmconnection') or os.path.isfile('/boot/wifi/wlan0-sync-STA.nmconnection'):
 	SYNC = True

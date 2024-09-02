@@ -327,7 +327,7 @@ class HPlayer2(Module):
                                   sed -i "s/ctl.!default .*/ctl.!default hdmi0/g" /etc/asound.conf && \
                                   sync && ro')
                         doreset = True
-                    os.system('amixer sset PCM 96%')
+                    os.system('amixer -c 0 sset Master 100%')
                     
                     
                         
@@ -338,7 +338,7 @@ class HPlayer2(Module):
                                   sed -i "s/ctl.!default .*/ctl.!default jack/g" /etc/asound.conf && \
                                   sync && ro')
                         doreset = True
-                    os.system('amixer sset PCM 96%')
+                    os.system('amixer -c 0 sset Master 100%')
                         
                 elif args[0] == 'usb':
                     if not 'pcm.!default usb' in open('/etc/asound.conf').read():

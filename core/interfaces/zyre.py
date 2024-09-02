@@ -649,6 +649,9 @@ class ZyreNode ():
             at = data['at'] / PRECISION
             delay =  at - time.time()
 
+            # add fixed offset correction 
+            delay += self.interface.offset
+
             if delay <= -10:
                 self.interface.log('WARNING event already passed by', delay, 's, its too late !! discarding... ')
             elif delay <= 0.1:
@@ -692,9 +695,10 @@ class ZyreNode ():
 #
 class ZyreInterface (BaseInterface):
 
-    def  __init__(self, hplayer, netiface=None):
+    def  __init__(self, hplayer, netiface=None, offset=0):
         super().__init__(hplayer, "ZYRE")
         self.node = ZyreNode(self, netiface)
+        self.offset = offset
 
         # Publish self status
         @self.hplayer.on('*.playing')
