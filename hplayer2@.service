@@ -1,10 +1,12 @@
 [Unit]
 Description=HPlayer
+After=plymouth-quit.service
            
 [Service]
 Type=simple
 WorkingDirectory=/opt/HPlayer2
 ExecStartPre=-hplayer2-kill
+ExecStartPre=/bin/sleep 2
 ExecStart=/usr/local/bin/hplayer2 %i
 ExecStop=/usr/local/bin/hplayer2-kill
 Restart=always

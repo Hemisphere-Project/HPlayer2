@@ -77,8 +77,10 @@ git clone https://github.com/zeromq/libzmq.git --depth=1 && cd libzmq
 make install && ldconfig
 
 cd "$(dirname "$(readlink -f "$0")")"
-git clone https://github.com/zeromq/czmq.git --depth=1 && cd czmq
-./autogen.sh && ./configure && make check -j4
+wget https://github.com/zeromq/czmq/releases/download/v4.2.1/czmq-4.2.1.tar.gz
+tar -xvzf czmq-4.2.1.tar.gz
+mv czmq-4.2.1 czmq && cd czmq
+./configure && make check -j4
 make install && ldconfig
 ln -s /usr/local/lib/libczmq.so.4 /usr/lib/
 

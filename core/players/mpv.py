@@ -244,7 +244,7 @@ class MpvPlayer(BasePlayer):
         script_path = os.path.dirname(os.path.realpath(__file__))
         
         command = ['mpv', '--input-ipc-server=' + self._mpv_socketpath + '',
-                                '--idle=yes', '-v', '--no-osc', '--msg-level=ipc=v', '--quiet', '--fs','--keep-open'
+                                '--idle=yes', '-v', '--no-osc', '--msg-level=ipc=v', '--quiet', '--fs','--keep-open', '--ao=alsa'
                                 ,'--window-scale=' + str(self._mpv_scale)
                                 ,'--hr-seek=yes'
                                 # ,'--af=rubberband'

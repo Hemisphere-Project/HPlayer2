@@ -23,8 +23,8 @@ pyserial = "*"
 eventlet = "*"
 evdev = "*"
 termcolor = "*"
-zyre = {file = "scripts/zyre/bindings/python", editable = true}
 czmq = {file = "scripts/czmq/bindings/python", editable = true}
+zyre = {file = "scripts/zyre/bindings/python", editable = true}
 
 [dev-packages]
 
