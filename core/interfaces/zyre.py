@@ -654,7 +654,7 @@ class ZyreNode ():
 
             if delay <= -10:
                 self.interface.log('WARNING event already passed by', delay, 's, its too late !! discarding... ')
-            elif delay <= 0.1:
+            elif delay <= 0.03:
                 self.interface.log('WARNING event already passed by', delay, 's, playing late... ')
                 self.preProcessor2(data)
             elif delay > 3:
