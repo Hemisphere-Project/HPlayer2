@@ -95,16 +95,16 @@ def play0(ev, *args):
 		hplayer.settings.set('loop', 0)
 	print('play0')
 
-# # SYNC_MASTER INIT PART 2
-# @hplayer.on('app-run')
-# def sync_init2(ev, *args):
-# 	if SYNC_MASTER:
-# 		time.sleep(1)
-# 		# hplayer.interface('zyre').node.broadcast('stop', None, SYNC_BUFFER)
-# 		# time.sleep(3)
-# 		#doPlay('/data/media/test_pattern_1080x30-CBD.mp4')
-# 		doPlay("[^1-9_]*.*")
-# 		#hplayer.interface('zyre').node.broadcast('play',  '/data/media/test_pattern_1080x30-CBD.mp4', SYNC_BUFFER)
+# SYNC_MASTER INIT PART 2
+@hplayer.on('app-run')
+def sync_init2(ev, *args):
+	if SYNC_MASTER:
+		time.sleep(1)
+		# hplayer.interface('zyre').node.broadcast('stop', None, SYNC_BUFFER)
+		# time.sleep(3)
+		#doPlay('/data/media/test_pattern_1080x30-CBD.mp4')
+		doPlay("[^1-9_]*.*")
+		#hplayer.interface('zyre').node.broadcast('play',  '/data/media/test_pattern_1080x30-CBD.mp4', SYNC_BUFFER)
 		
 
 if SYNC:
