@@ -135,87 +135,113 @@ if SYNC:
 lastSpeed = 1.0
 lastPos = -1
 didJump = False
-jumpFix = 300       # compensate the latency of jump (300ms for RockPro64 on timecode jump I.E. looping)
+jumpFix = 500       # compensate the latency of jump (300ms for RockPro64 on timecode jump I.E. looping)
+kickStart = 0
 
 @hplayer.on('mtc.qf')
 def f(ev, *args):
-    global lastSpeed, lastPos, didJump, jumpFix
+	global lastSpeed, lastPos, didJump, jumpFix, kickStart
 
-    doLog = True
+	doLog = True
 
-    pos = player.position()
+	pos = player.position()
 
-    # Check if player time is actually ellapsing
-    if pos == lastPos or not player.isPlaying():
-        # if doLog:
-        #     print(str(args[0]), end="\t")
-        #     print("no news from player.. dropping timecode tracking on this frame")
-        return
-    lastPos = pos
+	# Resume if paused
+	if player.isPaused():
+		player.resume()
 
-    clock = round(args[0].float, 2)
-    diff = clock-pos
+	# Player has been launched, wait for it to start
+	if kickStart > 0:
+		kickStart -= 1
+		# print("kickStart", kickStart)
 
-    speed = 1.0
+	# Play if stopped
+	elif not player.isPlaying():
 
-    # framebuffer corrector
-    #fix = 0.04    # compensate mtc latency from clock to tc tracker (typically 1 frame on Ubuntu x64 using Alsa Midi:Thru)
-    fix = 0
+		if kickStart < 0:
+			kickStart += 1
+		else:
+			hplayer.playlist.playindex(0)
+			pos = 0
+			kickStart = 20
+	else:
+		kickStart = -3
 
-    #jump
-    if diff > 10 or diff < -2:
-        player.seekTo(clock*1000+jumpFix)
-        didJump = True
-        print(str(args[0]), end="\t")
-        print("timedelay=" + colored(round(diff,2),"red"), end="\t")
-        print("JumpFix", jumpFix)
+	# Check if player time is actually ellapsing
+	if pos == lastPos or not player.isPlaying():
+		if doLog and kickStart == 0:
+			print(str(args[0]), end="\t")
+			print("no news from player.. dropping timecode tracking on this frame")
+		return
+	lastPos = pos
 
-    else:   
+	clock = round(args[0].float, 2)
+	diff = clock-pos
 
-        # Jump correction
-        if didJump:
-            didJump = False
-            # Correcting JumpFix is dangerous: might diverge on different jump position / media quality / ...
-            # if abs(diff+fix) > 0.01:
-            #     jumpFix += min( max(-300, (diff+fix)*1000), 300)
-            #     print("corrected JumpFix", jumpFix)
+	speed = 1.0
 
-        # accel
-        if (diff+fix) > 0.033 or (lastSpeed>1 and (diff+fix) > 0) :
-            speed = round( 1+(diff+fix)*1.65, 2)
-            speed = min(speed, 4.2)
-
-        # decel
-        elif (diff+fix) < -0.033 or (lastSpeed<1 and (diff+fix) < 0):
-            speed = round( 1+ min(-0.04, diff+fix), 2)
-            speed = max(speed, 0.1)
-
-    player.speed(speed)
-    lastSpeed = speed
-
-    # LOG
-    if doLog:
-        if speed != 1.0:
-            color1 = 'green'
-            if abs(diff+fix) > 0.08: color1 = 'red'
-            elif abs(diff+fix) > 0.04: color1 = 'yellow'
-
-            color2 = 'white'
-            if speed > 1: color2 = 'magenta'
-            elif speed < 1: color2 = 'cyan'
+	# framebuffer corrector
+	#fix = 0.04    # compensate mtc latency from clock to tc tracker (typically 1 frame on Ubuntu x64 using Alsa Midi:Thru)
+	fix = 0
 
 
-            framedelta = math.trunc(diff*1000/30)
-            color3 = 'green'
-            if abs(framedelta) > 1: color3 = 'red'
-            elif abs(framedelta) > 0: color3 = 'yellow'
+	#jump
+	if diff > 10 or diff < -2:
+		player.seekTo(clock*1000+jumpFix)
+		didJump = True
+		print(str(args[0]), end="\t")
+		print("timedelay=" + colored(round(diff,2),"red"), end="\t")
+		print("JumpFix", jumpFix)
 
-            print(str(args[0]), end="\t")
-            # print(str(clock), end="\t")
-            # print(str(pos), end="\t")
-            print("timedelay=" + colored(round(diff,2),color1), end="\t")
-            print("framedelta=" + colored(framedelta,color3), end="\t")
-            print("speed=" + colored(speed, color2) )
+	else:   
+
+		# Jump correction
+		if didJump:
+			didJump = False
+			# Correcting JumpFix is dangerous: might diverge on different jump position / media quality / ...
+			# if abs(diff+fix) > 0.01:
+			#     jumpFix += min( max(-300, (diff+fix)*1000), 300)
+			#     print("corrected JumpFix", jumpFix)
+
+		# accel
+		if (diff+fix) > 0.033 or (lastSpeed>1 and (diff+fix) > 0) :
+			speed = round( 1+ (diff+fix)*1.85, 2)
+			speed = min(speed, 4.2)
+
+		# decel
+		elif (diff+fix) < -0.033 or (lastSpeed<1 and (diff+fix) < 0):
+			speed = round( 1+ min(-0.04, (diff+fix)*1.5 ), 2)
+			speed = max(speed, 0.1)
+
+	if speed != 1.0:
+		print("\t speed=", speed, "\t diff=", diff)	
+		
+	player.speed(speed)
+	lastSpeed = speed
+
+	# LOG
+	if doLog:
+		if speed != 1.0:
+			color1 = 'green'
+			if abs(diff+fix) > 0.08: color1 = 'red'
+			elif abs(diff+fix) > 0.04: color1 = 'yellow'
+
+			color2 = 'white'
+			if speed > 1: color2 = 'magenta'
+			elif speed < 1: color2 = 'cyan'
+
+
+			framedelta = math.trunc(diff*1000/30)
+			color3 = 'green'
+			if abs(framedelta) > 1: color3 = 'red'
+			elif abs(framedelta) > 0: color3 = 'yellow'
+
+			print(str(args[0]), end="\t")
+			# print(str(clock), end="\t")
+			# print(str(pos), end="\t")
+			print("timedelay=" + colored(round(diff,2),color1), end="\t")
+			print("framedelta=" + colored(framedelta,color3), end="\t")
+			print("speed=" + colored(speed, color2) )
 
 # HTTP2 Logs
 @hplayer.on('player.*')

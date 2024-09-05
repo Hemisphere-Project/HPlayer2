@@ -27,11 +27,24 @@ class MtcInterface (BaseInterface):
 				if message.frame_type == 7:
 					tc = mtc_decode_quarter_frames(self.quarter_frames)
 					self.emit('qf', tc)
+					
 			elif message.type == 'sysex':
 				if len(message.data) == 8 and message.data[0:4] == (127,127,1,1):
 					data = message.data[4:]
 					tc = mtc_decode(data)
 					self.emit('ff', tc)
+
+				elif len(message.data) == 4 and message.data == (127,127,6,1):
+					self.emit('stop')
+
+				# elif len(message.data) == 11 and message.data[0:7] == (127,127,6,68,6,1,96):
+				# 	data = message.data[6:]
+				# 	jumpTo = (data[0]*60 + data[1])*1000 + data[2]
+				# 	# self.emit('seek', jumpTo/1000)
+
+				else:
+					self.log("sysex: ", message, len(message))
+
 			elif message.type == 'clock':
 				pass
 			elif message.type == 'start':
@@ -45,6 +58,9 @@ class MtcInterface (BaseInterface):
 				print("songpos", message.pos)
 			else:
 				print(message)
+
+			# if message.type not in ['quarter_frame']:
+			# 	print('MTC: ', message)
 
 		retryCount = 0
 		while self.isRunning():
