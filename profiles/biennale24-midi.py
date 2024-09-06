@@ -2,6 +2,7 @@ from core.engine.hplayer import HPlayer2
 from core.engine import network
 import os
 import time
+import re
 from termcolor import colored
 
 # EXTRA TMP UPLOAD
@@ -26,7 +27,7 @@ player.doLog['cmds'] = False
 # Interfaces
 # hplayer.addInterface('http', 8080)
 hplayer.addInterface('http2', 80, {'playlist': False, 'loop': False, 'mute': True})
-hplayer.addInterface('mtc', "rtpmidid")
+hplayer.addInterface('mtc', re.compile("rtpmidid:(?!Network Export|BEER|RtMidiIn)+") )
 
 # hplayer.addInterface('serial', '^M5', 10)
 #if hplayer.isRPi():

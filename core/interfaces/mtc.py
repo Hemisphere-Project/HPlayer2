@@ -1,6 +1,7 @@
 from .base import BaseInterface
 import mido
 import time
+import re
 
 class MtcInterface (BaseInterface):
 
@@ -56,12 +57,19 @@ class MtcInterface (BaseInterface):
 					self.log("Available ports: " + str(available_ports))
 					# remove port containing 'Network Export'
 					available_ports = [port for port in available_ports if 'Network Export' not in port]
+					matching_ports = [port for port in available_ports]
 
-					# find port containing self.filter
-					matching_ports = [port for port in available_ports if self.filter in port]
+					# find port containing self.filter (if is string)
+					if isinstance(self.filter, str) and self.filter:
+						matching_ports = [port for port in available_ports if self.filter in port]
+
+					# find port containing self.filter (if is regex) using re.match
+					elif isinstance(self.filter, re.Pattern) and self.filter:
+						matching_ports = [port for port in available_ports if self.filter.match(port)]
 
 					if len(matching_ports) > 1:
-						self.log("Multiple MTC ports found. using first one: " + matching_ports[0])
+						self.log("Multiple MTC ports found.", matching_ports)
+						self.log("using first one: " + matching_ports[0])
 					elif len(matching_ports) > 0:
 						self.log("MTC port found: " + matching_ports[0])
 
