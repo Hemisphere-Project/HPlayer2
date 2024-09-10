@@ -92,7 +92,7 @@ class MtcInterface (BaseInterface):
 					if len(matching_ports) > 0:
 						self.port_name = matching_ports[0]	
 					else:
-						self.log("No MTC port found. looking for: " + self.filter + " in " + str(available_ports))
+						self.log("No MTC port found. looking for: " + str(self.filter) + " in " + str(available_ports))
 						for i in range(10):
 							time.sleep(0.5)
 							if not self.isRunning(): 

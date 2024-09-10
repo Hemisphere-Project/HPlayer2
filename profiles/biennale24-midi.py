@@ -82,7 +82,7 @@ def doPlay(media, debounce=0):
 @hplayer.on('app-run')
 def sync_init(ev, *args):
 	if SYNC_MASTER:
-		time.sleep(10)
+		time.sleep(15)
 
 # DEFAULT File
 @hplayer.on('app-run')
@@ -124,6 +124,7 @@ if SYNC:
 		ev = ev.replace('http2.', '')
 		if ev == 'play':
 			hplayer.interface('zyre').node.broadcast('stop')
+			args = [ a.split("_")[0]+'_*' if '_' in a else a for a in args ]
 		hplayer.interface('zyre').node.broadcast(ev, args, SYNC_BUFFER)
 		if ev == 'play':
 			hplayer.interface('zyre').node.broadcast('loop', [0], SYNC_BUFFER)
