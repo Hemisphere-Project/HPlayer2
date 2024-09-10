@@ -15,6 +15,8 @@ class MtcInterface (BaseInterface):
 		self.filter 	= filter
 		self.maxRetry = maxRetry
 
+		self.lastNews = 0
+
 		# create a global accumulator for quarter_frames
 		self.quarter_frames = [0,0,0,0,0,0,0,0]
 
@@ -23,6 +25,8 @@ class MtcInterface (BaseInterface):
 		self.log("starting MTC listener")
 
 		def clbck(message):
+			self.lastNews = time.time()
+
 			if message.type == 'quarter_frame':
 				self.quarter_frames[message.frame_type] = message.frame_value
 				if message.frame_type == 7:
@@ -105,6 +109,7 @@ class MtcInterface (BaseInterface):
 					self.port = mido.open_input(self.port_name, callback=clbck)
 					self.log("connected to", self.port_name, "!")
 					self.emit('connected')
+					self.lastNews = time.time()
 
 				except:
 					self.log("connection failed on", self.port_name)
@@ -113,10 +118,28 @@ class MtcInterface (BaseInterface):
 					self.port_name 	= None
 					time.sleep(0.5)
 
-			# wait
+			# if more than 20s without news, close port
+			elif time.time() - self.lastNews > 20:
+					self.log("No news for 20s, closing port")
+					self.port.close()
+					self.port = None
+					self.port_name = None
+					self.emit('disconnected')
+					time.sleep(0.5)
+
 			else:
 				time.sleep(0.5)
-            
+				# time.sleep(0.5)
+				# for i in range(20):
+				# 	time.sleep(0.5)
+				# 	if not self.isRunning(): 
+				# 		return
+				# self.port.close()
+				# time.sleep(0.2)
+				# if self.port.closed:
+				# 	self.log("Port CLOSED !")
+				# else:
+				# 	self.log("Port not properly CLOSED...")
 
 
 
