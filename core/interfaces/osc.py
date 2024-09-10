@@ -1,6 +1,6 @@
 from .base import BaseInterface
 from core.engine import network
-import liblo
+import pyliblo3
 import random, time
 from sys import getsizeof
 import socket
@@ -29,27 +29,27 @@ class OscInterface (BaseInterface):
 
     # OSC sender
     def send(self, path, *args):
-        target = liblo.Address("osc.udp://"+self.hostOut+":"+str(self._portOut))
-        liblo.send(target, path, *args)
+        target = pyliblo3.Address("osc.udp://"+self.hostOut+":"+str(self._portOut))
+        pyliblo3.send(target, path, *args)
         # self.log("sent OSC", path, args ," to ","osc.udp://"+self.hostOut+":"+str(self._portOut))
 
     # OSC send BURST using stamp
     def sendBurst(self, path, *args):
         self.burstCounter += 1
-        target = liblo.Address("osc.udp://"+self.hostOut+":"+str(self._portOut))
+        target = pyliblo3.Address("osc.udp://"+self.hostOut+":"+str(self._portOut))
         for i in range(5):
-            liblo.send(target, '/burst', self.ethMac, self.burstCounter, path, *args)
+            pyliblo3.send(target, '/burst', self.ethMac, self.burstCounter, path, *args)
 
     # OSC receiver THREAD
     def listen(self):
 
         # OSC: Bind server
         try:
-            oscServer = liblo.Server(self._portIn)
+            oscServer = pyliblo3.Server(self._portIn)
             self.log("input  = udp://*:"+str(self._portIn))
             self.log("output = udp://"+str(self.hostOut)+":"+str(self._portOut))
 
-        except liblo.ServerError as e:
+        except pyliblo3.ServerError as e:
             self.log( "OSC Error:", e)
             self.stopped.set()
 
@@ -73,8 +73,8 @@ class OscInterface (BaseInterface):
                 path = args.pop(0)
                 types = types[2:]
                 # print("relaying bursted frame", path, args, types)
-                target = liblo.Address("osc.udp://127.0.0.1:"+str(self._portIn))
-                liblo.send(target, path, *args)
+                target = pyliblo3.Address("osc.udp://127.0.0.1:"+str(self._portIn))
+                pyliblo3.send(target, path, *args)
 
         @osc(None, None)
         def fallback(path, args, types, src):

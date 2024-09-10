@@ -17,7 +17,7 @@ emoji = "~=1.6.3"
 numpy = "*"
 opencv-python = "*"
 stupidartnet = "*"
-watchdog = "*"
+watchdog = "4.0.1"
 pillow = "*"
 pyserial = "*"
 eventlet = "*"
@@ -25,6 +25,7 @@ evdev = "*"
 termcolor = "*"
 czmq = {file = "scripts/czmq/bindings/python", editable = true}
 zyre = {file = "scripts/zyre/bindings/python", editable = true}
+pyliblo3 = "*"
 
 [dev-packages]
 
