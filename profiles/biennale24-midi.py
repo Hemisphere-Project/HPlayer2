@@ -206,13 +206,13 @@ def f(ev, *args):
 			#     print("corrected JumpFix", jumpFix)
 
 		# accel
-		if (diff+fix) > 0.033 or (lastSpeed>1 and (diff+fix) > 0) :
-			speed = round( 1+ (diff+fix)*1.85, 2)
+		if (diff+fix) > 0.043 or (lastSpeed>1 and (diff+fix) > 0) :
+			speed = round( 1+ (diff+fix)*1.5, 2)
 			speed = min(speed, 4.2)
 
 		# decel
-		elif (diff+fix) < -0.033 or (lastSpeed<1 and (diff+fix) < 0):
-			speed = round( 1+ min(-0.04, (diff+fix)*1.5 ), 2)
+		elif (diff+fix) < -0.043 or (lastSpeed<1 and (diff+fix) < 0):
+			speed = round( 1+ min(-0.03, (diff+fix)*1.5 ), 2)
 			speed = max(speed, 0.1)
 
 	if speed != 1.0:
