@@ -3,7 +3,6 @@ from core.engine import network
 import os
 import time
 import re
-import math
 from termcolor import colored
 
 # EXTRA TMP UPLOAD
@@ -79,11 +78,11 @@ def doPlay(media, debounce=0):
 	else:
 		hplayer.playlist.play(media)
 
-# # SYNC_MASTER INIT
-# @hplayer.on('app-run')
-# def sync_init(ev, *args):
-# 	if SYNC_MASTER:
-# 		time.sleep(15)
+# SYNC_MASTER INIT
+@hplayer.on('app-run')
+def sync_init(ev, *args):
+	if SYNC_MASTER:
+		time.sleep(15)
 
 # DEFAULT File
 @hplayer.on('app-run')
@@ -91,23 +90,22 @@ def doPlay(media, debounce=0):
 @hplayer.on('playlist.end')
 def play0(ev, *args):
 	doPlay("[^1-9_]*.*")
-	hplayer.settings.set('loop', 2) ### NEWSYNC
-	# if not SYNC: ### NEWSYNC
-	# 	hplayer.settings.set('loop', 2) # allow blackless loop on solo mode ### NEWSYNC
-	# else: ### NEWSYNC
-	# 	hplayer.settings.set('loop', 0) ### NEWSYNC
+	if not SYNC:
+		hplayer.settings.set('loop', 2) # allow blackless loop on solo mode
+	else:
+		hplayer.settings.set('loop', 0)
 	print('play0')
 
-# # SYNC_MASTER INIT PART 2
-# @hplayer.on('app-run')
-# def sync_init2(ev, *args):
-# 	if SYNC_MASTER:
-# 		time.sleep(1)
-# 		# hplayer.interface('zyre').node.broadcast('stop', None, SYNC_BUFFER)
-# 		# time.sleep(3)
-# 		#doPlay('/data/media/test_pattern_1080x30-CBD.mp4')
-# 		doPlay("[^1-9_]*.*")
-# 		#hplayer.interface('zyre').node.broadcast('play',  '/data/media/test_pattern_1080x30-CBD.mp4', SYNC_BUFFER)
+# SYNC_MASTER INIT PART 2
+@hplayer.on('app-run')
+def sync_init2(ev, *args):
+	if SYNC_MASTER:
+		time.sleep(1)
+		# hplayer.interface('zyre').node.broadcast('stop', None, SYNC_BUFFER)
+		# time.sleep(3)
+		#doPlay('/data/media/test_pattern_1080x30-CBD.mp4')
+		doPlay("[^1-9_]*.*")
+		#hplayer.interface('zyre').node.broadcast('play',  '/data/media/test_pattern_1080x30-CBD.mp4', SYNC_BUFFER)
 		
 
 if SYNC:
@@ -129,8 +127,7 @@ if SYNC:
 			args = [ a.split("_")[0]+'_*' if '_' in a else a for a in args ]
 		hplayer.interface('zyre').node.broadcast(ev, args, SYNC_BUFFER)
 		if ev == 'play':
-			# hplayer.interface('zyre').node.broadcast('loop', [0], SYNC_BUFFER) ### NEWSYNC
-			hplayer.interface('zyre').node.broadcast('loop', [2], SYNC_BUFFER)	 ### NEWSYNC
+			hplayer.interface('zyre').node.broadcast('loop', [0], SYNC_BUFFER)
 		
 
 #
@@ -144,7 +141,6 @@ jumpFix = 500       # compensate the latency of jump (300ms for RockPro64 on tim
 kickStart = 0
 
 @hplayer.on('mtc.qf')
-@hplayer.on('osc.time')
 def f(ev, *args):
 	global lastSpeed, lastPos, didJump, jumpFix, kickStart
 
@@ -181,7 +177,7 @@ def f(ev, *args):
 		return
 	lastPos = pos
 
-	clock = round(float(args[0]), 2)
+	clock = round(args[0].float, 2)
 	diff = clock-pos
 
 	speed = 1.0
@@ -248,20 +244,6 @@ def f(ev, *args):
 			print("timedelay=" + colored(round(diff,2),color1), end="\t")
 			print("framedelta=" + colored(framedelta,color3), end="\t")
 			print("speed=" + colored(speed, color2) )
-
-
-# SEND TIMEPOS
-if SYNC_MASTER:
-	hplayer.addInterface('osc', 1111, 3734) # 3734 is the port for timepos master
-	@hplayer.on('player.status')
-	def timepos(ev, *args):
-		if args[0] == 'time':
-			hplayer.interface('osc').send('/time', round(float(args[1]), 2))		
-
-# RECEIVE 
-if SYNC and not SYNC_MASTER:
-	hplayer.addInterface('osc', 3734) # 3734 is the port for timepos slave
-	hplayer.interface('osc').logQuietEvents.extend(['time'])
 
 # HTTP2 Logs
 @hplayer.on('player.*')
