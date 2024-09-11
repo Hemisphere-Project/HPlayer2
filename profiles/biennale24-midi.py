@@ -148,6 +148,12 @@ kickStart = 0
 def f(ev, *args):
 	global lastSpeed, lastPos, didJump, jumpFix, kickStart
 
+	# print(args[0], ev)
+	# if ev == 'mtc.qf':
+	# 	print('converting')
+	# 	args[0] = args[0].float
+	# 	print(args[0])
+
 	doLog = True
 
 	pos = player.position()
@@ -181,7 +187,10 @@ def f(ev, *args):
 		return
 	lastPos = pos
 
-	clock = round(float(args[0]), 2)
+	if ev == 'mtc.qf':
+		clock = round(args[0].float, 2)
+	else:
+		clock = round(float(args[0]), 2)
 	diff = clock-pos
 
 	speed = 1.0
