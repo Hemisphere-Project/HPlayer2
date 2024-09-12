@@ -112,7 +112,7 @@ def play0(ev, *args):
 
 if SYNC:
 	# HTTP2 Ctrl unbind
-	uev = ['play', 'pause', 'resume', 'stop']
+	uev = ['play', 'pause', 'resume', 'stop', 'volume']
 	for ev in uev:
 		for func in hplayer.interface('http2').listeners(ev):
 			hplayer.interface('http2').off(ev, func)
@@ -122,15 +122,20 @@ if SYNC:
 	@hplayer.on('http2.pause')
 	@hplayer.on('http2.resume')
 	@hplayer.on('http2.stop')
+	@hplayer.on('http2.volume')
 	def ctrl2(ev, *args):
 		ev = ev.replace('http2.', '')
+		sync_b = SYNC_BUFFER
+		if ev == 'volume': sync_b = 0
 		if ev == 'play':
 			hplayer.interface('zyre').node.broadcast('stop')
-			args = [ a.split("_")[0]+'_*' if '_' in a else a for a in args ]
-		hplayer.interface('zyre').node.broadcast(ev, args, SYNC_BUFFER)
+			args = [ a.split("_")[0]+'_*' if '_' in a else a for a in args ]  ### WARNING: missleading since it could trigger multiple files on self !
+		if ev == 'volume':
+			args = args[0]
+		hplayer.interface('zyre').node.broadcast(ev, args, sync_b)
 		if ev == 'play':
 			# hplayer.interface('zyre').node.broadcast('loop', [0], SYNC_BUFFER) ### NEWSYNC
-			hplayer.interface('zyre').node.broadcast('loop', [2], SYNC_BUFFER)	 ### NEWSYNC
+			hplayer.interface('zyre').node.broadcast('loop', [2], sync_b)	 ### NEWSYNC
 		
 
 #
