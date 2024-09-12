@@ -247,6 +247,7 @@ class MpvPlayer(BasePlayer):
                                 '--idle=yes', '-v', '--no-osc', '--msg-level=ipc=v', '--quiet', '--fs','--keep-open', '--ao=alsa'
                                 ,'--window-scale=' + str(self._mpv_scale)
                                 ,'--hr-seek=yes'
+                                ,'--volume-max=150'
                                 # ,'--af=rubberband'
                                 #,'--force-window=yes'
                                 ]
@@ -341,7 +342,7 @@ class MpvPlayer(BasePlayer):
 
     def _applyVolume(self, volume):
         self._mpv_send('{ "command": ["set_property", "volume", '+str(volume)+'] }')
-        # self.log("VOLUME to", volume)
+        self.log("VOLUME to", volume)
 
     def _applyPan(self, pan):
         if pan == 'mono':

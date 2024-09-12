@@ -104,6 +104,11 @@ input[type=range] {
     /* margin: 13.8px 0; */
 }
 
+input[type=range].overload {
+    background-color: red;
+    -webkit-appearance: none;
+}
+
 input[type=range]:focus {
     outline: none;
 }

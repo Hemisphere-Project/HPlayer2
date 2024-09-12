@@ -512,7 +512,7 @@ class HPlayer2(Module):
             if len(args) > 0:
                 vol = int(args[0])
                 if (vol < 0): vol = 0
-                if (vol > 100): vol = 100
+                if (vol > 150): vol = 150
                 self.settings.set('volume', vol)
 
         @module.on('volinc')

@@ -355,6 +355,8 @@ $(document).ready(function() {
     // VOLUME
     $('#volume_range').on('input', event => {
         trigger('volume', $('#volume_range').val());
+        if ($('#volume_range').val() > 100) $('#volume_range').addClass('overload')
+        else $('#volume_range').removeClass('overload')
     });
 
     // VOLUME LEFT
