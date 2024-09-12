@@ -126,6 +126,9 @@ $(document).ready(function() {
         usbBtn.setState((msg['audioout'] == 'usb'))
 
         $('#volume_range').val(msg['volume'])
+        if ($('#volume_range').val() > 100) $('#volume_range').addClass('overload')
+        else $('#volume_range').removeClass('overload')
+
         $('#volumeMain').html(msg['volume'])
 
         $('#left_range').val(msg['pan'][0])
