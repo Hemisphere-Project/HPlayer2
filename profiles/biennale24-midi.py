@@ -42,6 +42,8 @@ SYNC_MASTER = False
 if os.path.isfile('/boot/wifi/eth0-sync-AP.nmconnection') or os.path.isfile('/boot/wifi/eth0-sync-STA.nmconnection'):
 	SYNC = True
 	SYNC_MASTER = os.path.isfile('/boot/wifi/eth0-sync-AP.nmconnection')
+	if network.get_hostname() == "BEER-01-JC": SYNC_MASTER = True
+	if SYNC_MASTER: print("SYNC_MASTER!")
 	hplayer.addInterface('zyre', 'eth0', SYNC_OFFSET)
 
 elif os.path.isfile('/boot/wifi/wlan0-sync-AP.nmconnection') or os.path.isfile('/boot/wifi/wlan0-sync-STA.nmconnection'):
@@ -233,9 +235,6 @@ def f(ev, *args):
 			speed = round( 1+ min(-0.03, (diff+fix)*1.5 ), 2)
 			speed = max(speed, 0.1)
 
-	if speed != 1.0:
-		print("\t speed=", speed, "\t diff=", diff)	
-		
 	player.speed(speed)
 	lastSpeed = speed
 
@@ -256,7 +255,7 @@ def f(ev, *args):
 			if abs(framedelta) > 1: color3 = 'red'
 			elif abs(framedelta) > 0: color3 = 'yellow'
 
-			print(str(args[0]), end="\t")
+			# print(str(args[0]), end="\t")
 			# print(str(clock), end="\t")
 			# print(str(pos), end="\t")
 			print("timedelay=" + colored(round(diff,2),color1), end="\t")
