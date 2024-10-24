@@ -660,11 +660,11 @@ class ZyreNode ():
             else:
                 
                 # play event -> propagate now paused and timer to unpause
-                if data['event'].startswith('play'):
-                    dataNow = data.copy()
-                    dataNow['event'] = dataNow['event'].replace('play', 'playpause')
-                    self.preProcessor2(dataNow)
-                    data['event'] = 'resumesync'   
+                # if data['event'].startswith('play'):
+                #     dataNow = data.copy()
+                #     dataNow['event'] = dataNow['event'].replace('play', 'playpause')
+                #     self.preProcessor2(dataNow)
+                #     data['event'] = 'resumesync'   
                 
                 # event is programmed in the future
                 self.interface.log('programmed event in', delay, 's')

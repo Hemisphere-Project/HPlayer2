@@ -44,6 +44,12 @@ elif [[ $(command -v pacman) ]]; then
     # hplayer2 dependencies
     pacman -S pkg-config python cython liblo libxcrypt ttf-dejavu rsync python-pipenv mesa --noconfirm --needed
 
+    # Python (with overwrites)
+    pacman -S python-flask-socketio --overwrite *flask_socketio/* --overwrite *lask_SocketIO* --overwrite *socketio* --overwrite *bidict* --overwrite *engineio* --overwrite *flask* --overwrite *blinker* --overwrite *click* --overwrite *jinja2* --overwrite *itsdangerous* --overwrite *werkzeug* --overwrite *markupsafe* --overwrite *six* --noconfirm --needed    
+    pacman -S python-netifaces --overwrite *netifaces* --noconfirm --needed
+    pacman -S python-wheel --noconfirm --needed
+    
+    
     # RPi
     if [[ $(uname -m) = armv* || $(uname -m) = aarch64 ]]; then
       pacman -S i2c-tools --noconfirm --needed

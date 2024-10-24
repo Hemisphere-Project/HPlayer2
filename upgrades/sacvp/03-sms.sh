@@ -19,6 +19,7 @@ date -s "$(curl -s --head http://google.com | grep ^Date: | sed 's/Date: //g')"
 pacman -Sy
 pacman -S noto-fonts-emoji --needed --noconfirm
 pip install pilmoji
+pip install emoji~=1.6.3
 
 # systemctl stop hplayer2@sacvp
 cd /opt/HPlayer2

@@ -188,7 +188,7 @@ class MpvPlayer(BasePlayer):
                 except socket.timeout:
                     # print('-', end ="")
                     if self.status('isPlaying'):
-                        if not self.status('media').split('.')[-1] in self._imageExt:
+                        if not self.status('media').split('.')[-1].lower() in self._imageExt:
                             self.log('PLAYBACK LOCKED OUT', self._mpv_lockedout)
                             self._mpv_send('{ "command": ["set_property", "pause", false] }')
                             self._mpv_lockedout += 1
