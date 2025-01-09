@@ -18,6 +18,8 @@ hplayer = HPlayer2(base_path, "/data/hplayer2-"+profilename+".cfg")
 
 # PLAYERS
 video = hplayer.addPlayer('videonet', 'video')
+video.setSize(36, 138)
+video.setIP("2.12.0.2")
 
 # LOAD ROOT FOLDER AS PLAYLIST
 hplayer.playlist.load( hplayer.files.currentList() )

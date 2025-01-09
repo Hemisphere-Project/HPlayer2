@@ -1,6 +1,6 @@
 #!/bin/bash
 BASEPATH="$(dirname "$(readlink -f "$0")")"
-"$BASEPATH/scripts/install_dependencies.sh"
+#"$BASEPATH/scripts/install_dependencies.sh"
 #"$BASEPATH/scripts/install_mpv.sh"
 
 ln -sf "$BASEPATH/hplayer2@.service" /etc/systemd/system/

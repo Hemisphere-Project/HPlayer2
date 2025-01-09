@@ -34,6 +34,7 @@ hplayer.addInterface('http2', 80, {'playlist': False, 'loop': False, 'mute': Tru
 #    hplayer.addInterface('gpio', [21,20,16,26,14,15], 310)
 
 # Zyre SYNC
+SYNC_BUFFER = 200
 SYNC = False
 SYNC_MASTER = False
 if os.path.isfile('/boot/wifi/eth0-sync-AP.nmconnection') or os.path.isfile('/boot/wifi/eth0-sync-STA.nmconnection'):
@@ -66,7 +67,8 @@ def doPlay(media, debounce=0):
 	# PLAY SYNC -> forward to peers
 	if SYNC:
 		if SYNC_MASTER:
-			hplayer.interface('zyre').node.broadcast('play', media, 200)
+			hplayer.interface('zyre').node.broadcast('stop')
+			hplayer.interface('zyre').node.broadcast('play', media, SYNC_BUFFER)
 			print('doPLay: sync master.. broadcast')
 		else:
 			print('doPLay: sync slave.. do nothing')
@@ -91,6 +93,18 @@ def play0(ev, *args):
 		hplayer.settings.set('loop', 2) # allow blackless loop on solo mode
 	else:
 		hplayer.settings.set('loop', 0)
+		
+# SYNC_MASTER INIT PART 2
+@hplayer.on('app-run')
+def sync_init2(ev, *args):
+	if SYNC_MASTER:
+		time.sleep(1)
+		# hplayer.interface('zyre').node.broadcast('stop', None, SYNC_BUFFER)
+		# time.sleep(3)
+		#doPlay('/data/media/test_pattern_1080x30-CBD.mp4')
+		doPlay("[^1-9_]*.*")
+		#hplayer.interface('zyre').node.broadcast('play',  '/data/media/test_pattern_1080x30-CBD.mp4', SYNC_BUFFER)
+		
 
 # # BTN 1
 # @hplayer.on('http.push1')
@@ -127,9 +141,11 @@ if SYNC:
 	@hplayer.on('http2.stop')
 	def ctrl2(ev, *args):
 		ev = ev.replace('http2.', '')
-		hplayer.interface('zyre').node.broadcast(ev, args, 200)
 		if ev == 'play':
-			hplayer.interface('zyre').node.broadcast('loop', [0], 200)
+			hplayer.interface('zyre').node.broadcast('stop')
+		hplayer.interface('zyre').node.broadcast(ev, args, SYNC_BUFFER)
+		if ev == 'play':
+			hplayer.interface('zyre').node.broadcast('loop', [0], SYNC_BUFFER)
 		
 
 
