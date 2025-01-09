@@ -42,7 +42,7 @@ SYNC_MASTER = False
 if os.path.isfile('/boot/wifi/eth0-sync-AP.nmconnection') or os.path.isfile('/boot/wifi/eth0-sync-STA.nmconnection'):
 	SYNC = True
 	SYNC_MASTER = os.path.isfile('/boot/wifi/eth0-sync-AP.nmconnection')
-	if network.get_hostname() == "BEER-01-JC": SYNC_MASTER = True
+	# if network.get_hostname() == "BEER-01-JC": SYNC_MASTER = True
 	if SYNC_MASTER: print("SYNC_MASTER!")
 	hplayer.addInterface('zyre', 'eth0', SYNC_OFFSET)
 
