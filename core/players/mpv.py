@@ -159,18 +159,19 @@ class MpvPlayer(BasePlayer):
                                 self._mpv_lockedout = 0
 
                             elif mpvsays['name'] == 'time-pos':
-                                if mpvsays['data']:
+                                if 'data' in mpvsays and mpvsays['data']:
                                     self.update('time', round(float(mpvsays['data']),2))
 
                             elif mpvsays['name'] == 'duration':
-                                if mpvsays['data']:
+                                if 'data' in mpvsays and mpvsays['data']:
                                     self.update('duration', round(float(mpvsays['data']),2))
 
-                            elif mpvsays['name'] == 'eof-reached' and mpvsays['data'] == True:
-                                self.update('isPaused', False)
-                                self.update('isPlaying', False)
-                                print('END')
-                                self.emit('media-end', self.status('media'))
+                            elif mpvsays['name'] == 'eof-reached':
+                                if 'data' in mpvsays and mpvsays['data'] == True:
+                                    self.update('isPaused', False)
+                                    self.update('isPlaying', False)
+                                    print('END')
+                                    self.emit('media-end', self.status('media'))
                                     
                             else:
                                 pass

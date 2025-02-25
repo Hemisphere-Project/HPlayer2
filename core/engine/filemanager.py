@@ -19,11 +19,12 @@ class FileManager(Module):
         self.refreshTimer = None
         self.pathObservers = []
         
-        self.logQuietEvents.append('file-changed')
+        # self.logQuietEvents.append('file-changed')
         
         # Defered update (file change might trigger multiple events)
         @self.on('file-changed')                # file changed on disk -> trigger full refresh
         def deferredUpdate(ev, *args):
+            print(args[0].event_type)
             if self.refreshTimer:
                 self.refreshTimer.cancel()
             self.refreshTimer = Timer(.5, self.refresh)
@@ -66,9 +67,10 @@ class FileManager(Module):
         """
         # filter .tmp changes
         def onChange(e):
-            if not e.src_path.endswith('.tmp'):
-                if not e.src_path.endswith('project.json'):
-                    self.emit('file-changed', e)
+            if e.src_path.endswith('.tmp'): return
+            if e.src_path.endswith('project.json'): return
+            if e.event_type == 'opened': return
+            self.emit('file-changed', e)
 
         if not isinstance(path, list): 
             path = [path]
