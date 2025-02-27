@@ -248,6 +248,8 @@ class MpvPlayer(BasePlayer):
                                 # ,'--af=rubberband'
                                 #,'--force-window=yes'
                                 ]
+        
+        # self.log("starting mpv with", command)
 
         # image time (0 = still image)
         if self._mpv_imagetime > 0:
