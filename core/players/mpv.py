@@ -82,7 +82,7 @@ class MpvPlayer(BasePlayer):
 
         # Socket IPC to process
         self._mpv_sock = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
-        for retry in range(10, 0, -1):
+        for retry in range(50, 0, -1):
             try:
                 self._mpv_sock.connect(self._mpv_socketpath)
                 self._mpv_sock.settimeout(0.5)
@@ -96,7 +96,7 @@ class MpvPlayer(BasePlayer):
                     print (self.nameP, "socket error:", e)
                     self.isRunning(False)
                 else:
-                    # print (self.nameP, "retrying socket connection..")
+                    print (self.nameP, "retrying socket connection..")
                     time.sleep(0.2)
 
         if self._mpv_sock_connected:

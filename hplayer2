@@ -7,11 +7,23 @@ else
  	profile=$1
 fi
 
-# if poetry is installed, use it
-if command -v poetry &> /dev/null; then
-    cd "$DIR"
-    poetry run python -u "$DIR/launcher.py" "$profile" 
-else
-    python3 -u "$DIR/launcher.py" "$profile"
+cd "$DIR"
+
+# find poetry
+POETRY=""
+if [ -x /usr/bin/poetry ]; then
+    POETRY=/usr/bin/poetry
+elif [ -x /usr/local/bin/poetry ]; then
+    POETRY=/usr/local/bin/poetry
+elif [ -x ~/.local/bin/poetry ]; then
+    POETRY=~/.local/bin/poetry
 fi
+
+if [ -z "$POETRY" ]; then
+    echo "Poetry not found"
+    exit 1
+fi
+
+# install dependencies
+$POETRY run python "$DIR/launcher.py" "$profile" 
 
