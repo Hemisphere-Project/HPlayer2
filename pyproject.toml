@@ -29,9 +29,10 @@ dependencies = [
     "termcolor (>=2.5.0,<3.0.0)",
     "czmq @ file:///opt/HPlayer2/scripts/czmq/bindings/python",
     "zyre @ file:///opt/HPlayer2/scripts/zyre/bindings/python",
-    "rpi-gpio (>=0.7.1,<0.8.0)",
     "queuelib (>=1.7.0,<2.0.0)",
-    "adafruit-charlcd (>=1.1.1,<2.0.0)"
+    "adafruit-charlcd (>=1.1.1,<2.0.0)",
+    "python-osc (>=1.9.3,<2.0.0)",
+    "rpi-lgpio (>=0.6,<0.7)"
 ]
 
 
@@ -41,6 +42,7 @@ build-backend = "poetry.core.masonry.api"
 
 [tool.poetry]
 package-mode = false
+
 [tool.poetry.dependencies]
 czmq = {develop = true}
 zyre = {develop = true}

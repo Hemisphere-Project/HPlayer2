@@ -328,7 +328,13 @@ class ThreadedHTTPServer(object):
             self.regieinterface.reload()
             self.sendBuffer.put( ('data', self.projectData()) )
 
-        handler = PatternMatchingEventHandler("*/project.json", None, False, True)
+        handler = PatternMatchingEventHandler(
+                            patterns=["*/project.json"],
+                            ignore_patterns=None,
+                            ignore_directories=False,
+                            case_sensitive=True
+                        )
+                        
         handler.on_any_event = onchange
         self.projectObserver = Observer()
         self.projectObserver.schedule(handler, os.path.dirname(self.regieinterface.projectPath()))

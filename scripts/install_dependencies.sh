@@ -23,8 +23,8 @@ if [[ $(command -v apt) ]]; then
     # apt install libdrm libmpg123 gstreamer1.0-plugins-ugly libgstreamer1.0-dev libgstreamer-plugins-base1.0-dev gstreamer1.0-pulseaudio gstreamer1.0-x gstreamer1.0-plugins-bad gstreamer1.0-alsa gstreamer1.0-plugins-base gstreamer1.0-plugins-good -y
 
     # hplayer2 dependencies
-    apt install python3 rsync pipenv -y
-    apt install libffi-dev libjack-dev libjpeg-dev libtool autotools-dev automake liblo7 -y
+    apt install python3 rsync libdrm-dev libgbm-dev libgles-dev libegl-dev libegl1-mesa-dev libgles2-mesa-dev -y
+    apt install libffi-dev libjack-dev libjpeg-dev libtool autotools-dev automake libopenblas0 cython3 python3-opencv -y
 
     # RPi
     if [[ $(uname -m) = armv* ]]; then
@@ -96,7 +96,7 @@ ln -s /usr/local/lib/libzyre.so.2 /usr/lib/
 cd "$(dirname "$(readlink -f "$0")")/.."
 # poetry add --editable "$(dirname "$(readlink -f "$0")")/zyre/bindings/python"
 
-# PIP
+# POETRY
 poetry install
 
 # RPi

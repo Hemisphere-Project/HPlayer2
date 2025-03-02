@@ -2,7 +2,7 @@ from core.engine.hplayer import HPlayer2
 from core.engine.playlist import Playlist
 from core.engine import network
 
-import os, sys, types, platform
+import os
 import json, glob
 
 
@@ -45,12 +45,12 @@ hplayer.addInterface('teleco')
 hplayer.addInterface('serial', '^M5', 10)
 hplayer.addInterface('regie', 9111, projectfolder)
 gpio = hplayer.addInterface('gpio', [16, 20, 21], 1, 0, 'PUP') # service tek debounce @ 1 ??
-if myESP:
-    hplayer.addInterface('btserial', 'k32-'+str(myESP))
+# if myESP:
+#     hplayer.addInterface('btserial', 'k32-'+str(myESP))
 
 # Overlay
-if hplayer.isRPi():
-    video.addOverlay('rpifade')
+# if hplayer.isRPi():
+#     video.addOverlay('rpifade')
 
 #
 # SYNC PLAY

@@ -277,6 +277,12 @@ class MpvPlayer(BasePlayer):
         self._mpv_recvThread = threading.Thread(target=self._mpv_communicate)
         self._mpv_recvThread.start()
 
+        # Wait for socket to be connected
+        self.log("waiting for socket connection")
+        while not self._mpv_sock_connected:
+            time.sleep(0.1)
+            if not self.isRunning():
+                break
 
     #
     # Exit the player

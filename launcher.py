@@ -22,6 +22,8 @@ profile = 'looper'
 if len(sys.argv) > 1:
     profile = sys.argv[1]
 
+__import__("profiles."+profile)
+sys.exit(0)
 try:
     print ("HPlayer2: loading "+profile+" profile...\n")
     __import__("profiles."+profile)
