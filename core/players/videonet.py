@@ -7,6 +7,17 @@ import cv2 as cv
 import time
 from .base import BasePlayer
 
+
+# Monkey patching StupidArtnet to add a network check
+def checkNetwork(self):
+    try:
+        self.socket_client.sendto(b"TEST", (self.target_ip, self.UDP_PORT))
+        return True
+    except socket.error as error:
+        return False
+
+StupidArtnet.checkNetwork = checkNetwork
+
 class VideonetPlayer(BasePlayer):
 
     # MATRIX
@@ -33,16 +44,13 @@ class VideonetPlayer(BasePlayer):
         self._runflag = threading.Event()	
 
         # ARTNET
+        self._run_ip = None
+        self._dest_ip = None
         self._output = None
-        # self._output = StupidArtnet("2.12.0.2")
 
     def setIP(self, ip):
-        if self._output:
-            self._output.stop()
-            self._output.close()
-            self._output = None
-        self._output = StupidArtnet(ip)
-
+        self._dest_ip = ip
+        
     def setSize(self, w=36, h=138):
         self._target_size = (w, h)
         self._target_ratio = w / h
@@ -51,6 +59,7 @@ class VideonetPlayer(BasePlayer):
     ############
     ## private METHODS
     ############
+                
 
     # Wait for next frame
     def _waitFrame(self):
@@ -150,12 +159,34 @@ class VideonetPlayer(BasePlayer):
         self.log("player ready")
 
         while self.isRunning():	
+        
+            # ip changed
+            if self._dest_ip != self._run_ip:
+                if self._output: 
+                    del self._output
+                    self._output = None
+                self.log("Checking network..")
+                stupid = StupidArtnet(self._dest_ip)
+                if stupid.checkNetwork():
+                    self._output = stupid
+                    self._run_ip = self._dest_ip
+                    self.log(f"Socket ready")
+                else:
+                    # No network connection, wait 5s and retry
+                    self.log(f"ERROR: No network connection to {self._dest_ip}")
+                    del stupid
+                    for i in range(10):
+                        time.sleep(.5)
+                        if not self.isRunning():
+                            break
+                    continue
             
             if not self._cap or not self._runflag.isSet():     # not playing or paused    
                 if not self._cap:
                     self._blackout()       
                 time.sleep(0.01)
-            
+                self.log("waiting..", self.isRunning())
+                
             else:
                 ret = None
 
