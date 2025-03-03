@@ -329,11 +329,7 @@ def play1(ev, *args):
 #
 
 # default volume
-<<<<<<< HEAD
-@hplayer.on('app-ready')
-=======
 @hplayer.on('app-run')
->>>>>>> c05d543010504a4214f2af27804d5adf1bfaca56
 def init(ev, *args):
     hplayer.settings.set('volume', 100)
     hplayer.settings.set('loop', -1)
