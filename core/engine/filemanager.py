@@ -24,11 +24,12 @@ class FileManager(Module):
         # Defered update (file change might trigger multiple events)
         @self.on('file-changed')                # file changed on disk -> trigger full refresh
         def deferredUpdate(ev, *args):
-            print(args[0].event_type)
-            if self.refreshTimer:
-                self.refreshTimer.cancel()
-            self.refreshTimer = Timer(.5, self.refresh)
-            self.refreshTimer.start()
+            if args[0].event_type == 'modified':
+                print(args[0].event_type)
+                if self.refreshTimer:
+                    self.refreshTimer.cancel()
+                self.refreshTimer = Timer(.5, self.refresh)
+                self.refreshTimer.start()
 
         # Instant update: new player means new authorized extension -> trigger list refresh
         @self.parent.on('player-added')        # new player means new authorized extension -> trigger list refresh
