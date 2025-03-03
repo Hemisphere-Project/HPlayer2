@@ -87,7 +87,7 @@ class MpvPlayer(BasePlayer):
         for retry in range(50, 0, -1):
             try:
                 self._mpv_sock.connect(self._mpv_socketpath)
-                self._mpv_sock.settimeout(0.5)
+                self._mpv_sock.settimeout(0.2)
                 self.log("connected to player backend")
                 self._mpv_sock_connected = True
                 self.update('isReady', True)
@@ -185,14 +185,20 @@ class MpvPlayer(BasePlayer):
                             if 'name' not in mpvsays or mpvsays['name'] != 'time-pos':
                                 self.log("IPC event:", mpvsays)
 
-
+                        # print(self.status('media'))
                 # Timeout: retry
                 except socket.timeout:
                     # print('-', end ="")
                     if self.status('isPlaying'):
                         if not self.status('media').split('.')[-1].lower() in self._imageExt:
                             self.log('PLAYBACK LOCKED OUT', self._mpv_lockedout)
-                            self._mpv_send('{ "command": ["set_property", "pause", false] }')
+                            if self._mpv_lockedout == 0:
+                                self._mpv_send('{ "command": ["set_property", "pause", false] }')
+                            if self._mpv_lockedout == 1:
+                                print("CRASH RELOAD FILE", self.status('media'))
+                                self._mpv_send('{ "command": ["stop"] }')
+                                time.sleep(0.5)
+                                self._mpv_send('{"command": ["loadfile", "'+self.status('media')+'"]}')
                             self._mpv_lockedout += 1
                             if self._mpv_lockedout > 3:
                                 print("CRASH STOP")
