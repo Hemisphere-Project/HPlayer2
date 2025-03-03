@@ -403,6 +403,12 @@ class HPlayer2(Module):
             self.playlist.play(file, pause=pause)
             self.settings.set('loop', 1)
             
+        # Play stream
+        @module.on('playstream')
+        def playstream(ev, *args):
+            if len(args) > 0:
+                self.playlist.playstream(args[0])
+            
         @module.on('load')
         def load(ev, *args):
             if len(args) > 0:

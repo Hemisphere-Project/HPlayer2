@@ -324,9 +324,10 @@ class ThreadedHTTPServer(object):
     def watcher(self):
     
         def onchange(e):
-            self.regieinterface.log('project updated ! pushing it...')
-            self.regieinterface.reload()
-            self.sendBuffer.put( ('data', self.projectData()) )
+            if e.event_type == 'modified':
+                self.regieinterface.log('project updated ! pushing it...')
+                self.regieinterface.reload()
+                self.sendBuffer.put( ('data', self.projectData()) )
 
         handler = PatternMatchingEventHandler(
                             patterns=["*/project.json"],

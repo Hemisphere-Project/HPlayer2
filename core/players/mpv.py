@@ -9,6 +9,8 @@ class MpvPlayer(BasePlayer):
 
     _mpv_scale = 1          # % image scale
     _mpv_imagetime = 5      # diaporama transition time (s)
+    
+    _mpv_command = ['--idle=yes', '-v', '--no-osc', '--msg-level=ipc=v', '--quiet', '--fs','--keep-open' ,'--hr-seek=yes' ]
 
     def __init__(self, hplayer, name):
         super().__init__(hplayer, name)
@@ -134,8 +136,7 @@ class MpvPlayer(BasePlayer):
                             pass
                         
                         if 'name' in mpvsays:
-                            if self.name == 'player2':
-                                print(mpvsays)
+                            # print(mpvsays)
                             
                             if mpvsays['name'] == 'idle':
                                 self.emit('idle')
@@ -241,13 +242,7 @@ class MpvPlayer(BasePlayer):
         # create subprocess
         script_path = os.path.dirname(os.path.realpath(__file__))
         
-        command = ['mpv', '--input-ipc-server=' + self._mpv_socketpath + '',
-                                '--idle=yes', '-v', '--no-osc', '--msg-level=ipc=v', '--quiet', '--fs','--keep-open'
-                                ,'--window-scale=' + str(self._mpv_scale)
-                                ,'--hr-seek=yes'
-                                # ,'--af=rubberband'
-                                #,'--force-window=yes'
-                                ]
+        command = ['mpv', '--input-ipc-server=' + self._mpv_socketpath + '' ,'--window-scale=' + str(self._mpv_scale) ] + self._mpv_command
         
         # self.log("starting mpv with", command)
 

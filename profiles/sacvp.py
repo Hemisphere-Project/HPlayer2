@@ -20,7 +20,7 @@ base_path = ['/data/usb', projectfolder, devicefolder]
 hplayer = HPlayer2(base_path, "/data/hplayer2-"+profilename+".cfg")
 
 # PLAYERS
-video = hplayer.addPlayer('mpv', 'video')
+video = hplayer.addPlayer('mpvstream', 'video')
 
 # LOAD ROOT FOLDER AS PLAYLIST
 hplayer.playlist.load( hplayer.files.currentList() )
@@ -307,7 +307,7 @@ def play1(ev, *args):
 #
 
 # default volume
-@video.on('ready')
+@hplayer.on('app-ready')
 def init(ev, *args):
     hplayer.settings.set('volume', 100)
     hplayer.settings.set('loop', -1)
