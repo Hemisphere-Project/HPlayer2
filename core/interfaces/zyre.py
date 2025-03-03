@@ -214,11 +214,19 @@ class Subscriber():
         internal_pipe.signal(0)
 
         while True:
-            sock = poller.wait(500)
-
             # STOP program
-            if self.node.interface.stopped.is_set():
+            if self.interface.stopped.is_set():
                 break
+            
+            # POLL
+            now = time.time()
+            sock = poller.wait(500)
+            
+            if not sock:
+                if time.time() - now < 0.1:
+                    self.interface.log('subscriber broken.. get away !')
+                    self.interface.quit()
+                continue
 
             # NOBODY responded ...
             if not sock:
