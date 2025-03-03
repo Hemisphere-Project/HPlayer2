@@ -216,6 +216,10 @@ class Subscriber():
         while True:
             sock = poller.wait(500)
 
+            # STOP program
+            if self.node.interface.stopped.is_set():
+                break
+
             # NOBODY responded ...
             if not sock:
                 continue
@@ -400,6 +404,7 @@ class ZyreNode ():
     # ZYRE Zactor
     def actor_fn(self, pipe, netiface):
 
+        print('start node actor')
         # Internal
         internal_pipe = Zsock(pipe, False) # We don't own the pipe, so False.
 
@@ -411,9 +416,24 @@ class ZyreNode ():
         internal_pipe.signal(0)
 
         while True:
+            
+            # STOP program
+            if self.interface.stopped.is_set():
+                self.interface.log('stopping node')
+                break
+            
+            # POLL
+            now = time.time()
             sock = poller.wait(500)
+            
             if not sock:
+                if time.time() - now < 0.1:
+                    self.interface.log('poller broken.. get away !')
+                    self.interface.quit()
                 continue
+            
+            
+            
             
             #
             # ZYRE receive
@@ -530,13 +550,15 @@ class ZyreNode ():
                     break
                     
         internal_pipe.__del__()
-        self.interface.log(' - node stopped')   # WEIRD: print helps the closing going smoothly..
+        self.interface.log('node stopped')   # WEIRD: print helps the closing going smoothly..
         self.done = True
 
     def stop(self):
+        self.interface.log('stopping peers')
         for peer in self.book.values():
             peer.stop()
 
+        self.interface.log('stopping node')
         self.actor.sock().send(b"ss", b"$TERM")
         retry = 0
         while not self.done and retry < 10:
@@ -694,7 +716,10 @@ class ZyreInterface (BaseInterface):
 
     def  __init__(self, hplayer, netiface=None):
         super().__init__(hplayer, "ZYRE")
-        self.node = ZyreNode(self, netiface)
+        self.iface = netiface
+
+    def listen(self):
+        self.node = ZyreNode(self, self.iface)
 
         # Publish self status
         @self.hplayer.on('*.playing')
@@ -745,8 +770,8 @@ class ZyreInterface (BaseInterface):
                         self.log('peer is missing', ev['peer'])
                 else:
                     self.node.broadcast(ev['event'], data, 0, at if ev['synchro'] else 0)
-
-    def listen(self):
+        
+        
         self.log( "interface ready")
         self.stopped.wait()
         self.log( "closing sockets...") # CLOSING is messy !

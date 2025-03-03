@@ -70,7 +70,7 @@ class FileManager(Module):
         def onChange(e):
             if e.src_path.endswith('.tmp'): return
             if e.src_path.endswith('project.json'): return
-            if e.event_type == 'opened': return
+            if e.event_type != 'modified': return
             self.emit('file-changed', e)
 
         if not isinstance(path, list): 

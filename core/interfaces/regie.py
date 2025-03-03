@@ -50,6 +50,7 @@ class RegieInterface (BaseInterface):
         with ThreadedHTTPServer(self, self._port) as server:
             self._server = server
             self.stopped.wait()
+            self._server.stop()
 
         self._server = None
         
@@ -300,6 +301,7 @@ class ThreadedHTTPServer(object):
 
 
     def stop(self):
+        self.projectObserver.stop()
         #self.server.stop()
         pass
 

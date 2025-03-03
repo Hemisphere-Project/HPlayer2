@@ -7,19 +7,34 @@ import cv2 as cv
 import time
 from .base import BasePlayer
 
+
+# Monkey patching StupidArtnet to add a network check
+def checkNetwork(self):
+    try:
+        self.socket_client.sendto(b"TEST", (self.target_ip, self.UDP_PORT))
+        return True
+    except socket.error as error:
+        return False
+
+StupidArtnet.checkNetwork = checkNetwork
+
 class VideonetPlayer(BasePlayer):
 
     # MATRIX
-    # _target_size = (36, 108)
-    _target_size = (36, 138)
+    _target_size = (36, 108)
     _target_ratio = _target_size[0] / _target_size[1]
     _screen_offset = (0, 0)
+    _snakeFlip = False
 
     # INTERNALS
     _last_frame_time = 0
     _frame_interval = 1/30.0
     _cap = None
     _capLock = threading.Lock()
+    
+    # SETTINGS
+    _brightness = 1.0
+    _contrast = 0.5
 
     def __init__(self, hplayer, name):
         super().__init__(hplayer, name)
@@ -33,24 +48,26 @@ class VideonetPlayer(BasePlayer):
         self._runflag = threading.Event()	
 
         # ARTNET
+        self._run_ip = None
+        self._dest_ip = None
         self._output = None
-        # self._output = StupidArtnet("2.12.0.2")
+        self._lastIsBlack = 0
 
     def setIP(self, ip):
-        if self._output:
-            self._output.stop()
-            self._output.close()
-            self._output = None
-        self._output = StupidArtnet(ip)
-
-    def setSize(self, w=36, h=138):
+        self._dest_ip = ip
+        
+    def setSize(self, w=36, h=138, snakeFlip=False, vflip=False, hflip=False):
+        self._snakeFlip = snakeFlip
         self._target_size = (w, h)
         self._target_ratio = w / h
+        self._vflip = vflip
+        self._hflip = hflip
 
         
     ############
     ## private METHODS
     ############
+                
 
     # Wait for next frame
     def _waitFrame(self):
@@ -95,20 +112,32 @@ class VideonetPlayer(BasePlayer):
     # artnet Frame
     def _frame2artnet(self, frame):
         # Crop and resize frame
-        matrixO = self._resizeFrame(frame)
-
+        matrix = self._resizeFrame(frame)
+        
         # reverse Red and Blue before flatten (3rd dimension)
-        matrix = cv.cvtColor(matrixO, cv.COLOR_BGR2RGB)
+        matrix = cv.cvtColor(matrix, cv.COLOR_BGR2RGB)
+        
+        # Apply brightness / contrast using numpy
+        # brightness is a float in [0, 2], with 1 being no change
+        # contrast is a float in [0, 2], with 1 being no change
+        matrix = np.clip(matrix * self._brightness  + (self._contrast - 1) * 255, 0, 255).astype(np.uint8)
+        
 
-        # flip vertically even columns (ZigZag pattern)
-        for i in range(1, matrix.shape[1], 2):
-            matrix[:, i] = np.flip(matrix[:, i], axis=0)
+        # flip vertically even columns (SnakeFlip pattern)
+        if self._snakeFlip:
+            for i in range(1, matrix.shape[1], 2):
+                matrix[:, i] = np.flip(matrix[:, i], axis=0)
 
         # rotate 90°
         matrix = np.rot90(matrix)
 
         # flip vertically
-        matrix = np.flip(matrix, axis=0)
+        if self._vflip:
+            matrix = np.flip(matrix, axis=0)
+
+        # flip horizontally
+        if self._hflip:
+            matrix = np.flip(matrix, axis=1)
 
         # reshape (flatten) matrix to 1D array 
         artnet = np.reshape(matrix, (1,-1))[0]
@@ -123,7 +152,16 @@ class VideonetPlayer(BasePlayer):
         return artnet
     
     # draw artnet
-    def _drawArtnet(self, artnet):
+    def _drawArtnet(self, artnet, black=False):
+        
+        # Draw 10 black frames before idle
+        if black:
+            if self._lastIsBlack > 10: return
+            self._lastIsBlack += 1
+        else:
+            self._lastIsBlack = 0
+        
+        # send artnet
         if self._output:
             for i in range(len(artnet)):
                 self._output.set_universe(i)
@@ -136,7 +174,7 @@ class VideonetPlayer(BasePlayer):
         artnet = [artnet[i:i+510] for i in range(0, len(artnet), 510)]
         for i in range(len(artnet)):
             artnet[i] = np.pad(artnet[i], (0, 512 - len(artnet[i])))
-        self._drawArtnet(artnet)
+        self._drawArtnet(artnet, True)
 
 
     # VNET THREAD
@@ -150,12 +188,32 @@ class VideonetPlayer(BasePlayer):
         self.log("player ready")
 
         while self.isRunning():	
+        
+            # ip changed
+            if self._dest_ip != self._run_ip:
+                if self._output: 
+                    del self._output
+                    self._output = None
+                self.log("Checking network..")
+                stupid = StupidArtnet(self._dest_ip)
+                if stupid.checkNetwork():
+                    self._output = stupid
+                    self._run_ip = self._dest_ip
+                    self.log(f"Socket ready")
+                else:
+                    # No network connection, wait 5s and retry
+                    self.log(f"ERROR: No network connection to {self._dest_ip}")
+                    del stupid
+                    for i in range(10):
+                        time.sleep(.5)
+                        if not self.isRunning():
+                            break
+                    continue
             
             if not self._cap or not self._runflag.isSet():     # not playing or paused    
                 if not self._cap:
                     self._blackout()       
                 time.sleep(0.01)
-            
             else:
                 ret = None
 
@@ -249,13 +307,14 @@ class VideonetPlayer(BasePlayer):
     def _stop(self):
         self._blackout()
         if self._cap:
-            end = False   
-            with self._capLock:
-                if self._cap.isOpened():
-                    self._cap.release()
-                else: 
-                    end = True
-                self._cap = None
+            end = False
+            if self._capLock:   
+                with self._capLock:
+                    if self._cap and self._cap.isOpened():
+                        self._cap.release()
+                    else: 
+                        end = True
+                    self._cap = None
             self._runflag.clear()
             self.update('isPlaying', False)
             self.update('isPaused', False)
@@ -294,4 +353,12 @@ class VideonetPlayer(BasePlayer):
             self.log("skip", milli/1000)
 
 
-
+    def _applyBrightness(self, brightness):
+        self._brightness = brightness/100.0
+        self.log("brightness", self._brightness)
+        
+    def _applyContrast(self, contrast):
+        
+        # map contrast from 0-100 to 0.6 - 1.4
+        self._contrast = 0.6 + (contrast/100.0) * 0.8
+        self.log("contrast", self._contrast)
