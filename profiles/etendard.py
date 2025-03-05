@@ -9,10 +9,12 @@ import os
 profilename = os.path.basename(__file__).split('.')[0]
 projectfolder = os.path.join('/data/sync', profilename)
 
+sacvpfolder = '/data/sync/sacvp'
+
 devicename = network.get_hostname()
 devicefolder = os.path.join('/data/sync/solo', devicename)
 
-base_path = ['/data/usb', projectfolder, devicefolder]
+base_path = ['/data/usb', projectfolder, devicefolder, sacvpfolder]
 
 
 # INIT HPLAYER

@@ -76,7 +76,7 @@ class HPlayer2(Module):
             PlayerClass = playerlib.getPlayer(ptype)
             p = PlayerClass(self, name)
             self._players[name] = p
-
+            
             # Bind Volume
             @self.settings.on('do-volume')
             @self.settings.on('do-mute')
@@ -239,6 +239,8 @@ class HPlayer2(Module):
         try:
             if network.get_ip("eth0") != "127.0.0.1":
                 self.log("IP for eth0 is", network.get_ip("eth0"));
+            if network.get_ip("wint") != "127.0.0.1":
+                self.log("IP for wint  is", network.get_ip("wint"));
             if network.get_ip("wlan0") != "127.0.0.1":
                 self.log("IP for wlan0  is", network.get_ip("wlan0"));
         except:

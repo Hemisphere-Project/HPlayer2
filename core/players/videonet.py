@@ -185,8 +185,6 @@ class VideonetPlayer(BasePlayer):
                 if not self._cap:
                     self._blackout()       
                 time.sleep(0.01)
-                self.log("waiting..", self.isRunning())
-                
             else:
                 ret = None
 
@@ -280,13 +278,14 @@ class VideonetPlayer(BasePlayer):
     def _stop(self):
         self._blackout()
         if self._cap:
-            end = False   
-            with self._capLock:
-                if self._cap.isOpened():
-                    self._cap.release()
-                else: 
-                    end = True
-                self._cap = None
+            end = False
+            if self._capLock:   
+                with self._capLock:
+                    if self._cap.isOpened():
+                        self._cap.release()
+                    else: 
+                        end = True
+                    self._cap = None
             self._runflag.clear()
             self.update('isPlaying', False)
             self.update('isPaused', False)

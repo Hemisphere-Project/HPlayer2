@@ -109,8 +109,6 @@ class TimeClient():
 
         while retry < 10:
             sock = poller.wait(500)
-            print('actor_fn')
-            
 
             # NOBODY responded ...
             if not sock:
@@ -418,19 +416,24 @@ class ZyreNode ():
         internal_pipe.signal(0)
 
         while True:
-            now = time.time()
-            sock = poller.wait(500)
-            if time.time() - now < 0.1:
-                self.interface.log('poller broken.. get away !')
-                self.interface.quit()
             
             # STOP program
             if self.interface.stopped.is_set():
                 self.interface.log('stopping node')
                 break
             
+            # POLL
+            now = time.time()
+            sock = poller.wait(500)
+            
             if not sock:
+                if time.time() - now < 0.1:
+                    self.interface.log('poller broken.. get away !')
+                    self.interface.quit()
                 continue
+            
+            
+            
             
             #
             # ZYRE receive
