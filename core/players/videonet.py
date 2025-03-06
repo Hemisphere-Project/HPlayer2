@@ -56,10 +56,12 @@ class VideonetPlayer(BasePlayer):
     def setIP(self, ip):
         self._dest_ip = ip
         
-    def setSize(self, w=36, h=138, snakeFlip=False):
+    def setSize(self, w=36, h=138, snakeFlip=False, vflip=False, hflip=False):
         self._snakeFlip = snakeFlip
         self._target_size = (w, h)
         self._target_ratio = w / h
+        self._vflip = vflip
+        self._hflip = hflip
 
         
     ############
@@ -130,7 +132,12 @@ class VideonetPlayer(BasePlayer):
         matrix = np.rot90(matrix)
 
         # flip vertically
-        # matrix = np.flip(matrix, axis=0)
+        if self._vflip:
+            matrix = np.flip(matrix, axis=0)
+
+        # flip horizontally
+        if self._hflip:
+            matrix = np.flip(matrix, axis=1)
 
         # reshape (flatten) matrix to 1D array 
         artnet = np.reshape(matrix, (1,-1))[0]

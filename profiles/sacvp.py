@@ -42,7 +42,7 @@ except: pass
 # PLAYERS
 if myETEND:
     video = hplayer.addPlayer('videonet', 'video')
-    video.setSize(*myETEND['size'], myETEND['flip'])
+    video.setSize(*myETEND['size'], myETEND['snake'], myETEND['vflip'], myETEND['hflip'])
     video.setIP(myETEND['ip'])
     hplayer.log('mode VIDEO4ARTNET')
 else:
