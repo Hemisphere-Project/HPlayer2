@@ -324,7 +324,7 @@ def play1(ev, *args):
 #
 
 # default volume
-@video.on('ready')
+@hplayer.on('app-run')
 def init(ev, *args):
     hplayer.settings.set('volume', 100)
     hplayer.settings.set('loop', -1)

@@ -31,6 +31,10 @@ class VideonetPlayer(BasePlayer):
     _frame_interval = 1/30.0
     _cap = None
     _capLock = threading.Lock()
+    
+    # SETTINGS
+    _brightness = 1.0
+    _contrast = 0.5
 
     def __init__(self, hplayer, name):
         super().__init__(hplayer, name)
@@ -106,10 +110,16 @@ class VideonetPlayer(BasePlayer):
     # artnet Frame
     def _frame2artnet(self, frame):
         # Crop and resize frame
-        matrixO = self._resizeFrame(frame)
-
+        matrix = self._resizeFrame(frame)
+        
         # reverse Red and Blue before flatten (3rd dimension)
-        matrix = cv.cvtColor(matrixO, cv.COLOR_BGR2RGB)
+        matrix = cv.cvtColor(matrix, cv.COLOR_BGR2RGB)
+        
+        # Apply brightness / contrast using numpy
+        # brightness is a float in [0, 2], with 1 being no change
+        # contrast is a float in [0, 2], with 1 being no change
+        matrix = np.clip(matrix * self._brightness  + (self._contrast - 1) * 255, 0, 255).astype(np.uint8)
+        
 
         # flip vertically even columns (SnakeFlip pattern)
         if self._snakeFlip:
@@ -293,7 +303,7 @@ class VideonetPlayer(BasePlayer):
             end = False
             if self._capLock:   
                 with self._capLock:
-                    if self._cap.isOpened():
+                    if self._cap and self._cap.isOpened():
                         self._cap.release()
                     else: 
                         end = True
@@ -336,4 +346,12 @@ class VideonetPlayer(BasePlayer):
             self.log("skip", milli/1000)
 
 
-
+    def _applyBrightness(self, brightness):
+        self._brightness = brightness/100.0
+        self.log("brightness", self._brightness)
+        
+    def _applyContrast(self, contrast):
+        
+        # map contrast from 0-100 to 0.6 - 1.4
+        self._contrast = 0.6 + (contrast/100.0) * 0.8
+        self.log("contrast", self._contrast)

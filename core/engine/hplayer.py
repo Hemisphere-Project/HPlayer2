@@ -89,6 +89,16 @@ class HPlayer2(Module):
             def pan(ev, value, settings):
                 p._applyPan( settings['pan'] if settings['audiomode'] != 'mono' else 'mono' )
 
+            # Bind Brightness
+            @self.settings.on('do-brightness')
+            def brightness(ev, value, settings):
+                p._applyBrightness( settings['brightness'] )
+                
+            # Bind Contrast
+            @self.settings.on('do-contrast')
+            def contrast(ev, value, settings):
+                p._applyContrast( settings['contrast'] )
+
             # Bind Flip
             @self.settings.on('do-flip')
             def flip(ev, value, settings):
@@ -100,7 +110,7 @@ class HPlayer2(Module):
             def loop(ev, value, settings=None):
                 oneLoop = (self.settings.get('loop') == 1) or (self.settings.get('loop') == 2 and self.playlist.size() == 1)
                 p._applyOneLoop( oneLoop )
-
+        
 
             # Bind playlist
             p.on('media-end',        lambda ev, *args: self.playlist.onMediaEnd())    # Media end    -> Playlist next
@@ -563,6 +573,22 @@ class HPlayer2(Module):
         def audiomode(ev, *args):
             if len(args) > 0:
                 self.settings.set('audioout', args[0])
+                
+        @module.on('brightness')
+        def brightness(ev, *args):
+            if len(args) > 0:
+                bright = int(args[0])
+                if (bright < 0): bright = 0
+                if (bright > 100): bright = 100
+                self.settings.set('brightness', bright)
+                
+        @module.on('contrast')
+        def contrast(ev, *args):
+            if len(args) > 0:
+                contrast = int(args[0])
+                if (contrast < 0): contrast = 0
+                if (contrast > 100): contrast = 100
+                self.settings.set('contrast', contrast)
         
         @module.on('flip')
         def flip(ev, *args):

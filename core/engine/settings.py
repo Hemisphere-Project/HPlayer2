@@ -4,6 +4,7 @@ import os
 
 class Settings(Module):
 
+    _ready = False
     _settingspath = None
     _settings = {
         'flip':         False,
@@ -14,7 +15,9 @@ class Settings(Module):
         'audioout':     'jack',
         'audiomode':    'stereo',
         'pan':          [100,100],
-        'playlist':     None
+        'playlist':     None, 
+        'brightness':   100,
+        'contrast':     50
     }
 
     def __init__(self, hplayer, persistent=None):
@@ -58,6 +61,8 @@ class Settings(Module):
             except:
                 self.log('ERROR loading settings file', self._settingspath)  
 
+        self._ready = True
+
 
     def export(self):
         return self._settings.copy()
@@ -70,6 +75,9 @@ class Settings(Module):
 
 
     def set(self, key, val):
+        if not self._ready:
+            self.log('WARNING: settings not ready to set', key, val)
+            return
         if not key in self._settings:
             self._settings[key] = None
         if self._settings[key] != val:

@@ -203,3 +203,9 @@ class BasePlayer(Module):
 
     def _applyOneLoop(self, oneloop):
         self.log("one loop", oneloop)
+
+    def _applyBrightness(self, brightness):
+        self.log("brightness set to", brightness)
+        
+    def _applyContrast(self, contrast):
+        self.log("contrast set to", contrast)
