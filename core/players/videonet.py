@@ -21,10 +21,10 @@ StupidArtnet.checkNetwork = checkNetwork
 class VideonetPlayer(BasePlayer):
 
     # MATRIX
-    # _target_size = (36, 108)
-    _target_size = (36, 138)
+    _target_size = (36, 108)
     _target_ratio = _target_size[0] / _target_size[1]
     _screen_offset = (0, 0)
+    _snakeFlip = False
 
     # INTERNALS
     _last_frame_time = 0
@@ -47,11 +47,13 @@ class VideonetPlayer(BasePlayer):
         self._run_ip = None
         self._dest_ip = None
         self._output = None
+        self._lastIsBlack = 0
 
     def setIP(self, ip):
         self._dest_ip = ip
         
-    def setSize(self, w=36, h=138):
+    def setSize(self, w=36, h=138, snakeFlip=False):
+        self._snakeFlip = snakeFlip
         self._target_size = (w, h)
         self._target_ratio = w / h
 
@@ -109,15 +111,16 @@ class VideonetPlayer(BasePlayer):
         # reverse Red and Blue before flatten (3rd dimension)
         matrix = cv.cvtColor(matrixO, cv.COLOR_BGR2RGB)
 
-        # flip vertically even columns (ZigZag pattern)
-        for i in range(1, matrix.shape[1], 2):
-            matrix[:, i] = np.flip(matrix[:, i], axis=0)
+        # flip vertically even columns (SnakeFlip pattern)
+        if self._snakeFlip:
+            for i in range(1, matrix.shape[1], 2):
+                matrix[:, i] = np.flip(matrix[:, i], axis=0)
 
         # rotate 90°
         matrix = np.rot90(matrix)
 
         # flip vertically
-        matrix = np.flip(matrix, axis=0)
+        # matrix = np.flip(matrix, axis=0)
 
         # reshape (flatten) matrix to 1D array 
         artnet = np.reshape(matrix, (1,-1))[0]
@@ -132,7 +135,16 @@ class VideonetPlayer(BasePlayer):
         return artnet
     
     # draw artnet
-    def _drawArtnet(self, artnet):
+    def _drawArtnet(self, artnet, black=False):
+        
+        # Draw 10 black frames before idle
+        if black:
+            if self._lastIsBlack > 10: return
+            self._lastIsBlack += 1
+        else:
+            self._lastIsBlack = 0
+        
+        # send artnet
         if self._output:
             for i in range(len(artnet)):
                 self._output.set_universe(i)
@@ -145,7 +157,7 @@ class VideonetPlayer(BasePlayer):
         artnet = [artnet[i:i+510] for i in range(0, len(artnet), 510)]
         for i in range(len(artnet)):
             artnet[i] = np.pad(artnet[i], (0, 512 - len(artnet[i])))
-        self._drawArtnet(artnet)
+        self._drawArtnet(artnet, True)
 
 
     # VNET THREAD

@@ -2,7 +2,7 @@ from core.engine.hplayer import HPlayer2
 from core.engine.playlist import Playlist
 from core.engine import network
 
-import os
+import os, json, glob
 
 
 # DIRECTORY / FILE
@@ -20,10 +20,21 @@ base_path = ['/data/usb', projectfolder, devicefolder, sacvpfolder]
 # INIT HPLAYER
 hplayer = HPlayer2(base_path, "/data/hplayer2-"+profilename+".cfg")
 
+# ATTACHED ETENDARD: get ETENDARD from etendard.json
+myETEND = None
+try:
+    with open(os.path.join(projectfolder, 'etendard.json')) as json_file:
+        data = json.load(json_file)
+        if devicename in data:
+            myETEND = data[devicename]
+            hplayer.log('attached to ETENDARD', myETEND)
+except: pass
+
 # PLAYERS
-video = hplayer.addPlayer('videonet', 'video')
-video.setSize(36, 138)
-video.setIP("2.12.0.2")
+if myETEND:
+    video = hplayer.addPlayer('videonet', 'video')
+    video.setSize(*myETEND['size'])
+    video.setIP(myETEND['ip'])
 
 # LOAD ROOT FOLDER AS PLAYLIST
 hplayer.playlist.load( hplayer.files.currentList() )
@@ -33,7 +44,7 @@ hplayer.playlist.load( hplayer.files.currentList() )
 hplayer.addInterface('keyboard')
 hplayer.addInterface('zyre', 'wint')
 hplayer.addInterface('osc', 1222, 3737)
-hplayer.addInterface('mqtt', '10.0.0.1')
+hplayer.addInterface('mqtt', '10.0.0.2')
 hplayer.addInterface('http2', 8080)
 hplayer.addInterface('teleco')
 hplayer.addInterface('serial', '^M5', 10)
