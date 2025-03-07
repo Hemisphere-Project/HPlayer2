@@ -45,14 +45,18 @@ if myETEND:
     video.setSize(*myETEND['size'], myETEND['snake'], myETEND['vflip'], myETEND['hflip'])
     video.setIP(myETEND['ip'])
     hplayer.log('mode VIDEO4ARTNET')
+    # Ethernet Zyre
+    hplayer.addInterface('zyre', 'wint')
 else:
     video = hplayer.addPlayer('mpv', 'video')
     video.imagetime(0)
     hplayer.log('mode HDMI')
+    # Any Zyre
+    hplayer.addInterface('zyre')
+    
 
 # INTERFACES
 hplayer.addInterface('keyboard')
-hplayer.addInterface('zyre')
 hplayer.addInterface('osc', 1222, 3737)
 hplayer.addInterface('mqtt', '10.0.0.2')
 hplayer.addInterface('http2', 8080)
