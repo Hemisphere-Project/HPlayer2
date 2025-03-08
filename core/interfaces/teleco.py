@@ -166,10 +166,10 @@ class TelecoInterface (BaseInterface):
             self.line(0, '^1 STATUS - '+ network.get_hostname())
             if self.statusPage == 0:
                 ip = ''
-                net = network.get_essid('wlan0')
+                net = network.get_essid('wint')
                 if net: 
-                    net += ' '+str(network.get_rssi('wlan0'))+'%'
-                    ip += network.get_ip('wlan0')
+                    net += ' '+str(network.get_rssi('wint'))+'%'
+                    ip += network.get_ip('wint')
                 else:   net = 'NO-WIFI !'
                 
                 if network.get_ip('eth0') != '127.0.0.1':
