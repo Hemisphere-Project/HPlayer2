@@ -21,7 +21,7 @@ hplayer = HPlayer2(base_path)
 
 # PLAYERS
 video = hplayer.addPlayer('mpv', 'video')
-# audio = hplayer.addPlayer('mpv', 'audio')
+stream = hplayer.addPlayer('mpvstream', 'stream')
 
 # ATTACHED ESP 
 myESP = 0

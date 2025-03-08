@@ -9,6 +9,8 @@ class MpvPlayer(BasePlayer):
 
     _mpv_scale = 1          # % image scale
     _mpv_imagetime = 5      # diaporama transition time (s)
+    
+    _mpv_command = ['--idle=yes', '-v', '--no-osc', '--msg-level=ipc=v', '--quiet', '--fs','--keep-open' ,'--hr-seek=yes' ]
 
     def __init__(self, hplayer, name):
         super().__init__(hplayer, name)
@@ -85,7 +87,7 @@ class MpvPlayer(BasePlayer):
         for retry in range(10, 0, -1):
             try:
                 self._mpv_sock.connect(self._mpv_socketpath)
-                self._mpv_sock.settimeout(0.5)
+                self._mpv_sock.settimeout(0.2)
                 self.log("connected to player backend")
                 self._mpv_sock_connected = True
                 self.update('isReady', True)
@@ -188,7 +190,13 @@ class MpvPlayer(BasePlayer):
                     if self.status('isPlaying'):
                         if not self.status('media').split('.')[-1] in self._imageExt:
                             self.log('PLAYBACK LOCKED OUT', self._mpv_lockedout)
-                            self._mpv_send('{ "command": ["set_property", "pause", false] }')
+                            if self._mpv_lockedout == 0:
+                                self._mpv_send('{ "command": ["set_property", "pause", false] }')
+                            if self._mpv_lockedout == 1:
+                                print("CRASH RELOAD FILE", self.status('media'))
+                                self._mpv_send('{ "command": ["stop"] }')
+                                time.sleep(0.5)
+                                self._mpv_send('{"command": ["loadfile", "'+self.status('media')+'"]}')
                             self._mpv_lockedout += 1
                             if self._mpv_lockedout > 3:
                                 print("CRASH STOP")
@@ -238,13 +246,7 @@ class MpvPlayer(BasePlayer):
         # create subprocess
         script_path = os.path.dirname(os.path.realpath(__file__))
         
-        command = ['mpv', '--input-ipc-server=' + self._mpv_socketpath + '',
-                                '--idle=yes', '-v', '--no-osc', '--msg-level=ipc=v', '--quiet', '--fs','--keep-open'
-                                ,'--window-scale=' + str(self._mpv_scale)
-                                ,'--hr-seek=yes'
-                                # ,'--af=rubberband'
-                                #,'--force-window=yes'
-                                ]
+        command = ['mpv', '--input-ipc-server=' + self._mpv_socketpath + '' ,'--window-scale=' + str(self._mpv_scale) ] + self._mpv_command
 
         # image time (0 = still image)
         if self._mpv_imagetime > 0:

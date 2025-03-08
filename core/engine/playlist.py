@@ -135,6 +135,10 @@ class Playlist(Module):
             elif not (0 <= index < self.size()):    self.log("Index out of playlist range:", index, self._playlist)
             else:                                   self.log("Media not found:", self._playlist[index])
 
+    # PLAY a stream URL
+    def playstream(self, url):
+        self._index = -1
+        self.emit('do-play', url, -1)
 
     # NEXT item in playlist
     def next(self):

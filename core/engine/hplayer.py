@@ -390,6 +390,7 @@ class HPlayer2(EventEmitterX):
         @module.on('do-play')
         def doplay(ev, *args):
             for i,p in enumerate(self.players()): 
+                print(p.name, p.validExt(args[0]))
                 if p.validExt(args[0]):
                     if i != self._lastUsedPlayer:
                         self.activePlayer().stop()
@@ -431,6 +432,12 @@ class HPlayer2(EventEmitterX):
                 for p in self.players(): 
                     if p.isPlaying():
                         p.skip(int(args[0]))
+        
+        # Play stream
+        @module.on('playstream')
+        def playstream(ev, *args):
+            if len(args) > 0:
+                self.playlist.playstream(args[0])
                 
 
         # REGIE

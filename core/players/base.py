@@ -57,6 +57,8 @@ class BasePlayer(Module):
             return True
         if filename.lower().split('.')[-1] in self._validExt:
             return True
+        if '://' in filename and filename.split('://')[0]+'://' in self._validExt:
+            return True
         return False
 
 
