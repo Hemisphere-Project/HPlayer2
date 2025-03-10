@@ -206,7 +206,7 @@ class FileManager(Module):
         if relative:    
             liste = relativeliste
         if filtered:
-            return [f for f in liste if self.hplayer.settings('filter') in f]
+            return [f for f in liste if self.hplayer.settings('filter').lower() in f.lower()]
         return liste 
 
 
