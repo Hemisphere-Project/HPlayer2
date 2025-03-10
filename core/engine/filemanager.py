@@ -198,15 +198,15 @@ class FileManager(Module):
         List of files in activeDir (cached)
         """
         liste = self.active_list.copy()
-        if relative:
-            c = self.currentDir()
-            relativeliste = []
-            for path in self.root_paths:
-                p = os.path.join(path,c)+'/'
-                relativeliste.extend([ l[len(p):] for l in liste if l.startswith(p)])
-            return relativeliste
+        c = self.currentDir()
+        relativeliste = []
+        for path in self.root_paths:
+            p = os.path.join(path,c)+'/'
+            relativeliste.extend([ l[len(p):] for l in liste if l.startswith(p)])
+        if relative:    
+            liste = relativeliste
         if filtered:
-            return [f for f in liste if f.includes(self.hplayer.settings('filter'))]
+            return [f for f in liste if self.hplayer.settings('filter') in f]
         return liste 
 
 
