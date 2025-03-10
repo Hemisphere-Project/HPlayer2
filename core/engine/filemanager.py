@@ -193,7 +193,7 @@ class FileManager(Module):
         return i
 
 
-    def currentList(self, relative=False):
+    def currentList(self, relative=False, filtered=False):
         """
         List of files in activeDir (cached)
         """
@@ -205,6 +205,8 @@ class FileManager(Module):
                 p = os.path.join(path,c)+'/'
                 relativeliste.extend([ l[len(p):] for l in liste if l.startswith(p)])
             return relativeliste
+        if filtered:
+            return [f for f in liste if f.includes(filtered)]
         return liste 
 
 

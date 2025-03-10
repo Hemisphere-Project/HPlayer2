@@ -550,3 +550,9 @@ class HPlayer2(EventEmitterX):
             if len(args) > 0:
                 doAP = int(args[0]) > 0
             self.settings.set('autoplay', doAP)
+            
+        @module.on('filter')
+        def filter(ev, *args):
+            print('filter', args)
+            if len(args) > 0:
+                self.settings.set('filter', args[0])

@@ -13,7 +13,8 @@ class Settings(Module):
         'mute':         False,
         'audioout':     'jack',
         'audiomode':    'stereo',
-        'pan':          [100,100]
+        'pan':          [100,100],
+        'filter':       ''
     }
 
     def __init__(self, hplayer, persistent=None):
