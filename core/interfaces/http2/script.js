@@ -128,6 +128,14 @@ $(document).ready(function() {
         $('#volume_range').val(msg['volume'])
         $('#volumeMain').html(msg['volume'])
 
+        // brightness
+        $('#brightness_range').val(msg['brightness'])
+        $('#brightnessMain').html(msg['brightness'])
+
+        // contrast
+        $('#contrast_range').val(msg['contrast'])
+        $('#contrastMain').html(msg['contrast'])
+
         $('#left_range').val(msg['pan'][0])
         $('#volumeLeft').html(msg['pan'][0])
 
@@ -356,6 +364,16 @@ $(document).ready(function() {
     $('#volume_range').on('input', event => {
         trigger('volume', $('#volume_range').val());
     });
+
+    // BRIGHTNESS
+    $('#brightness_range').on('input', event => {
+        trigger('brightness', $('#brightness_range').val());
+    })
+
+    // CONTRAST
+    $('#contrast_range').on('input', event => {
+        trigger('contrast', $('#contrast_range').val());
+    })
 
     // VOLUME LEFT
     $('#left_range').on('input', event => {

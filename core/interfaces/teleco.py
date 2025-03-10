@@ -161,8 +161,8 @@ class TelecoInterface (BaseInterface):
 
         elif self.activePage == PAGE_STATUS:
 
-            net = network.get_essid('wlan0')
-            if net: net += ' '+str(network.get_rssi('wlan0'))+'%'
+            net = network.get_essid('wint')
+            if net: net += ' '+str(network.get_rssi('wint'))+'%'
             elif network.get_ip('eth0') != '127.0.0.1': net = 'Ethernet'
             else:   net = 'NO-WIFI !'
             net = '  ^2P '+net
@@ -176,8 +176,8 @@ class TelecoInterface (BaseInterface):
             self.line(2, people)
             self.line(3, 'name: '+network.get_hostname())
 
-            ip = network.get_ip('wlan0')
-            if not network.get_essid('wlan0'):
+            ip = network.get_ip('wint')
+            if not network.get_essid('wint'):
                 ip = network.get_ip('eth0')
             self.line(4, 'ip: ' + ip)
             

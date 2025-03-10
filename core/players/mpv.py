@@ -9,6 +9,8 @@ class MpvPlayer(BasePlayer):
 
     _mpv_scale = 1          # % image scale
     _mpv_imagetime = 5      # diaporama transition time (s)
+    
+    _mpv_command = ['--idle=yes', '-v', '--no-osc', '--msg-level=ipc=v', '--quiet', '--fs','--keep-open' ,'--hr-seek=yes' ]
 
     def __init__(self, hplayer, name):
         super().__init__(hplayer, name)
@@ -82,10 +84,10 @@ class MpvPlayer(BasePlayer):
 
         # Socket IPC to process
         self._mpv_sock = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
-        for retry in range(10, 0, -1):
+        for retry in range(50, 0, -1):
             try:
                 self._mpv_sock.connect(self._mpv_socketpath)
-                self._mpv_sock.settimeout(0.5)
+                self._mpv_sock.settimeout(0.2)
                 self.log("connected to player backend")
                 self._mpv_sock_connected = True
                 self.update('isReady', True)
@@ -96,7 +98,7 @@ class MpvPlayer(BasePlayer):
                     print (self.nameP, "socket error:", e)
                     self.isRunning(False)
                 else:
-                    # print (self.nameP, "retrying socket connection..")
+                    print (self.nameP, "retrying socket connection..")
                     time.sleep(0.2)
 
         if self._mpv_sock_connected:
@@ -134,8 +136,7 @@ class MpvPlayer(BasePlayer):
                             pass
                         
                         if 'name' in mpvsays:
-                            if self.name == 'player2':
-                                print(mpvsays)
+                            # print(mpvsays)
                             
                             if mpvsays['name'] == 'idle':
                                 self.emit('idle')
@@ -184,14 +185,20 @@ class MpvPlayer(BasePlayer):
                             if 'name' not in mpvsays or mpvsays['name'] != 'time-pos':
                                 self.log("IPC event:", mpvsays)
 
-
+                        # print(self.status('media'))
                 # Timeout: retry
                 except socket.timeout:
                     # print('-', end ="")
                     if self.status('isPlaying'):
                         if not self.status('media').split('.')[-1].lower() in self._imageExt:
                             self.log('PLAYBACK LOCKED OUT', self._mpv_lockedout)
-                            self._mpv_send('{ "command": ["set_property", "pause", false] }')
+                            if self._mpv_lockedout == 0:
+                                self._mpv_send('{ "command": ["set_property", "pause", false] }')
+                            if self._mpv_lockedout == 1:
+                                print("CRASH RELOAD FILE", self.status('media'))
+                                self._mpv_send('{ "command": ["stop"] }')
+                                time.sleep(0.5)
+                                self._mpv_send('{"command": ["loadfile", "'+self.status('media')+'"]}')
                             self._mpv_lockedout += 1
                             if self._mpv_lockedout > 3:
                                 print("CRASH STOP")
@@ -241,13 +248,9 @@ class MpvPlayer(BasePlayer):
         # create subprocess
         script_path = os.path.dirname(os.path.realpath(__file__))
         
-        command = ['mpv', '--input-ipc-server=' + self._mpv_socketpath + '',
-                                '--idle=yes', '-v', '--no-osc', '--msg-level=ipc=v', '--quiet', '--fs','--keep-open'
-                                ,'--window-scale=' + str(self._mpv_scale)
-                                ,'--hr-seek=yes'
-                                # ,'--af=rubberband'
-                                #,'--force-window=yes'
-                                ]
+        command = ['mpv', '--input-ipc-server=' + self._mpv_socketpath + '' ,'--window-scale=' + str(self._mpv_scale) ] + self._mpv_command
+        
+        # self.log("starting mpv with", command)
 
         # image time (0 = still image)
         if self._mpv_imagetime > 0:
@@ -275,6 +278,12 @@ class MpvPlayer(BasePlayer):
         self._mpv_recvThread = threading.Thread(target=self._mpv_communicate)
         self._mpv_recvThread.start()
 
+        # Wait for socket to be connected
+        self.log("waiting for socket connection")
+        while not self._mpv_sock_connected:
+            time.sleep(0.1)
+            if not self.isRunning():
+                break
 
     #
     # Exit the player

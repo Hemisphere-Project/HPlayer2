@@ -6,10 +6,6 @@
 import sys
 from core.engine import hplayer
 
-profile = 'default'
-if len(sys.argv) > 1:
-    profile = sys.argv[1]
-
 # print ASCII art of HPLAYER2
 
 print("\
@@ -22,6 +18,15 @@ print("\
 ╚═╝  ╚═╝╚═╝     ╚══════╝╚═╝  ╚═╝   ╚═╝   ╚══════╝╚═╝  ╚═╝╚══════╝ \n\
 \n")
 
-print ("HPlayer2: loading "+profile+" profile...\n")
+profile = 'looper'
+if len(sys.argv) > 1:
+    profile = sys.argv[1]
 
 __import__("profiles."+profile)
+sys.exit(0)
+try:
+    print ("HPlayer2: loading "+profile+" profile...\n")
+    __import__("profiles."+profile)
+except ImportError:
+    print ("HPlayer2: profile not found\n")
+    sys.exit(1)

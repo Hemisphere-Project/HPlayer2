@@ -7,10 +7,10 @@ mido
 python-rtmidi
 paho-mqtt
 timecode
-pilmoji
 emoji~=1.6.3
-numpy
-opencv-python
+pilmoji
+# numpy
+# opencv-python
 stupidartnet
 watchdog
 pillow

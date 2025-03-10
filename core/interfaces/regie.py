@@ -50,6 +50,7 @@ class RegieInterface (BaseInterface):
         with ThreadedHTTPServer(self, self._port) as server:
             self._server = server
             self.stopped.wait()
+            self._server.stop()
 
         self._server = None
         
@@ -300,6 +301,7 @@ class ThreadedHTTPServer(object):
 
 
     def stop(self):
+        self.projectObserver.stop()
         #self.server.stop()
         pass
 
@@ -324,11 +326,18 @@ class ThreadedHTTPServer(object):
     def watcher(self):
     
         def onchange(e):
-            self.regieinterface.log('project updated ! pushing it...')
-            self.regieinterface.reload()
-            self.sendBuffer.put( ('data', self.projectData()) )
+            if e.event_type == 'modified':
+                self.regieinterface.log('project updated ! pushing it...')
+                self.regieinterface.reload()
+                self.sendBuffer.put( ('data', self.projectData()) )
 
-        handler = PatternMatchingEventHandler("*/project.json", None, False, True)
+        handler = PatternMatchingEventHandler(
+                            patterns=["*/project.json"],
+                            ignore_patterns=None,
+                            ignore_directories=False,
+                            case_sensitive=True
+                        )
+                        
         handler.on_any_event = onchange
         self.projectObserver = Observer()
         self.projectObserver.schedule(handler, os.path.dirname(self.regieinterface.projectPath()))

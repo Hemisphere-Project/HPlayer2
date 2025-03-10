@@ -58,6 +58,8 @@ class BasePlayer(Module):
             return True
         if filename.lower().split('.')[-1] in self._validExt:
             return True
+        if '://' in filename and filename.split('://')[0]+'://' in self._validExt:
+            return True
         return False
 
 
@@ -203,3 +205,9 @@ class BasePlayer(Module):
 
     def _applyOneLoop(self, oneloop):
         self.log("one loop", oneloop)
+
+    def _applyBrightness(self, brightness):
+        self.log("brightness set to", brightness)
+        
+    def _applyContrast(self, contrast):
+        self.log("contrast set to", contrast)

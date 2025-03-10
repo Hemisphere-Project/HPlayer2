@@ -94,7 +94,12 @@ def file_change(event):
 		refreshTimer = Timer(3.0, refresh_filelist)
 		refreshTimer.start()
 
-my_event_handler = PatternMatchingEventHandler("*", "", False, True)
+my_event_handler = PatternMatchingEventHandler(
+                            patterns=["*"],
+                            ignore_patterns=None,
+                            ignore_directories=False,
+                            case_sensitive=True
+                        )
 my_event_handler.on_any_event = file_change
 my_observer = Observer()
 my_observer.schedule(my_event_handler, base_path, recursive=True)

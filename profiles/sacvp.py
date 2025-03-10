@@ -2,7 +2,7 @@ from core.engine.hplayer import HPlayer2
 from core.engine.playlist import Playlist
 from core.engine import network
 
-import os, sys, types, platform
+import os
 import json, glob
 
 
@@ -19,12 +19,6 @@ base_path = ['/data/usb', projectfolder, devicefolder]
 # INIT HPLAYER
 hplayer = HPlayer2(base_path, "/data/hplayer2-"+profilename+".cfg")
 
-# PLAYERS
-video = hplayer.addPlayer('mpv', 'video')
-
-# LOAD ROOT FOLDER AS PLAYLIST
-hplayer.playlist.load( hplayer.files.currentList() )
-
 # ATTACHED ESP 
 myESP = 0
 try:
@@ -35,22 +29,48 @@ try:
             hplayer.log('attached to ESP', myESP)
 except: pass
 
+# ATTACHED ETENDARD: get ETENDARD from etendard.json
+myETEND = None
+try:
+    with open(os.path.join(projectfolder, 'etendard.json')) as json_file:
+        data = json.load(json_file)
+        if devicename in data:
+            myETEND = data[devicename]
+            hplayer.log('attached to ETENDARD', myETEND)
+except: pass
+
+# PLAYERS
+if myETEND:
+    video = hplayer.addPlayer('videonet', 'video')
+    video.setSize(*myETEND['size'], myETEND['snake'], myETEND['vflip'], myETEND['hflip'])
+    video.setIP(myETEND['ip'])
+    hplayer.log('mode VIDEO4ARTNET')
+    # Ethernet Zyre
+    hplayer.addInterface('zyre', 'wint')
+else:
+    video = hplayer.addPlayer('mpv', 'video')
+    stream = hplayer.addPlayer('mpvstream', 'stream')
+    video.imagetime(0)
+    hplayer.log('mode HDMI')
+    # Any Zyre
+    hplayer.addInterface('zyre')
+    
+
 # INTERFACES
 hplayer.addInterface('keyboard')
-hplayer.addInterface('zyre')
 hplayer.addInterface('osc', 1222, 3737)
-hplayer.addInterface('mqtt', '10.0.0.1')
+hplayer.addInterface('mqtt', '10.0.0.2')
 hplayer.addInterface('http2', 8080)
 hplayer.addInterface('teleco')
 hplayer.addInterface('serial', '^M5', 10)
 hplayer.addInterface('regie', 9111, projectfolder)
 gpio = hplayer.addInterface('gpio', [16, 20, 21], 1, 0, 'PUP') # service tek debounce @ 1 ??
-if myESP:
-    hplayer.addInterface('btserial', 'k32-'+str(myESP))
+# if myESP:
+#     hplayer.addInterface('btserial', 'k32-'+str(myESP))
 
 # Overlay
-if hplayer.isRPi():
-    video.addOverlay('rpifade')
+# if hplayer.isRPi():
+#     video.addOverlay('rpifade')
 
 #
 # SYNC PLAY
@@ -237,7 +257,9 @@ def espRelay(ev, *args):
 # File name -> Trigger ESP
 @hplayer.on('*.playing')
 def espPlay(ev, *args):
+    if len(args) == 0: return
     last = args[0].split('.')[0].split('_')[-1]
+    if len(last) == 0: return
     if last[0] == 'L' and len(last) > 1:
         mem = last[1:]
         if mem == 'x':             # STOP leds
@@ -307,7 +329,7 @@ def play1(ev, *args):
 #
 
 # default volume
-@video.on('ready')
+@hplayer.on('app-run')
 def init(ev, *args):
     hplayer.settings.set('volume', 100)
     hplayer.settings.set('loop', -1)

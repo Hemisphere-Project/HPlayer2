@@ -24,11 +24,12 @@ class FileManager(Module):
         # Defered update (file change might trigger multiple events)
         @self.on('file-changed')                # file changed on disk -> trigger full refresh
         def deferredUpdate(ev, *args):
-            print(args[0].event_type)
-            if self.refreshTimer:
-                self.refreshTimer.cancel()
-            self.refreshTimer = Timer(.5, self.refresh)
-            self.refreshTimer.start()
+            if args[0].event_type == 'modified':
+                print(args[0].event_type)
+                if self.refreshTimer:
+                    self.refreshTimer.cancel()
+                self.refreshTimer = Timer(.5, self.refresh)
+                self.refreshTimer.start()
 
         # Instant update: new player means new authorized extension -> trigger list refresh
         @self.parent.on('player-added')        # new player means new authorized extension -> trigger list refresh
@@ -69,7 +70,7 @@ class FileManager(Module):
         def onChange(e):
             if e.src_path.endswith('.tmp'): return
             if e.src_path.endswith('project.json'): return
-            if e.event_type == 'opened': return
+            if e.event_type != 'modified': return
             self.emit('file-changed', e)
 
         if not isinstance(path, list): 
@@ -85,7 +86,12 @@ class FileManager(Module):
             else:
                 self.log("Adding "+p+" as root paths")
             self.root_paths.append(p)
-            handler = PatternMatchingEventHandler("*", None, False, True)
+            handler = PatternMatchingEventHandler(
+                            patterns=["*"],
+                            ignore_patterns=None,
+                            ignore_directories=False,
+                            case_sensitive=True
+                        )
             handler.on_any_event = onChange
             my_observer = Observer()
             my_observer.schedule(handler, p, recursive=True)

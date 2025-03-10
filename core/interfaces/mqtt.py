@@ -70,6 +70,7 @@ class MqttInterface (BaseInterface):
                     if not self.isRunning(): 
                         return
 
-        self.client.loop_start()        
+        self.client.loop_start()     
         self.stopped.wait()
-        self.client.loop_stop(force=True)
+        self.client.disconnect()
+        self.client.loop_stop()
