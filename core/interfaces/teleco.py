@@ -163,7 +163,7 @@ class TelecoInterface (BaseInterface):
 
         elif self.activePage == PAGE_STATUS:
             
-            self.line(0, '^1 STATUS')
+            self.line(0, '^1 STATUS - '+ network.get_hostname())
             if self.statusPage == 0:
                 ip = ''
                 net = network.get_essid('wlan0')
@@ -173,7 +173,8 @@ class TelecoInterface (BaseInterface):
                 else:   net = 'NO-WIFI !'
                 
                 if network.get_ip('eth0') != '127.0.0.1':
-                    net += ' / Ethernet'
+                    if ip: net += ' +'
+                    net += 'Ethernet'
                     if ip: ip += ' / '
                     ip += network.get_ip('eth0')
                 
@@ -184,13 +185,14 @@ class TelecoInterface (BaseInterface):
                 else: people = '                   '
 
                 self.line(1, net)
-                self.line(2, people)
-                self.line(3, 'name: '+network.get_hostname())
-                self.line(4, 'ip: '+ip)
-                # self.line(5, 'filter '+self.hplayer.settings('filter'))
+                self.line(2, 'ip: '+ip)
+                self.line(3, people)
+                self.line(4, 'filter: '+self.hplayer.settings('filter'))
                 
             elif self.statusPage == 1:
-                self.line(1, 'filter '+self.hplayer.settings('filter'))
+                # TODO: display more info
+                pass
+            
         
         elif self.activePage == PAGE_PLAYBACK:
 
