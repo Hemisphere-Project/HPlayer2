@@ -206,7 +206,7 @@ class FileManager(Module):
                 relativeliste.extend([ l[len(p):] for l in liste if l.startswith(p)])
             return relativeliste
         if filtered:
-            return [f for f in liste if f.includes(filtered)]
+            return [f for f in liste if f.includes(self.hplayer.settings('filter'))]
         return liste 
 
 
