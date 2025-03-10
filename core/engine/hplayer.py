@@ -556,3 +556,5 @@ class HPlayer2(EventEmitterX):
             print('filter', args)
             if len(args) > 0:
                 self.settings.set('filter', args[0])
+            else:
+                self.settings.set('filter', '')
