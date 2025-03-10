@@ -160,27 +160,31 @@ class TelecoInterface (BaseInterface):
             self.line(4, '       ')
 
         elif self.activePage == PAGE_STATUS:
-
+            
+            ip = ''
             net = network.get_essid('wint')
-            if net: net += ' '+str(network.get_rssi('wint'))+'%'
-            elif network.get_ip('eth0') != '127.0.0.1': net = 'Ethernet'
+            if net: 
+                net += ' '+str(network.get_rssi('wint'))+'%'
+                ip += network.get_ip('wint')
             else:   net = 'NO-WIFI !'
+            
+            if network.get_ip('eth0') != '127.0.0.1':
+                net += ' +Ethernet'
+                if ip: ip += ' '
+                ip += network.get_ip('eth0')
+            
             net = '  ^2P '+net
 
             z = self.hplayer.interface('zyre')
             if z: people = '  ^7C '+str(z.activeCount())
             else: people = '                   '
 
-            self.line(0, '^1 STATUS')
+            self.line(0, '^1 STATUS - '+network.get_hostname())
             self.line(1, net)
+            self.line(3, ip)
             self.line(2, people)
-            self.line(3, 'name: '+network.get_hostname())
-
-            ip = network.get_ip('wint')
-            if not network.get_essid('wint'):
-                ip = network.get_ip('eth0')
-            self.line(4, 'ip: ' + ip)
-            
+            self.line(4, 'filter '+self.hplayer.settings('filter'))
+        
         elif self.activePage == PAGE_PLAYBACK:
 
             player = self.hplayer.activePlayer()
@@ -249,12 +253,12 @@ class TelecoInterface (BaseInterface):
     def scrollDown(self):
         if self.microIndex < min(3, len(self.hplayer.files.currentList())-1):
             self.microIndex += 1
-        elif self.microOffset < len(self.hplayer.files.currentList())-4:
+        elif self.microOffset < len(self.hplayer.files.currentList(filtered=True))-4:
             self.microOffset += 1
         else:
             self.microIndex  = 0
             self.microOffset = 0
-        self.microList = self.hplayer.files.currentList(True)[self.microOffset:][:4]
+        self.microList = self.hplayer.files.currentList(True, filtered=True)[self.microOffset:][:4]
 
 
     def bind(self):
@@ -262,7 +266,7 @@ class TelecoInterface (BaseInterface):
         @self.on('ready')
         @self.hplayer.files.on('filelist-updated')
         def updatelist(ev, *args):
-            microL = self.hplayer.files.currentList(True)[self.microOffset:][:4]
+            microL = self.hplayer.files.currentList(True, filtered=True)[self.microOffset:][:4]
             if self.microList != microL:
                 self.microOffset = 0
                 self.microIndex = 0
@@ -317,7 +321,7 @@ class TelecoInterface (BaseInterface):
             #         self.hplayer.files.selectDir(self.dirPlayback)
             #         self.microOffset = max(0, self.hplayer.playlist.index()-3)
             #         self.microIndex = self.hplayer.playlist.index() - self.microOffset 
-            #         self.microList = self.hplayer.files.currentList(True)[self.microOffset:][:4]
+            #         self.microList = self.hplayer.files.currentList(True, filtered=True)[self.microOffset:][:4]
             #         # listchanged()
 
 
@@ -385,7 +389,7 @@ class TelecoInterface (BaseInterface):
                     self.emit('play')
 
             elif self.activePage == PAGE_MEDIA:
-                self.emit('play', self.hplayer.files.currentList(), self.microOffset+self.microIndex)
+                self.emit('play', self.hplayer.files.currentList(filtered=True), self.microOffset+self.microIndex)
                 self.dirPlayback = self.hplayer.files.currentDir()
                 self.emit('unfade')
                 self.isFaded = 0

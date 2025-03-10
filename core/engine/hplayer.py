@@ -639,3 +639,9 @@ class HPlayer2(Module):
                 self.playlist.play()
             elif not args[0] and self.activePlayer().isPlaying():
                 self.activePlayer().stop()
+            
+        @module.on('filter')
+        def filter(ev, *args):
+            print('filter', args)
+            if len(args) > 0:
+                self.settings.set('filter', args[0])

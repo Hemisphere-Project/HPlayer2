@@ -17,7 +17,8 @@ class Settings(Module):
         'pan':          [100,100],
         'playlist':     None, 
         'brightness':   100,
-        'contrast':     50
+        'contrast':     50,
+        'filter':       ''
     }
 
     def __init__(self, hplayer, persistent=None):
