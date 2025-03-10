@@ -6,7 +6,6 @@ class MpvstreamPlayer(MpvPlayer):
         
         self._mpv_command += [  '--rtsp-transport=udp'
                                 ,'--no-cache'
-                                ,'--untimed'
                                 ,'--no-correct-pts'
                                 ,'--framedrop=vo'
                                 ,'--profile=low-latency'
