@@ -35,6 +35,8 @@ class TelecoInterface (BaseInterface):
         self.microIndex = 0
         self.microOffset = 0
         self.microList = []
+        
+        self.statusPage = 0
 
         self._buffer = [None]*self.nLines        
         self._hardClear = True
@@ -161,29 +163,34 @@ class TelecoInterface (BaseInterface):
 
         elif self.activePage == PAGE_STATUS:
             
-            ip = ''
-            net = network.get_essid('wint')
-            if net: 
-                net += ' '+str(network.get_rssi('wint'))+'%'
-                ip += network.get_ip('wint')
-            else:   net = 'NO-WIFI !'
-            
-            if network.get_ip('eth0') != '127.0.0.1':
-                net += ' +Ethernet'
-                if ip: ip += ' '
-                ip += network.get_ip('eth0')
-            
-            net = '  ^2P '+net
+            self.line(0, '^1 STATUS')
+            if self.statusPage == 0:
+                ip = ''
+                net = network.get_essid('wlan0')
+                if net: 
+                    net += ' '+str(network.get_rssi('wlan0'))+'%'
+                    ip += network.get_ip('wlan0')
+                else:   net = 'NO-WIFI !'
+                
+                if network.get_ip('eth0') != '127.0.0.1':
+                    net += ' / Ethernet'
+                    if ip: ip += ' / '
+                    ip += network.get_ip('eth0')
+                
+                net = '  ^2P '+net
 
-            z = self.hplayer.interface('zyre')
-            if z: people = '  ^7C '+str(z.activeCount())
-            else: people = '                   '
+                z = self.hplayer.interface('zyre')
+                if z: people = '  ^7C '+str(z.activeCount())
+                else: people = '                   '
 
-            self.line(0, '^1 STATUS - '+network.get_hostname())
-            self.line(1, net)
-            self.line(3, ip)
-            self.line(2, people)
-            self.line(4, 'filter '+self.hplayer.settings('filter'))
+                self.line(1, net)
+                self.line(2, people)
+                self.line(3, 'name: '+network.get_hostname())
+                self.line(4, 'ip: '+ip)
+                # self.line(5, 'filter '+self.hplayer.settings('filter'))
+                
+            elif self.statusPage == 1:
+                self.line(1, 'filter '+self.hplayer.settings('filter'))
         
         elif self.activePage == PAGE_PLAYBACK:
 
@@ -342,6 +349,8 @@ class TelecoInterface (BaseInterface):
         def up(ev):
             if self.activePage == PAGE_MEDIA:
                 self.scrollUp()
+            if self.activePage == PAGE_STATUS:
+                self.statusPage = (self.statusPage-1)%2
 
         
         @self.on('UP-up')
@@ -364,6 +373,8 @@ class TelecoInterface (BaseInterface):
         def down(ev):
             if self.activePage == PAGE_MEDIA:
                 self.scrollDown()
+            if self.activePage == PAGE_STATUS:
+                self.statusPage = (self.statusPage+1)%2
 
         
         @self.on('DOWN-up')
