@@ -1,0 +1,9 @@
+sudo dd if=RastaOS-6.14.6-Theoriz25.img of=/dev/sda bs=4M status=progress conv=sync && sync
+
+sudo parted /dev/sda resizepart 3 100%; sudo resize2fs /dev/sda3
+
+NAME=B; 
+
+sudo parted /dev/sda resizepart 3 100%; sudo resize2fs /dev/sda3; sed -i "s/playerA/player$NAME/g" /media/mgr/BOOT/starter.txt; sudo cp /home/mgr/Videos/export\ rpi/film/rotated/"$NAME"_V1.mp4 /media/mgr/data/media/; sudo cp /home/mgr/Videos/export\ rpi/idle/rotated/0_idle\ 1\ "$NAME"\ _\ V1.mp4 /media/mgr/data/media/; sudo cp /home/mgr/Videos/export\ rpi/mire1/rotated/1_mire"$NAME"_V1.mp4 /media/mgr/data/media/; mv /media/mgr/BOOT/wifi/eth0-sync-AP.nmconnection /media/mgr/BOOT/wifi/_disabled; cp /media/mgr/BOOT/wifi/_disabled/eth0-sync-STA.nmconnection /media/mgr/BOOT/wifi/; sync
+
+
