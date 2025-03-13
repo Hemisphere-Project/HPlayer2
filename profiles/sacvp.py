@@ -332,7 +332,7 @@ def play1(ev, *args):
 @hplayer.on('app-run')
 def init(ev, *args):
     hplayer.settings.set('volume', 100)
-    hplayer.settings.set('loop', -1)
+    hplayer.settings.set('loop', 1)
 
 
 # file = hplayer.imgen.txt2img("004F006B00200073007500700065007200202764FE0F", "UCS2")
