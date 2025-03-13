@@ -59,10 +59,10 @@ else:
 # INTERFACES
 hplayer.addInterface('keyboard')
 hplayer.addInterface('osc', 1222, 3737)
-hplayer.addInterface('mqtt', '10.0.0.2')
+# hplayer.addInterface('mqtt', '10.0.0.2')
 hplayer.addInterface('http2', 8080)
 hplayer.addInterface('teleco')
-hplayer.addInterface('serial', '^M5', 10)
+# hplayer.addInterface('serial', '^M5', 10)
 hplayer.addInterface('regie', 9111, projectfolder)
 gpio = hplayer.addInterface('gpio', [16, 20, 21], 1, 0, 'PUP') # service tek debounce @ 1 ??
 # if myESP:
