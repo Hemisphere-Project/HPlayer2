@@ -255,7 +255,7 @@ def espRelay(ev, *args):
 
 
 # File name -> Trigger ESP
-@hplayer.on('*.playing')
+#@hplayer.on('*.playing')
 def espPlay(ev, *args):
     if len(args) == 0: return
     last = args[0].split('.')[0].split('_')[-1]
@@ -269,8 +269,8 @@ def espPlay(ev, *args):
 
 
 # Stop -> Blackout ESP
-@hplayer.on('*.stopped')
-@hplayer.on('*.paused')
+#@hplayer.on('*.stopped')
+#@hplayer.on('*.paused')
 def espStop(ev, *args):
     global lastEspEvent
     if lastEspEvent == 'sacvp.esp':
