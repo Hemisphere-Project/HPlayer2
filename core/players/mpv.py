@@ -84,7 +84,7 @@ class MpvPlayer(BasePlayer):
 
         # Socket IPC to process
         self._mpv_sock = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
-        for retry in range(10, 0, -1):
+        for retry in range(50, 0, -1):
             try:
                 self._mpv_sock.connect(self._mpv_socketpath)
                 self._mpv_sock.settimeout(0.2)
@@ -98,7 +98,7 @@ class MpvPlayer(BasePlayer):
                     print (self.nameP, "socket error:", e)
                     self.isRunning(False)
                 else:
-                    # print (self.nameP, "retrying socket connection..")
+                    print (self.nameP, "retrying socket connection..")
                     time.sleep(0.2)
 
         if self._mpv_sock_connected:
@@ -125,6 +125,8 @@ class MpvPlayer(BasePlayer):
                     self.doLog['cmds'] = False
 
                     # self.log("IPC says:", msg.rstrip())
+                    # if self.name == 'player0':
+                    #     self.log("IPC says:", msg.rstrip())
                     
                     # Message received
                     for event in msg.rstrip().split( b"\n" ):
@@ -136,6 +138,8 @@ class MpvPlayer(BasePlayer):
                         
                         if 'name' in mpvsays:
                             # print(mpvsays)
+                            # if self.name == 'player0':
+                            #     print(mpvsays)
                             
                             if mpvsays['name'] == 'idle':
                                 self.emit('idle')
@@ -155,15 +159,16 @@ class MpvPlayer(BasePlayer):
                                     # print('STOP')
                                     self.emit('stopped', self.status('media'))    # DO NOT emit STOPPED HERE -> STOP SHOULD BE TRIGGERED AFTER MEDIA-END
                                     # self.log('stop')  # also Triggered with oneloop
+                                    pass
                                     
                                 self._mpv_lockedout = 0
 
                             elif mpvsays['name'] == 'time-pos':
-                                if mpvsays['data']:
+                                if 'data' in mpvsays and mpvsays['data']:
                                     self.update('time', round(float(mpvsays['data']),2))
 
                             elif mpvsays['name'] == 'duration':
-                                if mpvsays['data']:
+                                if 'data' in mpvsays and mpvsays['data']:
                                     self.update('duration', round(float(mpvsays['data']),2))
 
                             elif mpvsays['name'] == 'eof-reached' and mpvsays['data'] == True:
@@ -188,7 +193,7 @@ class MpvPlayer(BasePlayer):
                 except socket.timeout:
                     # print('-', end ="")
                     if self.status('isPlaying'):
-                        if not self.status('media').split('.')[-1] in self._imageExt:
+                        if not self.status('media').split('.')[-1].lower() in self._imageExt:
                             self.log('PLAYBACK LOCKED OUT', self._mpv_lockedout)
                             if self._mpv_lockedout == 0:
                                 self._mpv_send('{ "command": ["set_property", "pause", false] }')

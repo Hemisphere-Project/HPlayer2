@@ -53,6 +53,19 @@ class HPlayer2(EventEmitterX):
         self.settings.load(settingspath)
         self.files.add(basepath)
 
+        # EMPTY AUDIO FILE
+        # self.emptyAudioFile = '/tmp/silent.wav'
+        # import wave
+        # duration_seconds = 1
+        # sample_rate = 44100  # Standard CD quality
+        # num_channels = 2     # Mono
+        # silent_frames = b'\x00\x00' * sample_rate * num_channels * 1 # 1 second
+        # with wave.open(self.emptyAudioFile, 'wb') as wav_file:
+        #     wav_file.setnchannels(num_channels)
+        #     wav_file.setsampwidth(2)                # 16-bit audio (2 bytes per sample)
+        #     wav_file.setframerate(sample_rate)
+        #     wav_file.writeframes(silent_frames)
+
 
     def log(self, *argv):
         print(self.nameP, *argv)

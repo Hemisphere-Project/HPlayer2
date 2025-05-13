@@ -74,3 +74,11 @@ class SerialInterface (BaseInterface):
                     self.log("broken link..")
                     self.serial = None
                     time.sleep(0.5)
+                    
+    # Serial SEND
+    def send(self, msg):
+        if not self.serial: 
+            self.log("no serial connection")
+            return
+        self.serial.write( (msg+'\n').encode() )
+        self.log("send >", msg)

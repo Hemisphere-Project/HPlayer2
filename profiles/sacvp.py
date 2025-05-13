@@ -23,15 +23,31 @@ hplayer = HPlayer2(base_path, '/data/hplayer2-sacvp.json')
 video = hplayer.addPlayer('mpv', 'video')
 stream = hplayer.addPlayer('mpvstream', 'stream')
 
+# Not working...
+# SAMPLER (play 0_* media from the same directory)
+# sampler = hplayer.addSampler('mpv', 'jp', 1)
+# lastSamplerMedia = None
+# @hplayer.on('video.playing')
+# def samplerPlay(ev, *args):
+#     global lastSamplerMedia
+#     directory = os.path.dirname(args[0])
+#     mediaList = hplayer.files.listFiles(directory + '/0_*')
+#     media = mediaList[0] if len(mediaList) > 0 else None
+#     if lastSamplerMedia != media:
+#         if not media: sampler.stop()
+#         else: sampler.play(media, oneloop=True, index=0)
+#         lastSamplerMedia = media
+        
+
 # ATTACHED ESP 
 myESP = 0
-try:
-    with open(os.path.join(projectfolder, 'esp.json')) as json_file:
-        data = json.load(json_file)
-        if devicename in data:
-            myESP = data[devicename]
-            hplayer.log('attached to ESP', myESP)
-except: pass
+# try:
+#     with open(os.path.join(projectfolder, 'esp.json')) as json_file:
+#         data = json.load(json_file)
+#         if devicename in data:
+#             myESP = data[devicename]
+#             hplayer.log('attached to ESP', myESP)
+# except: pass
 
 # INTERFACES
 hplayer.addInterface('keyboard')
@@ -49,8 +65,6 @@ if myESP:
 # Overlay
 if hplayer.isRPi():
     video.addOverlay('rpifade')
-
-
 
 #
 # SYNC PLAY
@@ -204,7 +218,7 @@ def keyboard(ev, *args):
 
 # ESP -> MQTT / BT
 lastEspEvent = 'sacvp.esp'  # save last event
-#@hplayer.on('*.esp')
+@hplayer.on('*.esp')
 def espRelay(ev, *args):
     if myESP:
         global lastEspEvent
@@ -214,7 +228,7 @@ def espRelay(ev, *args):
 
 
 # File name -> Trigger ESP
-#@hplayer.on('*.playing')
+@hplayer.on('*.playing')
 def espPlay(ev, *args):
     last = args[0].split('.')[0].split('_')[-1]
     if last[0] == 'L' and len(last) > 1:
@@ -226,8 +240,8 @@ def espPlay(ev, *args):
 
 
 # Stop -> Blackout ESP
-#@hplayer.on('*.stopped')
-#@hplayer.on('*.paused')
+@hplayer.on('*.stopped')
+@hplayer.on('*.paused')
 def espStop(ev, *args):
     global lastEspEvent
     if lastEspEvent == 'sacvp.esp':
@@ -239,7 +253,7 @@ def espStop(ev, *args):
 def init(ev, *args):
     hplayer.settings.set('volume', 100)
     hplayer.settings.set('loop', 1)
-
+   
 
 # file = hplayer.imgen.txt2img("004F006B00200073007500700065007200202764FE0F", "UCS2")
 # hplayer.playlist.play(file)

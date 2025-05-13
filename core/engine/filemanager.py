@@ -228,6 +228,10 @@ class FileManager(Module):
         Create recursive list of files based on source (can be files, folders, ...)
         """
         liste = []
+        
+        if not entries:
+            return liste
+        
         if not isinstance(entries, (list,)):
             entries = [entries]
 
