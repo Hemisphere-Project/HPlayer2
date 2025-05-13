@@ -24,6 +24,9 @@ if [ -z "$POETRY" ]; then
     exit 1
 fi
 
-# install dependencies
-$POETRY run python "$DIR/launcher.py" "$profile" 
+# run using poetry
+# $POETRY run python "$DIR/launcher.py" "$profile" 
 
+# direct launch using .venv made by poetry
+source .venv/bin/activate
+python "$DIR/launcher.py" "$profile" 

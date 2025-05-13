@@ -40,6 +40,7 @@ try:
 except: pass
 
 # PLAYERS
+# ETENDARD
 if myETEND:
     video = hplayer.addPlayer('videonet', 'video')
     video.setSize(*myETEND['size'], myETEND['snake'], myETEND['vflip'], myETEND['hflip'])
@@ -47,13 +48,32 @@ if myETEND:
     hplayer.log('mode VIDEO4ARTNET')
     # Ethernet Zyre
     hplayer.addInterface('zyre', 'wint')
+
+# HDMI
 else:
     video = hplayer.addPlayer('mpv', 'video')
-    stream = hplayer.addPlayer('mpvstream', 'stream')
     video.imagetime(0)
+    stream = hplayer.addPlayer('mpvstream', 'stream')
     hplayer.log('mode HDMI')
+
     # Any Zyre
     hplayer.addInterface('zyre')
+    
+    # Sampler (play 0_* media from the same directory)
+    sampler = hplayer.addSampler('mpv', 'jp', 1)
+    lastSamplerMedia = None
+    @hplayer.on('video.playing')
+    def samplerPlay(ev, *args):
+        global lastSamplerMedia
+        directory = os.path.dirname(args[0])
+        mediaList = hplayer.files.listFiles(directory + '/0_*')
+        media = mediaList[0] if len(mediaList) > 0 else None
+        if lastSamplerMedia != media:
+            if not media: sampler.stop()
+            else: sampler.play(media, oneloop=True, index=0)
+            lastSamplerMedia = media
+    
+    
     
 
 # INTERFACES
