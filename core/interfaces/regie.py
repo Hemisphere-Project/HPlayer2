@@ -180,7 +180,7 @@ class ThreadedHTTPServer(object):
 
         app = Flask(__name__, template_folder=www_path)
         app.config['SECRET_KEY'] = 'secret!'
-        socketio = SocketIO(app, cors_allowed_origins="*")
+        socketio = SocketIO(app, cors_allowed_origins="*", max_http_buffer_size=100_000_000)
 
 
         #
@@ -251,6 +251,7 @@ class ThreadedHTTPServer(object):
 
         @socketio.on('save')
         def save(data):
+            print("SAAAAVE")
             try:
                 json.loads(data)
                 with open( os.path.join(self.regieinterface._datapath, 'project.json'), 'w') as file:
