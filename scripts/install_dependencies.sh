@@ -25,6 +25,7 @@ if [[ $(command -v apt) ]]; then
     # hplayer2 dependencies
     apt install python3 rsync libdrm-dev libgbm-dev libgles-dev libegl-dev libegl1-mesa-dev libgles2-mesa-dev -y
     apt install libffi-dev libjack-dev libjpeg-dev libtool autotools-dev automake libopenblas0 cython3 python3-opencv -y
+    apt install libzmq3-dev -y
 
     # RPi
     if [[ $(uname -m) = armv* ]]; then
@@ -45,9 +46,9 @@ elif [[ $(command -v pacman) ]]; then
     pacman -S pkg-config python cython liblo libxcrypt ttf-dejavu rsync python-pipenv mesa --noconfirm --needed
 
     # Python (with overwrites)
-    pacman -S python-flask-socketio --overwrite *flask_socketio/* --overwrite *lask_SocketIO* --overwrite *socketio* --overwrite *bidict* --overwrite *engineio* --overwrite *flask* --overwrite *blinker* --overwrite *click* --overwrite *jinja2* --overwrite *itsdangerous* --overwrite *werkzeug* --overwrite *markupsafe* --overwrite *six* --noconfirm --needed    
-    pacman -S python-netifaces --overwrite *netifaces* --noconfirm --needed
-    pacman -S python-wheel --noconfirm --needed
+    # pacman -S python-flask-socketio --overwrite *flask_socketio/* --overwrite *lask_SocketIO* --overwrite *socketio* --overwrite *bidict* --overwrite *engineio* --overwrite *flask* --overwrite *blinker* --overwrite *click* --overwrite *jinja2* --overwrite *itsdangerous* --overwrite *werkzeug* --overwrite *markupsafe* --overwrite *six* --noconfirm --needed    
+    # pacman -S python-netifaces --overwrite *netifaces* --noconfirm --needed
+    # pacman -S python-wheel --noconfirm --needed
     
     
     # RPi
@@ -74,7 +75,7 @@ fi
 # git clone https://github.com/zeromq/libzmq.git --depth=1 && cd libzmq
 # ./autogen.sh && ./configure && make check -j4
 # make install && ldconfig
-apt install libzmq3-dev -y
+
 
 # CZMQ
 cd "$(dirname "$(readlink -f "$0")")"

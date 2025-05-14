@@ -1,4 +1,3 @@
-
 #!/bin/bash
 
 # exit when any command fails
@@ -13,15 +12,17 @@ rw
 chmod -R 777 /tmp
 date -s "$(curl -s --head http://google.com | grep ^Date: | sed 's/Date: //g')"
 
-# disable warnings OSD
-sed -i '/^disable_splash=1/a avoid_warnings=1    # Hide Lightning Bolt (low voltage) and Temperature warnings' /boot/config.txt
+cd /opt/HPlayer2/ 
+git stash
+git fetch 
+git checkout sacvp-kernel4-2025 
+git pull 
 
-# systemctl stop hplayer2@sacvp
-# cd /opt/HPlayer2
-# git stash
-# git pull
+cd /opt/RPi-Regie 
+git stash
+git pull 
 
-echo '04-lightning' >> /boot/VERSION
+echo '06-kernel4-branch' >> /boot/VERSION
 echo "SUCCESS !" 
 cat /etc/hostname
-# reboot
+reboot
