@@ -23,6 +23,21 @@ hplayer = HPlayer2(base_path, '/data/hplayer2-sacvp.json')
 video = hplayer.addPlayer('mpv', 'video')
 stream = hplayer.addPlayer('mpvstream', 'stream')
 
+# SAMPLER (play 0_* media from the same directory)
+sampler = hplayer.addSampler('mpv', 'jp', 1)
+lastSamplerMedia = None
+@hplayer.on('video.playing')
+def samplerPlay(ev, *args):
+    global lastSamplerMedia
+    directory = os.path.dirname(args[0])
+    mediaList = hplayer.files.listFiles(directory + '/0_*')
+    media = mediaList[0] if len(mediaList) > 0 else None
+    if lastSamplerMedia != media:
+        if not media: sampler.stop()
+        else: sampler.play(media, oneloop=True, index=0)
+        lastSamplerMedia = media
+        
+
 # ATTACHED ESP 
 myESP = 0
 # try:
@@ -49,8 +64,6 @@ if myESP:
 # Overlay
 if hplayer.isRPi():
     video.addOverlay('rpifade')
-
-
 
 #
 # SYNC PLAY

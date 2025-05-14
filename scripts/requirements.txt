@@ -9,3 +9,4 @@ python-rtmidi
 paho-mqtt
 timecode
 pilmoji
+just-playback
