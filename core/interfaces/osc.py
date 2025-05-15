@@ -16,12 +16,16 @@ def oscdump(address, *args):
 
 class OscInterface(BaseInterface):
 
-    def __init__(self, hplayer, in_port, out_port=0):
+    def __init__(self, hplayer, in_port, out_port=0, hostOut=None):
         super(OscInterface, self).__init__(hplayer, "OSC")
 
         self._portIn = in_port
         self._portOut = out_port if out_port > 0 else in_port
-        self.hostOut = network.get_broadcast()
+        
+        if not hostOut:
+            self.hostOut = network.get_broadcast()
+        else:
+            self.hostOut = hostOut
 
         self.burstCounter = random.randint(1, 10000)
         self.ethMac = network.get_ethmac()

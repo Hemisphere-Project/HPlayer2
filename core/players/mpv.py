@@ -10,7 +10,9 @@ class MpvPlayer(BasePlayer):
     _mpv_scale = 1          # % image scale
     _mpv_imagetime = 5      # diaporama transition time (s)
     
-    _mpv_command = ['--idle=yes', '-v', '--no-osc', '--msg-level=ipc=v', '--quiet', '--fs','--keep-open' ,'--hr-seek=yes', '--ao=alsa' ]
+    _mpv_command = ['--idle=yes', '-v', '--no-osc', '--msg-level=ipc=v', '--quiet', '--fs',
+                    '--keep-open' ,'--hr-seek=yes', '--ao=alsa', '--no-terminal', '--no-config', '--profile=low-latency',
+                    '--log-file=/tmp/mpv.log']
 
     def __init__(self, hplayer, name):
         super().__init__(hplayer, name)

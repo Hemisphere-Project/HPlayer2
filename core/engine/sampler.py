@@ -147,7 +147,7 @@ class Sampler(Module):
 
         # use specific player
         elif index < len(self.players()):
-            print('play', media, 'on', index)
+            # print('play', media, 'on', index)
             self.players()[index].play(_media)
             self.players()[index]._applyOneLoop(oneloop)
             self._usedHistory = [x for x in self._usedHistory if x != self.players()[index].name]

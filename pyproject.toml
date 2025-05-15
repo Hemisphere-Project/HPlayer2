@@ -3,47 +3,46 @@ name = "hplayer2"
 version = "0.1.0"
 description = ""
 authors = [
-    {name = "maigre",email = "thomas@37m.gr"}
+    {name = "maigre", email = "thomas@37m.gr"}
 ]
 readme = "README.md"
 requires-python = ">=3.11,<4.0"
 dependencies = [
-    "zeroconf (==0.31.0)",
-    "flask-socketio (>=5.5.1,<6.0.0)",
-    "netifaces (>=0.11.0,<0.12.0)",
-    "wheel (>=0.45.1,<0.46.0)",
-    "pymitter (>=1.0.0,<2.0.0)",
-    "mido (>=1.3.3,<2.0.0)",
-    "paho-mqtt (>=2.1.0,<3.0.0)",
-    "timecode (>=1.4.1,<2.0.0)",
-    "emoji (>=1.6.3,<1.7.0)",
-    "python-rtmidi (>=1.5.8,<2.0.0)",
-    "pilmoji (>=2.0.4,<3.0.0)",
-    "stupidartnet (>=1.5.0,<2.0.0)",
-    "watchdog (>=6.0.0,<7.0.0)",
-    "pillow (>=11.1.0,<12.0.0)",
-    "setuptools (>=75.8.2,<76.0.0)",
-    "pyserial (>=3.5,<4.0)",
-    "eventlet (>=0.39.0,<0.40.0)",
-    "evdev (>=1.9.1,<2.0.0)",
-    "termcolor (>=2.5.0,<3.0.0)",
-    "czmq @ file:///opt/HPlayer2/scripts/czmq/bindings/python",
-    "zyre @ file:///opt/HPlayer2/scripts/zyre/bindings/python",
-    "queuelib (>=1.7.0,<2.0.0)",
-    "adafruit-charlcd (>=1.1.1,<2.0.0)",
-    "python-osc (>=1.9.3,<2.0.0)",
-    "rpi-lgpio (>=0.6,<0.7)",
-    "just-playback (>=0.1.8,<0.2.0)",
+    "zeroconf==0.31.0",
+    "flask-socketio>=5.5.1,<6.0.0",
+    "netifaces>=0.11.0,<0.12.0",
+    "wheel>=0.45.1,<0.46.0",
+    "pymitter>=1.0.0,<2.0.0",
+    "mido>=1.3.3,<2.0.0",
+    "paho-mqtt>=2.1.0,<3.0.0",
+    "timecode>=1.4.1,<2.0.0",
+    "emoji>=1.6.3,<1.7.0",
+    "pilmoji>=2.0.4,<3.0.0",
+    "stupidartnet>=1.5.0,<2.0.0",
+    "watchdog>=6.0.0,<7.0.0",
+    "pillow>=11.1.0,<12.0.0",
+    "setuptools>=75.8.2,<76.0.0",
+    "pyserial>=3.5,<4.0",
+    "eventlet>=0.39.0,<0.40.0",
+    "evdev>=1.9.1,<2.0.0",
+    "termcolor>=2.5.0,<3.0.0",
+    "czmq",
+    "zyre",
+    "queuelib>=1.7.0,<2.0.0",
+    "adafruit-charlcd>=1.1.1,<2.0.0",
+    "python-osc>=1.9.3,<2.0.0",
+    "rpi-lgpio>=0.6,<0.7",
+    "just-playback>=0.1.8,<0.2.0"
 ]
 
+[tool.uv.sources]
+czmq = { path = "scripts/czmq/bindings/python" }
+zyre = { path = "scripts/zyre/bindings/python" }
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["core", "profiles"]
 
 [build-system]
-requires = ["poetry-core>=2.0.0,<3.0.0"]
-build-backend = "poetry.core.masonry.api"
-
-[tool.poetry]
-package-mode = false
-
-[tool.poetry.dependencies]
-czmq = {develop = true}
-zyre = {develop = true}
+requires = ["setuptools>=75.8.2,<76.0.0", "wheel"]
+build-backend = "setuptools.build_meta"

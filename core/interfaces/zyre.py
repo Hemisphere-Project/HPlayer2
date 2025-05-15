@@ -659,6 +659,9 @@ class ZyreNode ():
 
     def broadcast(self, event, args=None, delay_ms=0, at=0):
         self.shout('broadcast', event, args, delay_ms, at)
+        
+    def tomyself(self, event, args=None, delay_ms=0, at=0):
+        self.whisper(self.zyre.uuid(), event, args, delay_ms, at)
 
     def join(self, group):
         self.zyre.join(group.encode())

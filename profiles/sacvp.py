@@ -39,6 +39,21 @@ try:
             hplayer.log('attached to ETENDARD', myETEND)
 except: pass
 
+# ATTACHED GROUP: get GROUP from group.json
+myGROUP = []
+try:
+    with open(os.path.join(projectfolder, 'group.json')) as json_file:
+        data = json.load(json_file)
+        for k in data:
+            if devicename in data[k]:
+                myGROUP = data[k]
+                hplayer.log('attached to GROUP', myGROUP)
+except: pass
+
+# PLAYLIST Sampler
+playlistSampler = None
+
+
 # PLAYERS
 # ETENDARD
 if myETEND:
@@ -60,33 +75,46 @@ else:
     hplayer.addInterface('zyre')
     
     # Sampler (play 0_* media from the same directory)
-    sampler = hplayer.addSampler('mpv', 'jp', 1)
-    lastSamplerMedia = None
-    @hplayer.on('video.playing')
-    def samplerPlay(ev, *args):
-        global lastSamplerMedia
-        directory = os.path.dirname(args[0])
-        mediaList = hplayer.files.listFiles(directory + '/0_*')
-        media = mediaList[0] if len(mediaList) > 0 else None
-        if lastSamplerMedia != media:
-            if not media: sampler.stop()
-            else: sampler.play(media, oneloop=True, index=0)
-            lastSamplerMedia = media
+    # sampler = hplayer.addSampler('jp', 'audio', 1)
+    # lastSamplerMedia = None
+    
+    # @hplayer.on('video.playing')
+    # def samplerPlay(ev, *args):
+    #     global lastSamplerMedia
+    #     directory = os.path.dirname(args[0])
+    #     mediaList = hplayer.files.listFiles(directory + '/0_*')
+    #     media = mediaList[0] if len(mediaList) > 0 else None
+    #     if lastSamplerMedia != media:
+    #         if not media: sampler.stop()
+    #         else: sampler.play(media, oneloop=True, index=0)
+    #         lastSamplerMedia = media
+            
+    # @hplayer.on('*.stop')
+    # def samplerStop(ev, *args):
+    #     global lastSamplerMedia
+    #     if lastSamplerMedia:
+    #         sampler.stop()
+    #         lastSamplerMedia = None
     
     
+    # Sampler Pad
+    sampler = hplayer.addSampler('jp', 'audio', 1)
+    playlistSampler = Playlist(hplayer, 'Playlist-sampler')
+    playlistSampler.load(hplayer.files.listFiles('ZZ_AUDIO/*'))
     
 
 # INTERFACES
-hplayer.addInterface('keyboard')
-hplayer.addInterface('osc', 1222, 3737)
-# hplayer.addInterface('mqtt', '10.0.0.2')
+hplayer.addInterface('midictrl', 'LPD8', 10)
+# hplayer.addInterface('keyboard')
+hplayer.addInterface('osc', 1222, 9000, '127.0.0.1')
+hplayer.addInterface('mqtt', '10.0.0.2')
 hplayer.addInterface('http2', 8080)
 hplayer.addInterface('teleco')
 # hplayer.addInterface('serial', '^M5', 10)
 hplayer.addInterface('regie', 9111, projectfolder)
-gpio = hplayer.addInterface('gpio', [16, 20, 21], 1, 0, 'PUP') # service tek debounce @ 1 ??
-# if myESP:
-#     hplayer.addInterface('btserial', 'k32-'+str(myESP))
+# gpio = hplayer.addInterface('gpio', [16, 20, 21], 1, 0, 'PUP') # service tek debounce @ 1 ??
+if myESP:
+    hplayer.addInterface('btserial', 'k32-'+str(myESP))
 
 # Overlay
 # if hplayer.isRPi():
@@ -99,11 +127,76 @@ gpio = hplayer.addInterface('gpio', [16, 20, 21], 1, 0, 'PUP') # service tek deb
 # Broadcast Order on OSC/Zyre to other Pi's
 #
 def broadcast(path, *args):
-	# print(path, list(args))
+	delay = 500 if path.startswith('play') else 0
 	if path.startswith('play'):
-		hplayer.interface('zyre').node.broadcast(path, list(args), 500)   ## WARNING LATENCY !!
-	else:
-		hplayer.interface('zyre').node.broadcast(path, list(args))
+		hplayer.interface('zyre').node.broadcast(path, list(args), delay)   ## WARNING LATENCY !!
+  
+# Cast to group on OSC/Zyre
+def groupcast(path, *args):
+    delay = 500 if path.startswith('play') else 0
+    if len(myGROUP) > 0:
+        for group in myGROUP:
+            hplayer.interface('zyre').node.shout(group, path, list(args), delay)   ## WARNING LATENCY !!
+    else:
+        hplayer.interface('zyre').node.tomyself(path, list(args))
+
+#
+# MIDI CTRL
+#
+
+@hplayer.on('midictrl.noteon')
+@hplayer.on('midictrl.cc')
+@hplayer.on('midictrl.pc')
+def midiEvent(ev, *args):
+    if not playlistSampler: return
+    track = None
+    light = None
+    if ev == 'midictrl.noteon':
+        value = args[0]['note']    
+        if value == 36:   track = playlistSampler.trackAtIndex(0)
+        elif value == 37: track = playlistSampler.trackAtIndex(1)
+        elif value == 38: track = playlistSampler.trackAtIndex(2)
+        elif value == 39: track = 'stop'
+        
+        elif value == 40: light = 1
+        elif value == 41: light = 2
+        elif value == 42: light = 3
+        elif value == 43: light = 'stop'
+    
+    if ev == 'midictrl.cc':
+        value = args[0]['control']
+        if value == 12:   track = playlistSampler.trackAtIndex(3)
+        elif value == 13: track = playlistSampler.trackAtIndex(4)
+        elif value == 14: track = playlistSampler.trackAtIndex(5)
+        elif value == 15: track = 'stop'
+        
+        elif value == 16:  light = 4
+        elif value == 17:  light = 5
+        elif value == 18:  light = 6
+        elif value == 19:  light = 'stop'
+        
+        elif value == 73:  hplayer.emit('volume', args[0]['value']*100/127)           # master volume
+        elif value == 77:  sampler.playerAt(0)._applyVolume(args[0]['value']*100/127)    # sampler volume
+        
+    
+    if ev == 'midictrl.pc':
+        value = args[0]['program']
+        if value == 0:   track = playlistSampler.trackAtIndex(6)
+        elif value == 1: track = playlistSampler.trackAtIndex(7)
+        elif value == 2: track = playlistSampler.trackAtIndex(8)
+        elif value == 3: track = 'stop'
+        
+        elif value == 4:  light = 7
+        elif value == 5:  light = 8
+        elif value == 6:  light = 9
+        elif value == 7:  light = 'stop'
+
+    if track == 'stop': sampler.stop()
+    elif track: sampler.play(track, oneloop=True, index=0)
+    
+    if light == 'stop': hplayer.interface('osc').send('/hartnet/stop')
+    elif light: hplayer.interface('osc').send('/hartnet/play', light)
+        
 
 
 # SMS
