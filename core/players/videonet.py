@@ -7,11 +7,12 @@ import cv2 as cv
 import time
 from .base import BasePlayer
 
+PORT = 6454
 
 # Monkey patching StupidArtnet to add a network check
 def checkNetwork(self):
     try:
-        self.socket_client.sendto(b"TEST", (self.target_ip, self.UDP_PORT))
+        self.socket_client.sendto(b"TEST", (self.target_ip, PORT))
         return True
     except socket.error as error:
         return False
@@ -35,6 +36,7 @@ class VideonetPlayer(BasePlayer):
     # SETTINGS
     _brightness = 1.0
     _contrast = 0.5
+    _port = PORT
 
     def __init__(self, hplayer, name):
         super().__init__(hplayer, name)
@@ -195,7 +197,7 @@ class VideonetPlayer(BasePlayer):
                     del self._output
                     self._output = None
                 self.log("Checking network..")
-                stupid = StupidArtnet(self._dest_ip)
+                stupid = StupidArtnet(target_ip=self._dest_ip, packet_size=512, port=PORT)
                 if stupid.checkNetwork():
                     self._output = stupid
                     self._run_ip = self._dest_ip
