@@ -12,29 +12,27 @@ rw
 chmod -R 777 /tmp
 date -s "$(curl -s --head http://google.com | grep ^Date: | sed 's/Date: //g')"
 
-cd /opt/HPlayer2/ 
+cd /opt/RPi-Regie
 git stash
-git pull 
+git pull
 
-cd /opt/RPi-Regie 
+cd /opt/Pi-tools
 git stash
-git pull 
-
-apt update
-apt upgrade -y
-apt install python3-rtmidi -y
-apt purge firmware-intel-graphics firmware-nvidia-graphics -y
-curl -LsSf https://astral.sh/uv/install.sh | sh
-apt autoremove --purge -y 
-apt clean -y
+git pull
 
 cd /opt/HPlayer2/
-rm -Rf .venv
-uv sync
-sed -i 's/^include-system-site-packages = .*/include-system-site-packages = true/' .venv/pyvenv.cfg
+git stash
+git pull
 
+cd /opt/hartnet.js
+git stash
+git pull
 
-echo '07-jplayer_rtmidi' >> /boot/VERSION
+cd /opt/Pi-Tools/audioselect
+rm -Rf /etc/asound.conf
+cp -f ./asound.conf-pi2 /etc/asound.conf
+
+echo '02-dmix' >> /boot/VERSION
 echo "SUCCESS !" 
 cat /etc/hostname
 reboot

@@ -98,9 +98,25 @@ else:
     
     
     # Sampler Pad
-    sampler = hplayer.addSampler('jp', 'audio', 1)
-    playlistSampler = Playlist(hplayer, 'Playlist-sampler')
-    playlistSampler.load(hplayer.files.listFiles('ZZ_AUDIO/*'))
+    sampler = hplayer.addSampler('jp', 'audio', 2)
+    
+    # Playlist Sampler 1 from ZZ_AUDIO1 => loops
+    playlistSampler1 = Playlist(hplayer, 'Playlist-sampler')
+    filelist= hplayer.files.listFiles('ZZ_AUDIOLOOP/*')
+    filelist = [f for f in filelist if sampler.playerAt(0).validExt(f)] 
+    print()
+    print(filelist)
+    print()
+    playlistSampler1.load(filelist)
+    
+    # Playlist Sampler 2 from ZZ_AUDIO2 => one shot
+    playlistSampler2 = Playlist(hplayer, 'Playlist-sampler')
+    filelist= hplayer.files.listFiles('ZZ_AUDIOSHOT/*')
+    filelist = [f for f in filelist if sampler.playerAt(1).validExt(f)]
+    print()
+    print(filelist)
+    print()
+    playlistSampler2.load(filelist)
     
 
 # INTERFACES
@@ -143,60 +159,95 @@ def groupcast(path, *args):
 #
 # MIDI CTRL
 #
+volumeLoop = 100
+volumeShot = 100
 
 @hplayer.on('midictrl.noteon')
 @hplayer.on('midictrl.cc')
 @hplayer.on('midictrl.pc')
 def midiEvent(ev, *args):
-    if not playlistSampler: return
+    if not playlistSampler1: return
+    if not playlistSampler2: return
+    global volumeLoop, volumeShot
     track = None
     light = None
+    
     if ev == 'midictrl.noteon':
         value = args[0]['note']    
-        if value == 36:   track = playlistSampler.trackAtIndex(0)
-        elif value == 37: track = playlistSampler.trackAtIndex(1)
-        elif value == 38: track = playlistSampler.trackAtIndex(2)
-        elif value == 39: track = 'stop'
+        if value == 40: 
+            light = 1
+            track = playlistSampler1.trackAtIndex(0)
+        elif value == 41: 
+            light = 2
+            track = playlistSampler1.trackAtIndex(1)
+        elif value == 42: 
+            light = 3
+            track = playlistSampler1.trackAtIndex(2)
+        elif value == 43: 
+            light = 4
+            track = playlistSampler1.trackAtIndex(3)
+        elif value == 36: 
+            light = 5
+            track = playlistSampler1.trackAtIndex(4)
+        elif value == 37: 
+            light = 6
+            track = playlistSampler1.trackAtIndex(5)
+        elif value == 38: 
+            light = 7
+            track = playlistSampler1.trackAtIndex(6)
+        elif value == 39: 
+            track = 'stop'
+            light = 8
+            
+        if track == 'stop': 
+            sampler.stop()
+        elif track: 
+            sampler.play(track, oneloop=True, index=0)
         
-        elif value == 40: light = 1
-        elif value == 41: light = 2
-        elif value == 42: light = 3
-        elif value == 43: light = 'stop'
+        if light == 'stop': hplayer.interface('osc').send('/hartnet/stop')
+        elif light: hplayer.interface('osc').send('/hartnet/play', light)
     
     if ev == 'midictrl.cc':
         value = args[0]['control']
-        if value == 12:   track = playlistSampler.trackAtIndex(3)
-        elif value == 13: track = playlistSampler.trackAtIndex(4)
-        elif value == 14: track = playlistSampler.trackAtIndex(5)
+        
+        if value == 16:   track = playlistSampler2.trackAtIndex(0)
+        elif value == 17: track = playlistSampler2.trackAtIndex(1)
+        elif value == 18: track = playlistSampler2.trackAtIndex(2)
+        elif value == 19: track = playlistSampler2.trackAtIndex(3)
+        elif value == 12: track = playlistSampler2.trackAtIndex(4)
+        elif value == 13: track = playlistSampler2.trackAtIndex(5)
+        elif value == 14: track = playlistSampler2.trackAtIndex(6)
         elif value == 15: track = 'stop'
         
-        elif value == 16:  light = 4
-        elif value == 17:  light = 5
-        elif value == 18:  light = 6
-        elif value == 19:  light = 'stop'
+        # volumes
+        elif value == 70:  
+            hplayer.emit('volume', args[0]['value']*100/127)           # video volume
+        elif value == 73:  
+            volumeLoop = args[0]['value']*100/127
+            sampler.playerAt(0)._applyVolume(volumeLoop)    # sampler0 volume
+        elif value == 77:  
+            volumeShot = args[0]['value']*100/127
+            sampler.playerAt(1)._applyVolume(volumeShot)    # sampler1 volume
         
-        elif value == 73:  hplayer.emit('volume', args[0]['value']*100/127)           # master volume
-        elif value == 77:  sampler.playerAt(0)._applyVolume(args[0]['value']*100/127)    # sampler volume
-        
+        # play sampler shot
+        if track == 'stop': 
+            sampler.stop()
+        elif track: 
+            sampler.play(track, oneloop=False, index=1)
     
     if ev == 'midictrl.pc':
         value = args[0]['program']
-        if value == 0:   track = playlistSampler.trackAtIndex(6)
-        elif value == 1: track = playlistSampler.trackAtIndex(7)
-        elif value == 2: track = playlistSampler.trackAtIndex(8)
-        elif value == 3: track = 'stop'
+        if value == 4:   light = 1
+        elif value == 5: light = 2
+        elif value == 6: light = 3
+        elif value == 7: light = 4
+        elif value == 0: light = 5
+        elif value == 1: light = 6
+        elif value == 2: light = 7
+        elif value == 3: light = 8
         
-        elif value == 4:  light = 7
-        elif value == 5:  light = 8
-        elif value == 6:  light = 9
-        elif value == 7:  light = 'stop'
-
-    if track == 'stop': sampler.stop()
-    elif track: sampler.play(track, oneloop=True, index=0)
-    
-    if light == 'stop': hplayer.interface('osc').send('/hartnet/stop')
-    elif light: hplayer.interface('osc').send('/hartnet/play', light)
-        
+        if light == 'stop': hplayer.interface('osc').send('/hartnet/stop')
+        elif light: hplayer.interface('osc').send('/hartnet/play', light)
 
 
 # SMS

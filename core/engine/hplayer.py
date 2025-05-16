@@ -328,41 +328,41 @@ class HPlayer2(Module):
             self.log('HARD KILL in 5s')
             # os._exit(0)
 
-        @module.on('do-audioout')
-        def doaudioout(ev, *args):
-            if len(args) > 0:
-                doreset = False
-                if args[0] == 'hdmi':
-                    if not 'pcm.!default hdmi0' in open('/etc/asound.conf').read():
-                        os.system('rw && \
-                                  sed -i "s/pcm.!default .*/pcm.!default hdmi0/g" /etc/asound.conf && \
-                                  sed -i "s/ctl.!default .*/ctl.!default hdmi0/g" /etc/asound.conf && \
-                                  sync && ro')
-                        doreset = True
-                    os.system('amixer sset PCM 96%')
+        # @module.on('do-audioout')
+        # def doaudioout(ev, *args):
+        #     if len(args) > 0:
+        #         doreset = False
+        #         if args[0] == 'hdmi':
+        #             if not 'pcm.!default hdmi0' in open('/etc/asound.conf').read():
+        #                 os.system('rw && \
+        #                           sed -i "s/pcm.!default .*/pcm.!default hdmi0/g" /etc/asound.conf && \
+        #                           sed -i "s/ctl.!default .*/ctl.!default hdmi0/g" /etc/asound.conf && \
+        #                           sync && ro')
+        #                 doreset = True
+        #             os.system('amixer sset PCM 96%')
                     
                     
                         
-                elif args[0] == 'jack':
-                    if not 'pcm.!default jack' in open('/etc/asound.conf').read():
-                        os.system('rw && \
-                                  sed -i "s/pcm.!default .*/pcm.!default jack/g" /etc/asound.conf && \
-                                  sed -i "s/ctl.!default .*/ctl.!default jack/g" /etc/asound.conf && \
-                                  sync && ro')
-                        doreset = True
-                    os.system('amixer sset PCM 96%')
+        #         elif args[0] == 'jack':
+        #             if not 'pcm.!default jack' in open('/etc/asound.conf').read():
+        #                 os.system('rw && \
+        #                           sed -i "s/pcm.!default .*/pcm.!default jack/g" /etc/asound.conf && \
+        #                           sed -i "s/ctl.!default .*/ctl.!default jack/g" /etc/asound.conf && \
+        #                           sync && ro')
+        #                 doreset = True
+        #             os.system('amixer sset PCM 96%')
                         
-                elif args[0] == 'usb':
-                    if not 'pcm.!default usb' in open('/etc/asound.conf').read():
-                        os.system('rw && \
-                                  sed -i "s/pcm.!default .*/pcm.!default usb/g" /etc/asound.conf && \
-                                  sed -i "s/ctl.!default .*/ctl.!default usb/g" /etc/asound.conf && \
-                                  sync && ro')
-                        doreset = True
-                    os.system('amixer sset Speaker 96%')
+        #         elif args[0] == 'usb':
+        #             if not 'pcm.!default usb' in open('/etc/asound.conf').read():
+        #                 os.system('rw && \
+        #                           sed -i "s/pcm.!default .*/pcm.!default usb/g" /etc/asound.conf && \
+        #                           sed -i "s/ctl.!default .*/ctl.!default usb/g" /etc/asound.conf && \
+        #                           sync && ro')
+        #                 doreset = True
+        #             os.system('amixer sset Speaker 96%')
                 
-                if doreset:
-                    module.emit('hardreset')
+        #         if doreset:
+        #             module.emit('hardreset')
 
         # PLAYLIST
         #

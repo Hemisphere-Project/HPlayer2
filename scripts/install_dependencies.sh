@@ -85,7 +85,7 @@ make install && ldconfig
 ln -s /usr/local/lib/libczmq.so.4 /usr/lib/
 # cd bindings/python/ && python setup.py build && python setup.py install
 cd "$(dirname "$(readlink -f "$0")")/.."
-# poetry add --editable "$(dirname "$(readlink -f "$0")")/czmq/bindings/python"
+# uv add --editable "$(dirname "$(readlink -f "$0")")/czmq/bindings/python"
 
 # ZYRE
 cd "$(dirname "$(readlink -f "$0")")"
@@ -95,10 +95,14 @@ make install && ldconfig
 ln -s /usr/local/lib/libzyre.so.2 /usr/lib/
 # cd bindings/python/ && python setup.py build && python setup.py install
 cd "$(dirname "$(readlink -f "$0")")/.."
-# poetry add --editable "$(dirname "$(readlink -f "$0")")/zyre/bindings/python"
+# uv add --editable "$(dirname "$(readlink -f "$0")")/zyre/bindings/python"
 
-# POETRY
-poetry install
+# UV dep install
+cd "$(dirname "$(readlink -f "$0")")"
+cd ..
+uv sync
+sed -i 's/^include-system-site-packages = .*/include-system-site-packages = true/' .venv/pyvenv.cfg
+
 
 # RPi
 # if [[ $(uname -m) = armv* || $(uname -m) = aarch64 ]]; then
