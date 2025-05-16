@@ -63,6 +63,8 @@ class Settings(Module):
             self.emit('updated', self.export())
             self.save()
 
+    def update(self):
+        self.emit('updated', self.export())
 
     def save(self):
         if self._settingspath:

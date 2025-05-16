@@ -119,9 +119,6 @@ class RegieInterface (BaseInterface):
     
                 orderz.append(order)
                 
-                
-                        
-                
                 # LOOP
                 if b["loop"] == 'loop':
                     orderz.append( { 'peer': peerName, 'event':  'loop', 'data': 1} )

@@ -463,6 +463,10 @@ class HPlayer2(EventEmitterX):
         
         # SETTINGS
         #
+        
+        @module.on('get-settings')
+        def getsettings(ev, *args):
+            self.settings.update()
 
         @module.on('loop')
         def loop(ev, *args):
