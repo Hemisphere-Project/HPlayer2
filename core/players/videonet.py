@@ -6,6 +6,7 @@ import numpy as np
 import cv2 as cv
 import time
 from .base import BasePlayer
+from random import randrange
 
 PORT = 6454
 
@@ -165,6 +166,8 @@ class VideonetPlayer(BasePlayer):
         
         # send artnet
         if self._output:
+            if not black and artnet[0][0] == 0:
+                artnet[0][0] = 1         # weird fix: keep alive first value
             for i in range(len(artnet)):
                 self._output.set_universe(i)
                 self._output.set(artnet[i])
