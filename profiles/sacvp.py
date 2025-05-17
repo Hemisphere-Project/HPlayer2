@@ -100,7 +100,9 @@ else:
     # Sampler Pad
     sampler = hplayer.addSampler('jp', 'audio', 1)
     playlistSampler = Playlist(hplayer, 'Playlist-sampler')
-    playlistSampler.load(hplayer.files.listFiles('ZZ_AUDIO/*'))
+    filelist= hplayer.files.listFiles('ZZ_AUDIO/*')
+    filelist = [f for f in filelist if sampler.playerAt(0).validExt(f)] 
+    playlistSampler.load(filelist)
     
 
 # INTERFACES
