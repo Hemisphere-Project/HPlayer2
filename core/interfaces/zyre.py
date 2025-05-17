@@ -34,7 +34,7 @@ def zlist_strlist(zlist):
 PING_PEER = 1000
 
 PRECISION = 1000000
-SAMPLER_SIZE = 500
+SAMPLER_SIZE = 100
 KEEP_SAMPLE = [0.001, 0.3]
 
 
@@ -155,9 +155,9 @@ class TimeClient():
             if cs_count > 0:
                 cs = int(cs/cs_count)
 
-            print(self.client_ip, "clock shift", str(cs)+"ns", "using", len(sampler), "samples")
+            print(self.client_ip, "clock shift", str(cs)+"µs", "using", len(sampler), "samples")
             if self.clockshift:
-                print('\t correction =', str(self.clockshift-cs)+"ns" )
+                print('\t correction =', str(self.clockshift-cs)+"µs" )
             self.clockshift = cs
             self.status = 1
         else:
