@@ -29,7 +29,8 @@ git stash
 git pull
 
 cd /opt/Pi-Tools/audioselect
-cp ./asound.conf-pi2 /etc/asound.conf
+rm -Rf /etc/asound.conf
+cp -f ./asound.conf-pi2 /etc/asound.conf
 
 echo '02-dmix' >> /boot/VERSION
 echo "SUCCESS !" 
