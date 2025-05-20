@@ -12,6 +12,7 @@ class JpPlayer(BasePlayer):
         self.playback = None
         self._position_thread = None
         self._run_flag = threading.Event()
+        self._lastVolume = 100
 
     ############
     ## Internal Thread & Callbacks
@@ -88,14 +89,17 @@ class JpPlayer(BasePlayer):
             self.playback = Playback()
             self.playback.load_file(path)
             
+            
             self.update('media', path)
             
             if pause:
                 self.playback.pause()
+                self.playback.set_volume(self._lastVolume / 100.0)
                 self.update('isPaused', True)
                 self.emit('paused', self.status('media'))
             else:
                 self.playback.play()
+                self.playback.set_volume(self._lastVolume / 100.0)
                 self.update('isPlaying', True)
                 self.update('isPaused', False)
                 self.emit('playing', self.status('media'))
@@ -150,6 +154,7 @@ class JpPlayer(BasePlayer):
     # Additional audio-specific controls
     def _applyVolume(self, volume):
         """Set volume (0.0-1.0)"""
+        self._lastVolume = volume
         if self.playback:
             self.playback.set_volume(volume/100.0)
 

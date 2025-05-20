@@ -159,6 +159,8 @@ def groupcast(path, *args):
 #
 # MIDI CTRL
 #
+volumeLoop = 100
+volumeShot = 100
 
 @hplayer.on('midictrl.noteon')
 @hplayer.on('midictrl.cc')
@@ -166,6 +168,7 @@ def groupcast(path, *args):
 def midiEvent(ev, *args):
     if not playlistSampler1: return
     if not playlistSampler2: return
+    global volumeLoop, volumeShot
     track = None
     light = None
     
@@ -196,8 +199,10 @@ def midiEvent(ev, *args):
             track = 'stop'
             light = 8
             
-        if track == 'stop': sampler.stop()
-        elif track: sampler.play(track, oneloop=True, index=0)
+        if track == 'stop': 
+            sampler.stop()
+        elif track: 
+            sampler.play(track, oneloop=True, index=0)
         
         if light == 'stop': hplayer.interface('osc').send('/hartnet/stop')
         elif light: hplayer.interface('osc').send('/hartnet/play', light)
@@ -214,13 +219,21 @@ def midiEvent(ev, *args):
         elif value == 14: track = playlistSampler2.trackAtIndex(6)
         elif value == 15: track = 'stop'
         
-        elif value == 70:  hplayer.emit('volume', args[0]['value']*100/127)           # video volume
+        # volumes
+        elif value == 70:  
+            hplayer.emit('volume', args[0]['value']*100/127)           # video volume
+        elif value == 73:  
+            volumeLoop = args[0]['value']*100/127
+            sampler.playerAt(0)._applyVolume(volumeLoop)    # sampler0 volume
+        elif value == 77:  
+            volumeShot = args[0]['value']*100/127
+            sampler.playerAt(1)._applyVolume(volumeShot)    # sampler1 volume
         
-        elif value == 73:  sampler.playerAt(0)._applyVolume(args[0]['value']*100/127)    # sampler0 volume
-        elif value == 77:  sampler.playerAt(1)._applyVolume(args[0]['value']*100/127)    # sampler1 volume
-        
-        if track == 'stop': sampler.stop()
-        elif track: sampler.play(track, oneloop=False, index=1)
+        # play sampler shot
+        if track == 'stop': 
+            sampler.stop()
+        elif track: 
+            sampler.play(track, oneloop=False, index=1)
     
     if ev == 'midictrl.pc':
         value = args[0]['program']
