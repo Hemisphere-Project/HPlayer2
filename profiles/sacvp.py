@@ -102,7 +102,7 @@ else:
     
     # Playlist Sampler 1 from ZZ_AUDIO1 => loops
     playlistSampler1 = Playlist(hplayer, 'Playlist-sampler')
-    filelist= hplayer.files.listFiles('ZZ_AUDIO1/*')
+    filelist= hplayer.files.listFiles('ZZ_AUDIOLOOP/*')
     filelist = [f for f in filelist if sampler.playerAt(0).validExt(f)] 
     print()
     print(filelist)
@@ -111,7 +111,7 @@ else:
     
     # Playlist Sampler 2 from ZZ_AUDIO2 => one shot
     playlistSampler2 = Playlist(hplayer, 'Playlist-sampler')
-    filelist= hplayer.files.listFiles('ZZ_AUDIO2/*')
+    filelist= hplayer.files.listFiles('ZZ_AUDIOSHOT/*')
     filelist = [f for f in filelist if sampler.playerAt(1).validExt(f)]
     print()
     print(filelist)
