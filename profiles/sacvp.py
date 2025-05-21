@@ -197,7 +197,7 @@ def midiEvent(ev, *args):
             track = playlistSampler1.trackAtIndex(6)
         elif value == 39: 
             track = 'stop'
-            light = 8
+            light = 'stop'
             
         if track == 'stop': 
             sampler.stop()
@@ -244,7 +244,7 @@ def midiEvent(ev, *args):
         elif value == 0: light = 5
         elif value == 1: light = 6
         elif value == 2: light = 7
-        elif value == 3: light = 8
+        elif value == 3: light = 'stop'
         
         if light == 'stop': hplayer.interface('osc').send('/hartnet/stop')
         elif light: hplayer.interface('osc').send('/hartnet/play', light)
