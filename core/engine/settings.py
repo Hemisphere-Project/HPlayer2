@@ -86,7 +86,10 @@ class Settings(Module):
             self.emit('do-'+key, val, self.export())
             self.emit('updated', self.export())
             self.save()
-
+            
+    def update(self):
+        if self._ready:
+            self.emit('updated', self.export())
 
     def save(self):
         if self._settingspath:

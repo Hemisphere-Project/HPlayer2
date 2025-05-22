@@ -513,6 +513,10 @@ class HPlayer2(Module):
         
         # SETTINGS
         #
+        
+        @module.on('get-settings')
+        def getsettings(ev, *args):
+            self.settings.update()
 
         @module.on('loop')
         def loop(ev, *args):
