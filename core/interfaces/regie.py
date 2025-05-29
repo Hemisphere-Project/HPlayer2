@@ -33,17 +33,20 @@ class RegieInterface (BaseInterface):
     # HTTP receiver THREAD
     def listen(self):
 
-        # Advertize on ZeroConf
-        zeroconf = Zeroconf()
-        info = ServiceInfo(
-            "_http._tcp.local.",
-            "Regie._"+get_hostname()+"._http._tcp.local.",
-            addresses=[socket.inet_aton(ip) for ip in get_allip()],
-            port=self._port,
-            properties={},
-            server=get_hostname()+".local.",
-        )
-        zeroconf.register_service(info)
+        try:
+            # Advertize on ZeroConf
+            zeroconf = Zeroconf()
+            info = ServiceInfo(
+                "_http._tcp.local.",
+                "Regie._"+get_hostname()+"._http._tcp.local.",
+                addresses=[socket.inet_aton(ip) for ip in get_allip()],
+                port=self._port,
+                properties={},
+                server=get_hostname()+".local.",
+            )
+            zeroconf.register_service(info)
+        except Exception as e:
+            self.log("Error while registering Zeroconf service:", e)
 
         # Start server
         self.log( "regie interface on port", self._port)

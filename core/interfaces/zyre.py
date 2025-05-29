@@ -35,9 +35,8 @@ def zlist_strlist(zlist):
 PING_PEER = 1000
 
 PRECISION = 1000000
-SAMPLER_SIZE = 500
+SAMPLER_SIZE = 100
 KEEP_SAMPLE = [0.001, 0.3]
-
 
 #
 #  Round Trip REQ-REP Time sample
@@ -156,9 +155,9 @@ class TimeClient():
             if cs_count > 0:
                 cs = int(cs/cs_count)
 
-            # safe_print("\t", "["+self.client_ip+"]", "clock shift", str(cs)+"ns", "using", len(sampler), "samples")
+            # safe_print("\t", "["+self.client_ip+"]", "clock shift", str(cs)+"µs", "using", len(sampler), "samples")
             if self.clockshift:
-                safe_print("\t", "["+self.client_ip+"]", "correction =", str(self.clockshift-cs)+"ns")
+                safe_print("\t", "["+self.client_ip+"]", "correction =", str(self.clockshift-cs)+"µs")
             else:
                 safe_print("\t", "["+self.client_ip+"]", "clock sync")
 
