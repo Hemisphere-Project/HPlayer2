@@ -28,7 +28,7 @@ cd /opt/hartnet.js
 git stash
 git pull
 
-cd /opt/Pi-Tools/audioselect
+cd /opt/Pi-tools/audioselect
 rm -Rf /etc/asound.conf
 cp -f ./asound.conf-pi2 /etc/asound.conf
 
