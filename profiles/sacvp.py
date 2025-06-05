@@ -230,13 +230,15 @@ def espRelay(ev, *args):
 # File name -> Trigger ESP
 @hplayer.on('*.playing')
 def espPlay(ev, *args):
-    last = args[0].split('.')[0].split('_')[-1]
-    if last[0] == 'L' and len(last) > 1:
-        mem = last[1:]
-        if mem == 'x':             # STOP leds
-            hplayer.emit('sacvp.esp', {'topic': 'leds/stop', 'data': ''})
-        elif mem.isnumeric():      # MEM leds
-            hplayer.emit('sacvp.esp', {'topic': 'leds/mem', 'data': mem})
+    if myESP:
+        last = args[0].split('.')[0].split('_')[-1]
+        if len(last) == 0: return
+        if last[0] == 'L' and len(last) > 1:
+            mem = last[1:]
+            if mem == 'x':             # STOP leds
+                hplayer.emit('sacvp.esp', {'topic': 'leds/stop', 'data': ''})
+            elif mem.isnumeric():      # MEM leds
+                hplayer.emit('sacvp.esp', {'topic': 'leds/mem', 'data': mem})
 
 
 # Stop -> Blackout ESP
