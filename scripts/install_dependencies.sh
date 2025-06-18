@@ -97,6 +97,10 @@ ln -s /usr/local/lib/libzyre.so.2 /usr/lib/
 cd "$(dirname "$(readlink -f "$0")")/.."
 # uv add --editable "$(dirname "$(readlink -f "$0")")/zyre/bindings/python"
 
+# UV
+curl -LsSf https://astral.sh/uv/install.sh | sh
+source $HOME/.local/bin/env
+
 # UV dep install
 cd "$(dirname "$(readlink -f "$0")")"
 cd ..
