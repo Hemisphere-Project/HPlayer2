@@ -6,7 +6,7 @@ from threading import Timer
 
 # DIRECTORY / FILE
 profilename = os.path.basename(__file__).split('.')[0]
-base_path = ['/data/media']
+base_path = ['/data/media', '/data/usb']
 
 # INIT HPLAYER
 hplayer = HPlayer2(base_path, "/data/hplayer2-"+profilename+".cfg")
@@ -28,9 +28,12 @@ time.sleep(2.0)  	# wait for USB to get ready
 
 # RSync USB (on start)
 #
-usbCount = len([name for name in os.listdir('/data/usb') if os.path.isfile( os.path.join('/data/usb', name) )])
-if usbCount > 0:
-    
+# usbCount = len([name for name in os.listdir('/data/usb') if os.path.isfile( os.path.join('/data/usb', name) )])
+# if usbCount > 0:
+
+usbSync = os.path.exists('/data/usb/sync') and os.path.isdir('/data/usb/sync')
+
+if usbSync:    
 	keypad.draw( [".:: HPlayer2 ::.", "    USB sync    "] )
     
 	class RepeatTimer(Timer):
@@ -50,8 +53,8 @@ if usbCount > 0:
     
 	ellapsed = time.time()
  
-	hplayer.log("USB detected: syncing !")
-	cmd = "rsync -rtv --delete /data/usb/ "+base_path[0]
+	hplayer.log("USB sync folder detected: syncing !")
+	cmd = "rsync -tdv --delete --exclude='.*' --exclude='*/' --exclude='Thumbs.db' /data/usb/sync/ "+base_path[0]
 	hplayer.log(cmd)
 	os.system(cmd)
 
@@ -60,6 +63,8 @@ if usbCount > 0:
 		print("WAIT", 2-ellapsed)
 		time.sleep(2-ellapsed)
 	timer.cancel()
+else:
+	hplayer.log("No USB sync folder detected, skipping sync !")
 
 
 # No Loop, neither playlist
@@ -79,7 +84,9 @@ def masterLoop(ev, *args):
 #
 @hplayer.files.on('file-changed')
 def bulid_list(ev=None, *args):
-    hplayer.playlist.load(base_path[0])
+    # hplayer.playlist.load(base_path[0])
+    # LOAD ROOT FOLDER AS PLAYLIST
+	hplayer.playlist.load( hplayer.files.currentList() )
 bulid_list()
 
 
