@@ -83,6 +83,7 @@ def masterLoop(ev, *args):
 # Build playlist
 #
 @hplayer.files.on('file-changed')
+@hplayer.files.on('filelist-updated')
 def bulid_list(ev=None, *args):
     # hplayer.playlist.load(base_path[0])
     # LOAD ROOT FOLDER AS PLAYLIST
