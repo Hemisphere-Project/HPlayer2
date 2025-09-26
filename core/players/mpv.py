@@ -155,10 +155,8 @@ class MpvPlayer(BasePlayer):
 
                                 else: 
                                     # print('STOP')
-                                    if closeToTheEnd:
-                                        print('END (guess)')
-                                        self.emit('media-end', self.status('media'))
-                                    self.emit('stopped', self.status('media'))    # DO NOT emit STOPPED HERE -> STOP SHOULD BE TRIGGERED AFTER MEDIA-END
+                                    if not closeToTheEnd:
+                                        self.emit('stopped', self.status('media'))    # DO NOT emit STOPPED HERE -> STOP SHOULD BE TRIGGERED AFTER MEDIA-END
                                     # self.log('stop')  # also Triggered with oneloop
                                     
                                 self._mpv_lockedout = 0
@@ -169,18 +167,21 @@ class MpvPlayer(BasePlayer):
                                     self.update('time', pos)
                                     duration = self.status('duration')
                                     closeToTheEnd = duration > 0 and abs(duration-pos) < 0.2
+                                    # print(abs(duration-pos))
 
                             elif mpvsays['name'] == 'duration':
                                 if 'data' in mpvsays and mpvsays['data']:
                                     self.update('duration', round(float(mpvsays['data']),2))
 
-                            # elif mpvsays['name'] == 'eof-reached':
-                            #     if 'data' in mpvsays and mpvsays['data'] == True:
-                            #         closeToTheEnd = False
-                            #         self.update('isPaused', False)
-                            #         self.update('isPlaying', False)
-                            #         print('END')
-                            #         self.emit('media-end', self.status('media'))
+                            elif mpvsays['name'] == 'eof-reached':
+                                if 'data' in mpvsays and mpvsays['data'] == True:
+                                    if closeToTheEnd:
+                                        closeToTheEnd = False
+                                        self.update('isPaused', False)
+                                        self.update('isPlaying', False)
+                                        print('END')
+                                        self.emit('stopped', self.status('media'))
+                                        self.emit('media-end', self.status('media'))
                                     
                             else:
                                 pass
