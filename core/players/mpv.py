@@ -107,6 +107,7 @@ class MpvPlayer(BasePlayer):
             self._mpv_send('{ "command": ["observe_property", 3, "time-pos"] }')
             self._mpv_send('{ "command": ["observe_property", 4, "duration"] }')
             self._mpv_send('{ "command": ["observe_property", 5, "eof-reached"] }')
+            closeToTheEnd = False
             
             self.emit('status', self.status())
 
@@ -117,7 +118,7 @@ class MpvPlayer(BasePlayer):
                 try:
                     msg = self._mpv_sock.recv(4096)
                     assert len(msg) != 0, "socket disconnected"
-                    # print(len(msg))
+                    # print(msg)
 
                     self.doLog['recv'] = False
                     self.doLog['cmds'] = False
@@ -144,6 +145,7 @@ class MpvPlayer(BasePlayer):
                                 self.update('isPlaying', not mpvsays['data'])
 
                                 if self.status('isPlaying'): 
+                                    closeToTheEnd = False
                                     self.emit('playing', self.status('media'))
                                     # self.log('play')
 
@@ -153,6 +155,9 @@ class MpvPlayer(BasePlayer):
 
                                 else: 
                                     # print('STOP')
+                                    if closeToTheEnd:
+                                        print('END (guess)')
+                                        self.emit('media-end', self.status('media'))
                                     self.emit('stopped', self.status('media'))    # DO NOT emit STOPPED HERE -> STOP SHOULD BE TRIGGERED AFTER MEDIA-END
                                     # self.log('stop')  # also Triggered with oneloop
                                     
@@ -160,18 +165,22 @@ class MpvPlayer(BasePlayer):
 
                             elif mpvsays['name'] == 'time-pos':
                                 if 'data' in mpvsays and mpvsays['data']:
-                                    self.update('time', round(float(mpvsays['data']),2))
+                                    pos = round(float(mpvsays['data']),2)
+                                    self.update('time', pos)
+                                    duration = self.status('duration')
+                                    closeToTheEnd = duration > 0 and abs(duration-pos) < 0.2
 
                             elif mpvsays['name'] == 'duration':
                                 if 'data' in mpvsays and mpvsays['data']:
                                     self.update('duration', round(float(mpvsays['data']),2))
 
-                            elif mpvsays['name'] == 'eof-reached':
-                                if 'data' in mpvsays and mpvsays['data'] == True:
-                                    self.update('isPaused', False)
-                                    self.update('isPlaying', False)
-                                    print('END')
-                                    self.emit('media-end', self.status('media'))
+                            # elif mpvsays['name'] == 'eof-reached':
+                            #     if 'data' in mpvsays and mpvsays['data'] == True:
+                            #         closeToTheEnd = False
+                            #         self.update('isPaused', False)
+                            #         self.update('isPlaying', False)
+                            #         print('END')
+                            #         self.emit('media-end', self.status('media'))
                                     
                             else:
                                 pass
