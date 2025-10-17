@@ -6,6 +6,13 @@ i/o interfaces (osc, http, rfid, ble, gpio, ...) and patch everything up.
 
 HPlayer2 is focused on Raspberry Pi, but is based on python code wrapping 3rd parties engines and libraries, so as long as those 3rd parties components are supported on other platform, HPlayer2 should run on it !
 
+## Supported Platforms
+
+- Raspberry Pi 3B+ (and newer) running a recent Linux distribution
+- x64 Linux distributions with mpv or alternative media engines available
+
+Some interfaces depend on Raspberry Pi specific peripherals (GPIO, I2C devices, etc.). These modules now detect missing hardware gracefully so the same codebase can run on generic x64 systems. Optional engines or interfaces can remain disabled if the host platform does not expose the required capabilities.
+
 HPlayer2 is under development, some features might not be fully available or sometimes broken, feel free to ask for help and open issues, i'll do my best to cover it. Pull requests are also welcomed !
 
 ## Media engine
@@ -24,31 +31,50 @@ HPlayer2 is a python program, with several "modular" dependencies, depending on 
 The core component you need to install is of course the media engine.
 For now, only **mpv** is supported, so you should install it, but the **mpv** package in your distro repository might not be compiled with HW video decoding, so it might be necessary to build it yourself with this specific options enabled.
 
-There is two scripts to help you install everything needed:
+There are helper scripts to prepare the platform-specific prerequisites:
 
-**scripts/install_dependencies.sh** that should cover most of the dependencies installation. 
-This script supports **arch** and **xbian** (raspbian/debian/ubuntu)  
-On Raspberry Pi, i recommand using arch since boot up is faster, but it's up to you !
-The script might miss some recent dependencies (i sometime forget to update this script for brand new features).
+- `scripts/install_dependencies.sh` covers the legacy Raspberry Pi flows and supports **arch** and **xbian** (Raspbian/Debian/Ubuntu). It installs system packages and will call into `install_mpv.sh` for the hardware-accelerated build when the distro package does not provide it.
+- `scripts/install_mpv.sh` detects prebuilt MPV binaries and, if needed, recompiles MPV with Raspberry Pi hardware acceleration enabled.
+- `scripts/install_macos.sh` streamlines a macOS development setup. It leverages Homebrew to pull `uv`, autotools, `zeromq`, and then runs the Python bootstrapper described below before syncing the uv environment with the `dev` extra enabled.
 
-**scripts/install_mpv.sh** tries to detect if a pre-compiled version of MPV is available for your platform.
-If not, it tries to re-compile MPV with HW acceleration for RaspberryPi. 
+Feel free to dive into the scripts and tweak them for your needs. If you want to help make installation more universal, please submit a PR!
 
-Feel free to dive into both scripts and tweak it for your needs.
-If you want help make install script more universal, please submit PR !
+On a freshly configured Raspberry Pi:
 
-On your freshly configured Raspberry Pi:
+```bash
+cd ~
+git clone https://github.com/Hemisphere-Project/HPlayer2.git
+cd HPlayer2/scripts
+sudo ./install_dependencies.sh
+sudo ./install_mpv.sh
+cd ..
+```
 
-    cd ~
-    git clone https://github.com/Hemisphere-Project/HPlayer2.git
-    cd HPlayer2/scripts
-    sudo ./install_dependencies.sh
-    sudo ./install_mpv.sh
-    cd ..
+On macOS for local development you can run:
 
-You should examine those scripts to understand what they do.
-You could run each part on your own instead of running the whole script blindly,  
-it will help in case it is broken (it can be !).
+```bash
+git clone https://github.com/Hemisphere-Project/HPlayer2.git
+cd HPlayer2
+./scripts/install_macos.sh
+```
+
+You should examine the scripts to understand what they do. You can also run each step manually instead of executing the script end to end—this helps when a dependency changes upstream (it can happen!).
+
+## Development Setup
+
+This project uses [uv](https://docs.astral.sh/uv/latest/) to manage the virtual environment.
+
+ZeroMQ helper libraries (`czmq` and `zyre`) are vendored under `scripts/` via git sub-clones. Run the bootstrap script once (and whenever you need to update the native libraries):
+
+```bash
+python scripts/bootstrap_native_deps.py
+export PKG_CONFIG_PATH="$HOME/.local/lib/pkgconfig:${PKG_CONFIG_PATH:-}"
+uv sync --extra dev  # add --extra pi on Raspberry Pi hosts for GPIO/evdev support
+uv run ruff check
+uv run pytest
+```
+
+The `dev` extra bundles the tools required for linting and testing, while `pi` gathers GPIO- and evdev-related packages that only make sense on Raspberry Pi. `ruff` performs lightweight linting and formatting, while `pytest` runs the unit test suite. All commands stay inside uv—no global installs required.
 
 ## Run
 Since HPlayer2 is modular, the concept is to run HPlayer2 against a specific **profile**.
@@ -67,6 +93,10 @@ it will use the default profile located in **profiles/default.py**
 To create a custom profile for your project, 
 you can create a new file like **profiles/your-project.py**
 To run it: `./hplayer2 your-project`
+
+### MPV backend
+
+The default player relies on [mpv](https://mpv.io/). On hosts where the binary is not installed in the `$PATH`, set `HPLAYER_MPV_BIN` to the desired executable. If `mpv` is missing entirely, HPlayer2 will attempt to use one of the prebuilt binaries located in `bin/prebuilds/` based on the current architecture.
 
 
 ## Patch a profile

@@ -1,16 +1,43 @@
 from .base import BaseInterface
 from ..module import safe_print
-from zyre import Zyre, ZyreEvent
-from czmq import *
-import time, random
+import importlib
+import time
+import random
 from time import sleep
 import json
 from threading import Timer, Lock
 
-
-from ctypes import string_at
+from ctypes import string_at, create_string_buffer
 from sys import getsizeof
 from binascii import hexlify
+
+Zyre = None
+ZyreEvent = None
+Zsock = None
+Zmsg = None
+Zpoller = None
+Zactor = None
+zactor_fn = None
+
+_ZYRE_IMPORT_ERROR = None
+_CZMQ_IMPORT_ERROR = None
+
+try:
+    _zyre_module = importlib.import_module("zyre")
+    Zyre = getattr(_zyre_module, "Zyre", None)
+    ZyreEvent = getattr(_zyre_module, "ZyreEvent", None)
+except ImportError as err:
+    _ZYRE_IMPORT_ERROR = err
+
+try:
+    _czmq_module = importlib.import_module("czmq")
+    Zsock = getattr(_czmq_module, "Zsock", None)
+    Zmsg = getattr(_czmq_module, "Zmsg", None)
+    Zpoller = getattr(_czmq_module, "Zpoller", None)
+    Zactor = getattr(_czmq_module, "Zactor", None)
+    zactor_fn = getattr(_czmq_module, "zactor_fn", None)
+except ImportError as err:
+    _CZMQ_IMPORT_ERROR = err
 
 # current_milli_time = lambda: int(round(time.time() * 1000))
 
@@ -726,6 +753,13 @@ class ZyreNode ():
 class ZyreInterface (BaseInterface):
 
     def  __init__(self, hplayer, netiface=None):
+        if _ZYRE_IMPORT_ERROR:
+            raise RuntimeError("zyre is required for ZyreInterface") from _ZYRE_IMPORT_ERROR
+        if _CZMQ_IMPORT_ERROR:
+            raise RuntimeError("czmq is required for ZyreInterface") from _CZMQ_IMPORT_ERROR
+        required = [Zyre, ZyreEvent, Zsock, Zmsg, Zpoller, Zactor, zactor_fn]
+        if any(dep is None for dep in required):
+            raise RuntimeError("zyre interface dependencies are unavailable")
         super().__init__(hplayer, "ZYRE")
         self.iface = netiface
 

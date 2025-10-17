@@ -1,13 +1,23 @@
 from .base import BaseInterface
 from core.engine import network
-from pythonosc import udp_client, dispatcher, osc_server
 import random, time
 from sys import getsizeof
 import socket
 from threading import Thread
 
-from ..engine.network import get_allip, get_hostname
-from zeroconf import ServiceInfo, Zeroconf
+try:
+    from pythonosc import udp_client, dispatcher, osc_server
+    OSC_DEPENDENCIES_AVAILABLE = True
+except ImportError:  # pragma: no cover - optional dependency
+    OSC_DEPENDENCIES_AVAILABLE = False
+    udp_client = dispatcher = osc_server = None
+
+try:
+    from ..engine.network import get_allip, get_hostname
+    from zeroconf import ServiceInfo, Zeroconf
+    ZERO_AVAILABLE = True
+except ImportError:  # pragma: no cover - zeroconf optional
+    ZERO_AVAILABLE = False
 
 current_milli_time = lambda: int(round(time.time() * 1000))
 
@@ -18,6 +28,8 @@ class OscInterface(BaseInterface):
 
     def __init__(self, hplayer, in_port, out_port=0, hostOut=None):
         super(OscInterface, self).__init__(hplayer, "OSC")
+        if not OSC_DEPENDENCIES_AVAILABLE:
+            raise RuntimeError("python-osc module not available; OSC interface disabled")
 
         self._portIn = in_port
         self._portOut = out_port if out_port > 0 else in_port
@@ -50,27 +62,29 @@ class OscInterface(BaseInterface):
         self.log("input  = udp://*:" + str(self._portIn))
         self.log("output = udp://" + str(self.hostOut) + ":" + str(self._portOut))
 
-        # Advertize on ZeroConf
-        zeroconf = Zeroconf()
-        info = ServiceInfo(
-            "_osc._udp.local.",
-            "OSC input._" + get_hostname() + "._osc._udp.local.",
-            addresses=[socket.inet_aton(ip) for ip in get_allip()],
-            port=self._portIn,
-            properties={},
-            server=get_hostname() + ".local.",
-        )
-        zeroconf.register_service(info)
-        if self._portOut != self._portIn:
-            info2 = ServiceInfo(
+        zeroconf = None
+        info = info2 = None
+        if ZERO_AVAILABLE:
+            zeroconf = Zeroconf()
+            info = ServiceInfo(
                 "_osc._udp.local.",
-                "OSC output._" + get_hostname() + "._osc._udp.local.",
+                "OSC input._" + get_hostname() + "._osc._udp.local.",
                 addresses=[socket.inet_aton(ip) for ip in get_allip()],
-                port=self._portOut,
+                port=self._portIn,
                 properties={},
                 server=get_hostname() + ".local.",
             )
-            zeroconf.register_service(info2)
+            zeroconf.register_service(info)
+            if self._portOut != self._portIn:
+                info2 = ServiceInfo(
+                    "_osc._udp.local.",
+                    "OSC output._" + get_hostname() + "._osc._udp.local.",
+                    addresses=[socket.inet_aton(ip) for ip in get_allip()],
+                    port=self._portOut,
+                    properties={},
+                    server=get_hostname() + ".local.",
+                )
+                zeroconf.register_service(info2)
 
         server_thread = Thread(target=server.serve_forever)
         server_thread.start()
@@ -81,11 +95,12 @@ class OscInterface(BaseInterface):
         server.shutdown()
         server_thread.join()
 
-        # Unregister ZeroConf
-        zeroconf.unregister_service(info)
-        if self._portOut != self._portIn:
-            zeroconf.unregister_service(info2)
-        zeroconf.close()
+        if ZERO_AVAILABLE and zeroconf:
+            if info:
+                zeroconf.unregister_service(info)
+            if info2:
+                zeroconf.unregister_service(info2)
+            zeroconf.close()
 
     def burst(self, address, *args):
         if len(args) < 2:

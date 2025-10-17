@@ -18,21 +18,28 @@ dependencies = [
     "timecode>=1.4.1,<2.0.0",
     "emoji>=1.6.3,<1.7.0",
     "pilmoji>=2.0.4,<3.0.0",
-    "stupidartnet>=1.5.0,<2.0.0",
     "watchdog>=6.0.0,<7.0.0",
     "pillow>=11.1.0,<12.0.0",
     "setuptools>=75.8.2,<76.0.0",
     "pyserial>=3.5,<4.0",
     "eventlet>=0.39.0,<0.40.0",
-    "evdev>=1.9.1,<2.0.0",
     "termcolor>=2.5.0,<3.0.0",
     "czmq",
     "zyre",
     "queuelib>=1.7.0,<2.0.0",
     "adafruit-charlcd>=1.1.1,<2.0.0",
     "python-osc>=1.9.3,<2.0.0",
-    "rpi-lgpio>=0.6,<0.7",
     "just-playback>=0.1.8,<0.2.0"
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.3.0,<9.0.0",
+    "ruff>=0.6.0,<0.7.0"
+]
+pi = [
+    "rpi-lgpio>=0.6,<0.7",
+    "evdev>=1.9.1,<2.0.0"
 ]
 
 [tool.uv.sources]
@@ -42,6 +49,17 @@ zyre = { path = "scripts/zyre/bindings/python" }
 [tool.setuptools.packages.find]
 where = ["."]
 include = ["core", "profiles"]
+
+[tool.ruff]
+target-version = "py311"
+line-length = 100
+
+[tool.ruff.lint]
+select = ["E", "F", "I"]
+
+[tool.pytest.ini_options]
+minversion = "8.0"
+testpaths = ["tests"]
 
 [build-system]
 requires = ["setuptools>=75.8.2,<76.0.0", "wheel"]

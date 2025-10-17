@@ -1,8 +1,61 @@
 from .base import BaseInterface
 from time import sleep
-from pyre import Pyre 
-from pyre import zhelper 
-import zmq 
+from ctypes import string_at
+import importlib
+
+Pyre = None
+zhelper = None
+zmq = None
+Zsock = None
+Zmsg = None
+Zpoller = None
+Zactor = None
+zactor_fn = None
+Zyre = None
+get_port = None
+PING_PEER = None
+Peer = None
+
+_PYRE_IMPORT_ERROR = None
+_ZMQ_IMPORT_ERROR = None
+_CZMQ_IMPORT_ERROR = None
+_ZYRE_IMPORT_ERROR = None
+
+try:
+    _pyre_module = importlib.import_module("pyre")
+    Pyre = getattr(_pyre_module, "Pyre", None)
+    zhelper = getattr(_pyre_module, "zhelper", None)
+except ImportError as err:
+    _PYRE_IMPORT_ERROR = err
+
+try:
+    zmq = importlib.import_module("zmq")
+except ImportError as err:
+    _ZMQ_IMPORT_ERROR = err
+
+try:
+    _czmq_module = importlib.import_module("czmq")
+    Zsock = getattr(_czmq_module, "Zsock", None)
+    Zmsg = getattr(_czmq_module, "Zmsg", None)
+    Zpoller = getattr(_czmq_module, "Zpoller", None)
+    Zactor = getattr(_czmq_module, "Zactor", None)
+    zactor_fn = getattr(_czmq_module, "zactor_fn", None)
+except ImportError as err:
+    _CZMQ_IMPORT_ERROR = err
+
+try:
+    _zyre_module = importlib.import_module("zyre")
+    Zyre = getattr(_zyre_module, "Zyre", None)
+except ImportError as err:
+    _ZYRE_IMPORT_ERROR = err
+
+try:
+    _zyre_helpers = importlib.import_module("core.interfaces.zyre")
+    get_port = getattr(_zyre_helpers, "get_port", None)
+    PING_PEER = getattr(_zyre_helpers, "PING_PEER", None)
+    Peer = getattr(_zyre_helpers, "Peer", None)
+except ImportError:
+    pass
 
 
 class ZyreNode ():
@@ -58,6 +111,17 @@ class ZyreNode ():
 class PyreInterface (BaseInterface):
 
     def  __init__(self, hplayer, netiface=None):
+        if _PYRE_IMPORT_ERROR:
+            raise RuntimeError("pyre is required for PyreInterface") from _PYRE_IMPORT_ERROR
+        if _ZMQ_IMPORT_ERROR:
+            raise RuntimeError("pyzmq is required for PyreInterface") from _ZMQ_IMPORT_ERROR
+        if _CZMQ_IMPORT_ERROR:
+            raise RuntimeError("czmq is required for PyreInterface") from _CZMQ_IMPORT_ERROR
+        if _ZYRE_IMPORT_ERROR:
+            raise RuntimeError("zyre is required for PyreInterface") from _ZYRE_IMPORT_ERROR
+        required = [Pyre, zhelper, zmq, Zsock, Zmsg, Zpoller, Zactor, zactor_fn, Zyre, get_port, PING_PEER, Peer]
+        if any(dep is None for dep in required):
+            raise RuntimeError("pyre interface dependencies are unavailable")
         super().__init__(hplayer, "PYRE")        
         self.node = ZyreNode(self, netiface)
         

@@ -1,7 +1,8 @@
 from __future__ import print_function
 from termcolor import colored
-import socket, threading, subprocess, os, json, select
+import socket, threading, subprocess, os, json, select, sys, platform
 import time
+from pathlib import Path
 from shutil import which
 from .base import BasePlayer
 
@@ -10,12 +11,27 @@ class MpvPlayer(BasePlayer):
     _mpv_scale = 1          # % image scale
     _mpv_imagetime = 5      # diaporama transition time (s)
     
-    _mpv_command = ['--idle=yes', '-v', '--no-osc', '--msg-level=ipc=v', '--quiet', '--fs',
-                    '--keep-open' ,'--hr-seek=yes', '--ao=alsa', '--no-terminal', '--no-config', '--profile=low-latency',
-                    '--log-file=/tmp/mpv.log']
+    _BASE_ARGS = [
+        '--idle=yes',
+        '-v',
+        '--no-osc',
+        '--msg-level=ipc=v',
+        '--quiet',
+        '--fs',
+        '--keep-open',
+        '--hr-seek=yes',
+        '--no-terminal',
+        '--no-config',
+        '--profile=low-latency',
+        '--log-file=/tmp/mpv.log',
+    ]
 
     def __init__(self, hplayer, name):
         super().__init__(hplayer, name)
+
+        self._mpv_command = self._BASE_ARGS.copy()
+        if sys.platform.startswith('linux'):
+            self._mpv_command.append('--ao=alsa')
 
         self._videoExt = ['mp4', 'm4v', 'mkv', 'avi', 'mov', 'flv', 'mpg', 'wmv', '3gp', 'webm']
         self._audioExt = ['mp3', 'aac', 'wma', 'wav', 'flac', 'aif', 'aiff', 'm4a', 'ogg', 'opus']
@@ -205,7 +221,7 @@ class MpvPlayer(BasePlayer):
                             if self._mpv_lockedout > 3:
                                 print("CRASH STOP")
                                 self._mpv_send('{ "command": ["stop"] }')
-                                os.system('pkill mpv')
+                                self._force_stop_backend()
                                 self.emit('hardreset')
                     pass
 
@@ -250,23 +266,19 @@ class MpvPlayer(BasePlayer):
         # create subprocess
         script_path = os.path.dirname(os.path.realpath(__file__))
         
-        command = ['mpv', '--input-ipc-server=' + self._mpv_socketpath + '' ,'--window-scale=' + str(self._mpv_scale) ] + self._mpv_command
-        
-        # self.log("starting mpv with", command)
+        binary = self._resolve_mpv_binary()
+
+        command = [
+            binary,
+            '--input-ipc-server=' + self._mpv_socketpath,
+            '--window-scale=' + str(self._mpv_scale),
+        ] + self._mpv_command
 
         # image time (0 = still image)
         if self._mpv_imagetime > 0:
             command.append('--image-display-duration=' + str(self._mpv_imagetime))
         else:
             command.append('--image-display-duration=inf')
-        
-        # Special command for RockPro64
-        if os.path.exists('/usr/local/bin/rkmpv'):
-            command[0] = 'rkmpv'
-            
-        # Local mpv
-        elif which('mpv') is None:
-            command[0] = os.path.dirname(os.path.realpath(__file__))+'/../../bin/mpv'
         
         self._mpv_subproc = subprocess.Popen(command,
                             stdout=subprocess.PIPE, stdin=subprocess.PIPE, stderr = subprocess.STDOUT,
@@ -372,3 +384,45 @@ class MpvPlayer(BasePlayer):
 
     def _applyOneLoop(self, oneloop):
         self._mpv_send('{ "command": ["set_property", "loop", ' + ('"inf"' if oneloop else '"no"') +'] }')
+
+    def _candidate_prebuilds(self):
+        arch = platform.machine().lower()
+        prebuild_dir = Path(__file__).resolve().parents[2] / 'bin' / 'prebuilds'
+        mapping = {
+            'x86_64': ['mpv-arch-x86_64', 'mpv-xbian-x86_64'],
+            'amd64': ['mpv-arch-x86_64', 'mpv-xbian-x86_64'],
+            'armv6l': ['mpv-arch-armv6l'],
+            'armv7l': ['mpv-arch-armv7l', 'mpv-xbian-armv7l'],
+            'armv8l': ['mpv-arch-armv7l', 'mpv-xbian-armv7l'],
+            'aarch64': ['mpv-arch-armv7l', 'mpv-xbian-armv7l'],
+        }
+        candidates = []
+        for name in mapping.get(arch, []):
+            candidates.append(prebuild_dir / name)
+        candidates.append(Path(__file__).resolve().parents[2] / 'bin' / 'mpv')
+        return candidates
+
+    def _resolve_mpv_binary(self):
+        env_path = os.environ.get('HPLAYER_MPV_BIN')
+        if env_path and os.path.isfile(env_path):
+            return env_path
+
+        if os.path.exists('/usr/local/bin/rkmpv'):
+            return '/usr/local/bin/rkmpv'
+
+        which_path = which('mpv')
+        if which_path:
+            return which_path
+
+        for candidate in self._candidate_prebuilds():
+            if candidate.is_file():
+                return str(candidate)
+
+        raise RuntimeError('mpv binary not found. Install mpv or set HPLAYER_MPV_BIN to a valid executable path.')
+
+    def _force_stop_backend(self):
+        pkill = which('pkill')
+        if pkill:
+            subprocess.run([pkill, 'mpv'], check=False)
+        else:
+            self.log('pkill command not available; unable to force-stop mpv')
