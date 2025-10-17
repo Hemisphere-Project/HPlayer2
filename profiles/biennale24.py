@@ -10,12 +10,13 @@ tempfile.tempdir = '/data/var/tmp'
 # MEDIA PATH
 mediaPath = ['/data/media', '/data/usb']
 
-# CHECK IF /etc/asound.conf contains "pcm.usb", otherwise copy from scripts/asound.conf-rpi3
-if not os.path.isfile('/etc/asound.conf') or not open('/etc/asound.conf').read().find('pcm.usb') > -1:
-	os.system('rw && cp /opt/HPlayer2/scripts/asound.conf-rpi3 /etc/asound.conf && sync && ro')
-
 # INIT HPLAYER
 hplayer = HPlayer2(mediaPath, '/data/hplayer2-biennale24.cfg')
+
+# CHECK IF /etc/asound.conf contains "pcm.usb", otherwise copy from scripts/asound.conf-rpi3
+if hplayer.isRPi():
+	if not os.path.isfile('/etc/asound.conf') or not open('/etc/asound.conf').read().find('pcm.usb') > -1:
+		os.system('rw && cp /opt/HPlayer2/scripts/asound.conf-rpi3 /etc/asound.conf && sync && ro')
 
 
 # PLAYER
@@ -28,7 +29,7 @@ player.doLog['cmds'] = False
 
 # Interfaces
 # hplayer.addInterface('http', 8080)
-hplayer.addInterface('http2', 80, {'playlist': False, 'loop': False, 'mute': True})
+hplayer.addInterface('http2', 80 if hplayer.isRPi() else 8080, {'playlist': False, 'loop': False, 'mute': True})
 # hplayer.addInterface('serial', '^M5', 10)
 #if hplayer.isRPi():
 #    hplayer.addInterface('gpio', [21,20,16,26,14,15], 310)
