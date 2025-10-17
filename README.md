@@ -69,12 +69,12 @@ ZeroMQ helper libraries (`czmq` and `zyre`) are vendored under `scripts/` via gi
 ```bash
 python scripts/bootstrap_native_deps.py
 export PKG_CONFIG_PATH="$HOME/.local/lib/pkgconfig:${PKG_CONFIG_PATH:-}"
-uv sync --extra dev  # add --extra pi on Raspberry Pi hosts for GPIO/evdev support
+uv sync --extra dev
 uv run ruff check
 uv run pytest
 ```
 
-The `dev` extra bundles the tools required for linting and testing, while `pi` gathers GPIO- and evdev-related packages that only make sense on Raspberry Pi. `ruff` performs lightweight linting and formatting, while `pytest` runs the unit test suite. All commands stay inside uv—no global installs required.
+The `dev` extra bundles the tools required for linting and testing. Raspberry Pi specific dependencies (GPIO and evdev bindings) are pulled in automatically on ARM Linux platforms. `ruff` performs lightweight linting and formatting, while `pytest` runs the unit test suite. All commands stay inside uv—no global installs required.
 
 ## Run
 Since HPlayer2 is modular, the concept is to run HPlayer2 against a specific **profile**.

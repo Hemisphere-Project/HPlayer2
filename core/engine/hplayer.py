@@ -353,10 +353,19 @@ class HPlayer2(Module):
             for iface in self.interfaces():
                 iface.start()
 
-            # WAIT for players and samplers to be ready
-            for p in self.players() + self.samplers():
-                while not p.isReady():
+            # WAIT for players and samplers to be ready, but respect shutdown signals
+            for component in self.players() + self.samplers():
+                while (self._shutdown_event.is_set()
+                       and component.isRunning()
+                       and not component.isReady()):
                     sleep(0.1)
+
+                if not self._shutdown_event.is_set():
+                    self.log("shutdown requested before components became ready")
+                    break
+
+                if not component.isRunning() and not component.isReady():
+                    self.log(component.name, "failed to start correctly; continuing without waiting")
 
             self.emit('app-ready')
 

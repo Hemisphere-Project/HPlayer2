@@ -24,22 +24,21 @@ dependencies = [
     "pyserial>=3.5,<4.0",
     "eventlet>=0.39.0,<0.40.0",
     "termcolor>=2.5.0,<3.0.0",
+    "evdev>=1.9.1,<2.0.0; sys_platform == 'linux'",
+    "rpi-lgpio>=0.6,<0.7; sys_platform == 'linux' and (platform_machine == 'armv6l' or platform_machine == 'armv7l' or platform_machine == 'aarch64')",
     "czmq",
     "zyre",
     "queuelib>=1.7.0,<2.0.0",
     "adafruit-charlcd>=1.1.1,<2.0.0",
     "python-osc>=1.9.3,<2.0.0",
-    "just-playback>=0.1.8,<0.2.0"
+    "just-playback>=0.1.8,<0.2.0",
+    "platformdirs>=4.5.0",
 ]
 
 [project.optional-dependencies]
 dev = [
     "pytest>=8.3.0,<9.0.0",
     "ruff>=0.6.0,<0.7.0"
-]
-pi = [
-    "rpi-lgpio>=0.6,<0.7",
-    "evdev>=1.9.1,<2.0.0"
 ]
 
 [tool.uv.sources]
