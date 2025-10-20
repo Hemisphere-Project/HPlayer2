@@ -1,5 +1,7 @@
 from .base import BaseInterface
 import importlib
+import re
+from typing import Optional, Sequence
 
 mido = None
 _MIDO_IMPORT_ERROR = None
@@ -16,9 +18,14 @@ try:
 except ImportError as err:
     _TIMECODE_IMPORT_ERROR = err
 
+_PatternType = type(re.compile(""))
+
+
 class MtcInterface(BaseInterface):
 
-    def __init__(self, hplayer, port_name):
+    PORT_LOOKUP_INTERVAL = 5.0
+
+    def __init__(self, hplayer, port_name, max_retry=0):
         if _MIDO_IMPORT_ERROR:
             raise RuntimeError("mido is required for MtcInterface") from _MIDO_IMPORT_ERROR
         if mido is None:
@@ -32,7 +39,9 @@ class MtcInterface(BaseInterface):
         self.logQuietEvents.extend(['qf', 'ff'])  # Do not log tc
 
         self.port = None
-        self.port_name = port_name
+        self.port_filter = port_name
+        self.max_retry = max_retry
+        self._resolved_port_name: Optional[str] = None
 
         # create a global accumulator for quarter_frames
         self.quarter_frames = [0, 0, 0, 0, 0, 0, 0, 0]
@@ -54,12 +63,71 @@ class MtcInterface(BaseInterface):
                     self.emit('ff', tc)
 
         try:
-            self.port = mido.open_input(self.port_name, callback=clbck)
-            self.stopped.wait()
-        except:
-            self.quit()
-            
+            target_port = self._wait_for_port()
+            if not target_port:
+                self.log(f"no MIDI input matching {self._port_filter_label()} found; stopping")
+                return
 
+            self.log(f"listening on '{target_port}'")
+            try:
+                self.port = mido.open_input(target_port, callback=clbck)
+            except OSError as err:
+                self.log(f"failed to open '{target_port}': {err}")
+                return
+
+            self._resolved_port_name = target_port
+            self.stopped.wait()
+        except Exception as err:
+            self.log(f"listener error: {err}")
+        finally:
+            if self.port is not None:
+                try:
+                    self.port.close()
+                except Exception:
+                    pass
+                self.port = None
+            self._resolved_port_name = None
+
+    def _wait_for_port(self) -> Optional[str]:
+        attempts = 0
+
+        while not self.stopped.is_set():
+            available = mido.get_input_names()
+            match = self._resolve_port_from(available)
+            if match:
+                return match
+
+            attempts += 1
+            ports_display = ", ".join(available) if available else "none"
+            total = self.max_retry if self.max_retry else "inf"
+            self.log(f"retry {attempts}/{total}: waiting for MIDI input {self._port_filter_label()} (available: {ports_display})")
+
+            if self.max_retry and attempts >= self.max_retry:
+                break
+
+            self.stopped.wait(self.PORT_LOOKUP_INTERVAL)
+
+        return None
+
+    def _resolve_port_from(self, candidates: Sequence[str]) -> Optional[str]:
+        for candidate in candidates:
+            if self._matches_port(candidate):
+                return candidate
+        return None
+
+    def _matches_port(self, name: str) -> bool:
+        if self.port_filter is None:
+            return True
+        if isinstance(self.port_filter, _PatternType):
+            return bool(self.port_filter.search(name))
+        return str(self.port_filter) == name
+
+    def _port_filter_label(self) -> str:
+        if self.port_filter is None:
+            return "any port"
+        if isinstance(self.port_filter, _PatternType):
+            return f"pattern '{self.port_filter.pattern}'"
+        return f"'{self.port_filter}'"
 
 
 ##### MTC TOOLS imported from 
