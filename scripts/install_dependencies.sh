@@ -4,8 +4,11 @@ cd "$(dirname "$(readlink -f "$0")")"
 # Dummy sudo request to ask for password at the beginning
 sudo echo ""
 
-# exit on error
-set -e
+# exit sudo error
+if [[ $? -ne 0 ]]; then
+    echo "Sudo command failed"
+    exit 1
+fi
 
 ##
 ## Install plateform spcific dependencies
@@ -79,20 +82,24 @@ fi
 
 # CZMQ
 cd "$(dirname "$(readlink -f "$0")")"
-git clone https://github.com/zeromq/czmq.git --depth=1 && cd czmq
+git clone https://github.com/zeromq/czmq.git --depth=1 
+cd czmq
+git pull --rebase origin master
 ./autogen.sh && ./configure && make check -j4
 make install && ldconfig
-ln -s /usr/local/lib/libczmq.so.4 /usr/lib/
+ln -sf /usr/local/lib/libczmq.so.4 /usr/lib/
 # cd bindings/python/ && python setup.py build && python setup.py install
 cd "$(dirname "$(readlink -f "$0")")/.."
 # uv add --editable "$(dirname "$(readlink -f "$0")")/czmq/bindings/python"
 
 # ZYRE
 cd "$(dirname "$(readlink -f "$0")")"
-git clone https://github.com/zeromq/zyre.git --depth=1 && cd zyre
+git clone https://github.com/zeromq/zyre.git --depth=1
+cd zyre
+git pull --rebase origin master
 ./autogen.sh && ./configure && make check -j4
 make install && ldconfig
-ln -s /usr/local/lib/libzyre.so.2 /usr/lib/
+ln -sf /usr/local/lib/libzyre.so.2 /usr/lib/
 # cd bindings/python/ && python setup.py build && python setup.py install
 cd "$(dirname "$(readlink -f "$0")")/.."
 # uv add --editable "$(dirname "$(readlink -f "$0")")/zyre/bindings/python"
