@@ -1,11 +1,14 @@
 #!/bin/bash
-
-if [[ $EUID -ne 0 ]]; then
-   echo "This script must be run as root"
-   exit 1
-fi
-
 cd "$(dirname "$(readlink -f "$0")")"
+
+# Dummy sudo request to ask for password at the beginning
+sudo echo ""
+
+# exit sudo error
+if [[ $? -ne 0 ]]; then
+    echo "Sudo command failed"
+    exit 1
+fi
 
 ##
 ## Install plateform spcific dependencies
@@ -17,19 +20,19 @@ if [[ $(command -v apt) ]]; then
     DISTRO='xbian'
 
     # MPV
-    apt install mpv -y
+    sudo apt install mpv -y
 
     # GStreamer
-    # apt install libdrm libmpg123 gstreamer1.0-plugins-ugly libgstreamer1.0-dev libgstreamer-plugins-base1.0-dev gstreamer1.0-pulseaudio gstreamer1.0-x gstreamer1.0-plugins-bad gstreamer1.0-alsa gstreamer1.0-plugins-base gstreamer1.0-plugins-good -y
+    # sudo apt install libdrm libmpg123 gstreamer1.0-plugins-ugly libgstreamer1.0-dev libgstreamer-plugins-base1.0-dev gstreamer1.0-pulseaudio gstreamer1.0-x gstreamer1.0-plugins-bad gstreamer1.0-alsa gstreamer1.0-plugins-base gstreamer1.0-plugins-good -y
 
     # hplayer2 dependencies
-    apt install python3 rsync libdrm-dev libgbm-dev libgles-dev libegl-dev libegl1-mesa-dev libgles2-mesa-dev -y
-    apt install libffi-dev libjack-dev libjpeg-dev libtool autotools-dev automake libopenblas0 cython3 python3-opencv -y
-    apt install libzmq3-dev -y
+    sudo apt install python3 rsync libdrm-dev libgbm-dev libgles-dev libegl-dev libegl1-mesa-dev libgles2-mesa-dev -y
+    sudo apt install libffi-dev libjack-dev libjpeg-dev libtool autotools-dev automake libopenblas0 cython3 python3-opencv -y
+    sudo apt install libzmq3-dev -y
 
     # RPi
     if [[ $(uname -m) = armv* ]]; then
-    	apt-get install i2c-tools -y
+    	sudo apt-get install i2c-tools -y
     fi
 
 ## ARCH Linux
@@ -37,23 +40,23 @@ elif [[ $(command -v pacman) ]]; then
     DISTRO='arch'
 
     # MPV
-    pacman -S mpv --noconfirm --needed
+    sudo pacman -S mpv --noconfirm --needed
 
     # GStreamer
-    # pacman -S gst-python libdrm mpg123 gst-plugins-ugly gst-libav gst-plugins-base-libs gstreamer gst-plugins-bad gst-plugins-base gst-plugins-good --noconfirm --needed
+    # sudo pacman -S gst-python libdrm mpg123 gst-plugins-ugly gst-libav gst-plugins-base-libs gstreamer gst-plugins-bad gst-plugins-base gst-plugins-good --noconfirm --needed
     
     # hplayer2 dependencies
-    pacman -S pkg-config python cython liblo libxcrypt ttf-dejavu rsync python-pipenv mesa --noconfirm --needed
+    sudo pacman -S pkg-config python cython liblo libxcrypt ttf-dejavu rsync python-pipenv mesa --noconfirm --needed
 
     # Python (with overwrites)
-    # pacman -S python-flask-socketio --overwrite *flask_socketio/* --overwrite *lask_SocketIO* --overwrite *socketio* --overwrite *bidict* --overwrite *engineio* --overwrite *flask* --overwrite *blinker* --overwrite *click* --overwrite *jinja2* --overwrite *itsdangerous* --overwrite *werkzeug* --overwrite *markupsafe* --overwrite *six* --noconfirm --needed    
-    # pacman -S python-netifaces --overwrite *netifaces* --noconfirm --needed
-    # pacman -S python-wheel --noconfirm --needed
-    
-    
+    # sudo pacman -S python-flask-socketio --overwrite *flask_socketio/* --overwrite *lask_SocketIO* --overwrite *socketio* --overwrite *bidict* --overwrite *engineio* --overwrite *flask* --overwrite *blinker* --overwrite *click* --overwrite *jinja2* --overwrite *itsdangerous* --overwrite *werkzeug* --overwrite *markupsafe* --overwrite *six* --noconfirm --needed    
+    # sudo pacman -S python-netifaces --overwrite *netifaces* --noconfirm --needed
+    # sudo pacman -S python-wheel --noconfirm --needed
+
+
     # RPi
     if [[ $(uname -m) = armv* || $(uname -m) = aarch64 ]]; then
-      pacman -S i2c-tools --noconfirm --needed
+      sudo pacman -S i2c-tools --noconfirm --needed
     fi
 
 ## Plateform not detected ...
@@ -79,20 +82,24 @@ fi
 
 # CZMQ
 cd "$(dirname "$(readlink -f "$0")")"
-git clone https://github.com/zeromq/czmq.git --depth=1 && cd czmq
+git clone https://github.com/zeromq/czmq.git --depth=1 
+cd czmq
+git pull --rebase origin master
 ./autogen.sh && ./configure && make check -j4
 make install && ldconfig
-ln -s /usr/local/lib/libczmq.so.4 /usr/lib/
+ln -sf /usr/local/lib/libczmq.so.4 /usr/lib/
 # cd bindings/python/ && python setup.py build && python setup.py install
 cd "$(dirname "$(readlink -f "$0")")/.."
 # uv add --editable "$(dirname "$(readlink -f "$0")")/czmq/bindings/python"
 
 # ZYRE
 cd "$(dirname "$(readlink -f "$0")")"
-git clone https://github.com/zeromq/zyre.git --depth=1 && cd zyre
+git clone https://github.com/zeromq/zyre.git --depth=1
+cd zyre
+git pull --rebase origin master
 ./autogen.sh && ./configure && make check -j4
 make install && ldconfig
-ln -s /usr/local/lib/libzyre.so.2 /usr/lib/
+ln -sf /usr/local/lib/libzyre.so.2 /usr/lib/
 # cd bindings/python/ && python setup.py build && python setup.py install
 cd "$(dirname "$(readlink -f "$0")")/.."
 # uv add --editable "$(dirname "$(readlink -f "$0")")/zyre/bindings/python"
