@@ -35,7 +35,7 @@ player.doLog['cmds'] = True
 # Interfaces
 # hplayer.addInterface('http', 8081)
 hplayer.addInterface('http2', 8080, {'playlist': False, 'loop': False, 'mute': True})
-hplayer.addInterface('mtc', re.compile("rtpmidid:(?!Nowde)+") )
+hplayer.addInterface('mtc', re.compile(r"^Nowde\b"), 0)
 # hplayer.addInterface('serial', '^M5', 10)
 
 
