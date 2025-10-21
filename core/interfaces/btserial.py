@@ -1,10 +1,21 @@
 from .base import BaseInterface
 from time import sleep
-import socket, bluetooth, sys
+import importlib
+import socket
+import sys
+
+bluetooth = None
+_BLUETOOTH_IMPORT_ERROR = None
+try:
+    bluetooth = importlib.import_module("bluetooth")
+except ImportError as err:
+    _BLUETOOTH_IMPORT_ERROR = err
 
 class BtserialInterface (BaseInterface):
 
     def __init__(self, hplayer, _device):
+        if _BLUETOOTH_IMPORT_ERROR:
+            raise RuntimeError("pybluez is required for BtserialInterface") from _BLUETOOTH_IMPORT_ERROR
         super().__init__(hplayer, "BTSERIAL")
         self.device_name = _device
         self.device_addr = None

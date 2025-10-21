@@ -1,12 +1,23 @@
 from .base import BaseInterface
 from ..engine import network
-import paho.mqtt.client as mqtt
+import importlib
 from time import sleep
 from random import randrange
+
+mqtt = None
+_MQTT_IMPORT_ERROR = None
+try:
+    mqtt = importlib.import_module("paho.mqtt.client")
+except ImportError as err:
+    _MQTT_IMPORT_ERROR = err
 
 class MqttInterface (BaseInterface):
 
     def __init__(self, hplayer, _broker):
+        if _MQTT_IMPORT_ERROR:
+            raise RuntimeError("paho-mqtt is required for MqttInterface") from _MQTT_IMPORT_ERROR
+        if mqtt is None:
+            raise RuntimeError("paho-mqtt is unavailable for MqttInterface")
         super().__init__(hplayer, "MQTT")
         self.broker = _broker
         self.isConnected = False

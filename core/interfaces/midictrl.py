@@ -1,18 +1,57 @@
 from .base import BaseInterface
-import rtmidi
 import time
 import threading
+import platform
+from typing import Optional
+
+try:
+    import rtmidi
+except ImportError:  # pragma: no cover - optional dependency
+    rtmidi = None
 
 class MidictrlInterface(BaseInterface):
     
     def __init__(self, hplayer, device_filter="LPD8", retry=0):
         super().__init__(hplayer, "MidiCtrl")
+        if rtmidi is None:
+            raise RuntimeError("python-rtmidi module not available; MIDI interface disabled")
+
         self.device_filter = device_filter
-        self.midiin = rtmidi.MidiIn(rtapi=rtmidi.API_LINUX_ALSA)
+        self._rtapi = self._select_api()
+        try:
+            self.midiin = rtmidi.MidiIn(rtapi=self._rtapi)
+        except RuntimeError as exc:
+            raise RuntimeError(f"MIDI backend unavailable: {exc}") from exc
         self._connection_attempts = 0
         self._max_retries = retry
         self._running = False
         self._callback_lock = threading.Lock()
+
+    def _select_api(self):
+        compiled = list(rtmidi.get_compiled_api())
+        if not compiled:
+            raise RuntimeError("No MIDI backend available")
+
+        system = platform.system().lower()
+
+        preference: list[Optional[int]] = []
+        if system == "linux":
+            preference.extend([
+                getattr(rtmidi, "API_LINUX_ALSA", None),
+                getattr(rtmidi, "API_UNIX_JACK", None),
+            ])
+        elif system == "darwin":
+            preference.append(getattr(rtmidi, "API_MACOSX_CORE", None))
+        elif system.startswith("win"):
+            preference.append(getattr(rtmidi, "API_WINDOWS_MM", None))
+
+        preference.append(getattr(rtmidi, "API_UNSPECIFIED", None))
+
+        for api in preference:
+            if api in compiled:
+                return api
+
+        return compiled[0]
 
     def _midi_callback(self, message_data, _):
         msg, _ = message_data

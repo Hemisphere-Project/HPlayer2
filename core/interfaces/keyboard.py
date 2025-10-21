@@ -1,15 +1,43 @@
 from .base import BaseInterface
-from evdev import InputDevice, categorize, ecodes
-from watchdog.observers import Observer                 # python3-watchdog ?
-from watchdog.events import FileSystemEventHandler
-import sys, subprocess
+import importlib
+import sys
+import subprocess
 import time
+
+InputDevice = None
+categorize = None
+ecodes = None
+_EVDEV_IMPORT_ERROR = None
+try:
+    _evdev = importlib.import_module("evdev")
+    InputDevice = getattr(_evdev, "InputDevice", None)
+    categorize = getattr(_evdev, "categorize", None)
+    ecodes = getattr(_evdev, "ecodes", None)
+except ImportError as err:
+    _EVDEV_IMPORT_ERROR = err
+
+Observer = None
+FileSystemEventHandler = None
+_WATCHDOG_IMPORT_ERROR = None
+try:
+    Observer = importlib.import_module("watchdog.observers").Observer
+    FileSystemEventHandler = importlib.import_module("watchdog.events").FileSystemEventHandler
+except ImportError as err:
+    _WATCHDOG_IMPORT_ERROR = err
 
 millis = lambda: int(round(time.time() * 1000))
 
 class KeyboardInterface (BaseInterface):
 
     def __init__(self, hplayer):
+        if _EVDEV_IMPORT_ERROR:
+            raise RuntimeError("evdev is required for KeyboardInterface") from _EVDEV_IMPORT_ERROR
+        if InputDevice is None or categorize is None or ecodes is None:
+            raise RuntimeError("evdev is unavailable for KeyboardInterface")
+        if _WATCHDOG_IMPORT_ERROR:
+            raise RuntimeError("watchdog is required for KeyboardInterface") from _WATCHDOG_IMPORT_ERROR
+        if Observer is None or FileSystemEventHandler is None:
+            raise RuntimeError("watchdog is unavailable for KeyboardInterface")
 
         # Interface settings
         super(KeyboardInterface, self).__init__(hplayer, "Keyboard")
@@ -101,7 +129,7 @@ class KeyboardInterface (BaseInterface):
                     # self.log("keyboard event:", keycode+'-'+keymode)
 
                 elif not event:
-                	time.sleep(0.05)
+                    time.sleep(0.05)
 
             except:
                 time.sleep(0.5)

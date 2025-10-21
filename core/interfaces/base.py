@@ -33,10 +33,10 @@ class BaseInterface(ABC, Module):
 
     # Stop
     def quit(self, join=True):
-        if self.isRunning(): 
+        if self.isRunning():
             self.log("stopping...")
             self.stopped.set()
-        if join:
+        if join and threading.current_thread() is not self.recvThread:
             self.recvThread.join()
             self.log("stopped")
 

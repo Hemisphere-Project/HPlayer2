@@ -1,6 +1,10 @@
 from .base import BaseInterface
-import RPi.GPIO as GPIO
 from threading import Timer
+
+try:
+    import RPi.GPIO as GPIO
+except ImportError:  # pragma: no cover - GPIO is optional on non-RPi platforms
+    GPIO = None
 
 class GpioInterface (BaseInterface):
     
@@ -8,6 +12,9 @@ class GpioInterface (BaseInterface):
 
     def __init__(self, hplayer, pins_watch=[], debounce=200, antispike=100, pullupdown='PUP'):
         super().__init__(hplayer, self.name)
+
+        if GPIO is None:
+            raise RuntimeError("RPi.GPIO module not available; GPIO interface disabled")
 
         self._state = {}
         self._pinsIN = []

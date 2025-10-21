@@ -10,21 +10,21 @@ from core.engine.settings import Settings
 from core.engine.imgen import ImGen
 
 from collections import OrderedDict
-from threading import Timer
+from threading import Timer, Event
 from termcolor import colored
 from time import sleep
 import signal
-import sys, os, platform
+import sys, os, platform, shutil, subprocess
 from pymitter import EventEmitter
 
 
-runningFlag = True
+_RUN_EVENT = Event()
+_RUN_EVENT.set()
 
 # CTR-C Handler
 def signal_handler(signal, frame):
-        print ('\n'+colored('[SIGINT] You pressed Ctrl+C!', 'yellow'))
-        global runningFlag
-        runningFlag = False
+    print('\n'+colored('[SIGINT] You pressed Ctrl+C!', 'yellow'))
+    _RUN_EVENT.clear()
 signal.signal(signal.SIGINT, signal_handler)
 
 
@@ -34,6 +34,11 @@ class HPlayer2(Module):
         # super().__init__(wildcard=True, delimiter=".")
         super().__init__(None, 'HPlayer2', 'green')
         self.nameP = colored(('[HPlayer2]').ljust(10, ' ')+' ', 'green')
+
+        self._shutdown_event = _RUN_EVENT
+        self._shutdown_requested = False
+        self._shutdown_complete = False
+        self._exit_code = 0
 
         self._lastUsedPlayer = 0
 
@@ -73,8 +78,17 @@ class HPlayer2(Module):
         if name and name in self._players:
             self.log("player", name, "already exists")
         else:
-            PlayerClass = playerlib.getPlayer(ptype)
-            p = PlayerClass(self, name)
+            try:
+                PlayerClass = playerlib.getPlayer(ptype)
+            except (ImportError, AttributeError) as err:
+                self.log("player", ptype, "not available:", err)
+                return None
+
+            try:
+                p = PlayerClass(self, name)
+            except RuntimeError as err:
+                self.log("player", ptype, "disabled:", err)
+                return None
             self._players[name] = p
             
             # Bind Volume
@@ -125,8 +139,8 @@ class HPlayer2(Module):
             @p.on('hardreset')
             def reset(ev, *args):
                 self.log('HARD KILL FROM PLAYER')
-                os.system('pkill mpv')
-                os._exit(0)
+                self._kill_process('mpv')
+                self.request_shutdown(force=True)
 
             self.emit('player-added', p)
 
@@ -146,6 +160,57 @@ class HPlayer2(Module):
 
     def statusPlayers(self):
         return [p.status() for p in self.players()]
+
+    def _kill_process(self, name):
+        pkill = shutil.which('pkill')
+        if pkill:
+            subprocess.run([pkill, name], check=False)
+        else:
+            self.log('pkill not available; unable to terminate', name)
+
+    def _force_exit(self, code=0):
+        os._exit(code)
+
+    def request_shutdown(self, exit_code=0, *, force=False, force_delay=None):
+        """Signal the main loop to terminate and optionally force exit."""
+        self._exit_code = exit_code
+        if not self._shutdown_requested and force_delay:
+            Timer(force_delay, self._force_exit, args=(exit_code,)).start()
+        self._shutdown_requested = True
+        self._shutdown_event.clear()
+        if force:
+            self._force_exit(exit_code)
+
+    def shutdown(self, exit_code=0):
+        """Public helper to request a graceful shutdown."""
+        self.request_shutdown(exit_code=exit_code)
+
+    def _stop_components(self):
+        if self._shutdown_complete:
+            return
+
+        self._shutdown_complete = True
+
+        self.log()
+        self.log("is closing..")
+        self.emit('app-closing')
+
+        interfaces = list(self.interfaces())
+        players = self.players()
+        samplers = self.samplers()
+
+        for iface in interfaces:
+            iface.quit(False)
+        for player in players:
+            player.quit()
+        for sampler in samplers:
+            sampler.quit()
+
+        for iface in interfaces:
+            iface.quit(True)
+
+        self.emit('app-quit')
+        self.log("stopped. Goodbye !\n")
 
 
     #
@@ -190,8 +255,8 @@ class HPlayer2(Module):
             @s.on('hardreset')
             def reset(ev, *args):
                 self.log('HARD KILL FROM PLAYER')
-                os.system('pkill mpv')
-                os._exit(0)
+                self._kill_process('mpv')
+                self.request_shutdown(force=True)
 
             self.emit('sampler-added', s)
 
@@ -215,9 +280,20 @@ class HPlayer2(Module):
     #
 
     def addInterface(self, iface, *argv):
-        InterfaceClass = ifacelib.getInterface(iface)
-        self._interfaces[iface] = InterfaceClass(self, *argv)
-        return self._interfaces[iface]
+        try:
+            InterfaceClass = ifacelib.getInterface(iface)
+        except (ImportError, AttributeError) as err:
+            self.log("interface", iface, "not available:", err)
+            return None
+
+        try:
+            instance = InterfaceClass(self, *argv)
+        except RuntimeError as err:
+            self.log("interface", iface, "disabled:", err)
+            return None
+
+        self._interfaces[iface] = instance
+        return instance
 
 
     def interface(self, name):
@@ -245,67 +321,66 @@ class HPlayer2(Module):
     def run(self):
 
         sleep(0.1)
+        self._shutdown_event.set()
+        self._shutdown_requested = False
+        self._shutdown_complete = False
+        self._exit_code = 0
 
         try:
-            if network.get_ip("eth0") != "127.0.0.1":
-                self.log("IP for eth0 is", network.get_ip("eth0"));
-            if network.get_ip("wint") != "127.0.0.1":
-                self.log("IP for wint  is", network.get_ip("wint"));
-            if network.get_ip("wlan0") != "127.0.0.1":
-                self.log("IP for wlan0  is", network.get_ip("wlan0"));
-        except:
-            pass
+            try:
+                if network.get_ip("eth0") != "127.0.0.1":
+                    self.log("IP for eth0 is", network.get_ip("eth0"))
+                if network.get_ip("wint") != "127.0.0.1":
+                    self.log("IP for wint  is", network.get_ip("wint"))
+                if network.get_ip("wlan0") != "127.0.0.1":
+                    self.log("IP for wlan0  is", network.get_ip("wlan0"))
+            except Exception:
+                pass
 
-        self.log("started.. Welcome ! \n");
+            self.log("started.. Welcome ! \n")
 
-        sys.stdout.flush()
-
-        # START players
-        for p in self.players():
-            p.start()
-
-        # START samplers
-        for s in self.samplers():
-            s.start()
-
-        # START interfaces
-        for iface in self.interfaces():
-            iface.start()
-
-        # WAIT for players an samplers to be ready
-        for p in self.players() + self.samplers():
-            while not p.isReady():
-                sleep(0.1)
-
-        self.emit('app-ready')
-
-        # LOAD persistent settings
-        self.settings.load()
-
-        self.emit('app-run')
-
-        while runningFlag and self.running():
             sys.stdout.flush()
-            sleep(0.5)
 
-        # STOP
-        self.log()
-        self.log("is closing..")
-        self.emit('app-closing')
+            # START players
+            for p in self.players():
+                p.start()
 
-        # Trigger QUIT
-        for iface in self.interfaces(): iface.quit(False)
-        for p in self.players(): p.quit()
-        for s in self.samplers(): s.quit()
+            # START samplers
+            for s in self.samplers():
+                s.start()
 
-        # Wait for interface threads to finish
-        for iface in self.interfaces(): iface.quit(True)
+            # START interfaces
+            for iface in self.interfaces():
+                iface.start()
 
-        # os.system('ps faux | pgrep mpv | xargs kill')
-        self.emit('app-quit')
-        self.log("stopped. Goodbye !\n");
-        # sys.exit(0)
-        os._exit(0)
+            # WAIT for players and samplers to be ready, but respect shutdown signals
+            for component in self.players() + self.samplers():
+                while (self._shutdown_event.is_set()
+                       and component.isRunning()
+                       and not component.isReady()):
+                    sleep(0.1)
+
+                if not self._shutdown_event.is_set():
+                    self.log("shutdown requested before components became ready")
+                    break
+
+                if not component.isRunning() and not component.isReady():
+                    self.log(component.name, "failed to start correctly; continuing without waiting")
+
+            self.emit('app-ready')
+
+            # LOAD persistent settings
+            self.settings.load()
+
+            self.emit('app-run')
+
+            while self._shutdown_event.is_set() and self.running():
+                sys.stdout.flush()
+                sleep(0.5)
+        finally:
+            self._stop_components()
+
+        return self._exit_code
 
 
     #
@@ -318,13 +393,13 @@ class HPlayer2(Module):
         #
         @module.on('hardreset')
         def hardreset(ev, *args): 
-            os.system('systemctl restart NetworkManager')
-            # set timer to exit
-            Timer(5.0, os._exit, [0]).start()
-            global runningFlag
-            runningFlag = False
-            # sleep(5.0)
-            os.system('pkill mpv')
+            systemctl = shutil.which('systemctl')
+            if systemctl:
+                subprocess.run([systemctl, 'restart', 'NetworkManager'], check=False)
+            else:
+                self.log('systemctl not available; skipping NetworkManager restart')
+            self.request_shutdown(force_delay=5.0)
+            self._kill_process('mpv')
             self.log('HARD KILL in 5s')
             # os._exit(0)
 

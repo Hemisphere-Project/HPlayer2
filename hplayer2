@@ -1,32 +1,22 @@
 #!/bin/bash
-DIR="$(dirname "$(readlink -f "$0")")"
 
-if [ "$#" -eq  "0" ]; then
- 	profile=default
-else
- 	profile=$1
-fi
+set -euo pipefail
+
+# Resolve repository root
+DIR="$(cd "$(dirname "$0")" && pwd)"
+
+profile="${1:-default}"
 
 cd "$DIR"
 
-# find poetry
-POETRY=""
-if [ -x /usr/bin/poetry ]; then
-    POETRY=/usr/bin/poetry
-elif [ -x /usr/local/bin/poetry ]; then
-    POETRY=/usr/local/bin/poetry
-elif [ -x ~/.local/bin/poetry ]; then
-    POETRY=~/.local/bin/poetry
+if command -v uv >/dev/null 2>&1; then
+    exec uv run python "$DIR/launcher.py" "$profile"
 fi
 
-if [ -z "$POETRY" ]; then
-    echo "Poetry not found"
-    exit 1
+if [ -x "$DIR/.venv/bin/python" ]; then
+    source "$DIR/.venv/bin/activate"
+    exec python "$DIR/launcher.py" "$profile"
 fi
 
-# run using poetry
-# $POETRY run python "$DIR/launcher.py" "$profile" 
-
-# direct launch using .venv made by poetry
-source .venv/bin/activate
-python "$DIR/launcher.py" "$profile" 
+echo "uv is required to run HPlayer2. You should first run scripts/install.sh'." >&2
+exit 1
