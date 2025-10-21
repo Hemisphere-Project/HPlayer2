@@ -1,15 +1,20 @@
 from .base import BaseInterface
 from time import sleep
 import binascii
+import importlib
 import sys
-
 
 
 ###
 ### ADAFRUIT NFC PN532
 ### https://github.com/adafruit/Adafruit_Python_PN532
 ###
-import Adafruit_PN532 as PN532
+PN532 = None
+_PN532_IMPORT_ERROR = None
+try:
+    PN532 = importlib.import_module("Adafruit_PN532")
+except ImportError as err:
+    _PN532_IMPORT_ERROR = err
 
 
 class NfcInterface (BaseInterface):
@@ -18,11 +23,16 @@ class NfcInterface (BaseInterface):
 
     def __init__(self, hplayer, timeout=1000, divider=5):
 
-        self.log('timeout:', timeout ,'ms')
-        self.log('divider:', divider ,'ms')
+        if _PN532_IMPORT_ERROR:
+            raise RuntimeError("Adafruit_PN532 is required for NfcInterface") from _PN532_IMPORT_ERROR
+        if PN532 is None:
+            raise RuntimeError("Adafruit_PN532 is unavailable for NfcInterface")
 
         # Interface settings
         super(NfcInterface, self).__init__(hplayer, "NFC")
+
+        self.log('timeout:', timeout ,'ms')
+        self.log('divider:', divider ,'ms')
 
         # Timeout
         self.timeout = timeout

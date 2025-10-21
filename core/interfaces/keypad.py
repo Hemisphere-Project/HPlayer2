@@ -1,7 +1,14 @@
 from .base import BaseInterface
-import Adafruit_CharLCD as LCD
+import importlib
 from time import sleep
 import os
+
+LCD = None
+_LCD_IMPORT_ERROR = None
+try:
+    LCD = importlib.import_module("Adafruit_CharLCD")
+except ImportError as err:
+    _LCD_IMPORT_ERROR = err
 
 
 class KeypadInterface (BaseInterface):
@@ -22,14 +29,13 @@ class KeypadInterface (BaseInterface):
     CHAR_LOVE   = '\x05'
 
     def __init__(self, hplayer):
+        if _LCD_IMPORT_ERROR:
+            raise RuntimeError("Adafruit_CharLCD is required for KeypadInterface") from _LCD_IMPORT_ERROR
+        if LCD is None:
+            raise RuntimeError("Adafruit_CharLCD is unavailable for KeypadInterface")
         super(KeypadInterface, self).__init__(hplayer, "KEYPAD")
-        try:
-            self.lcd = LCD.Adafruit_CharLCDPlate()
-            self.lcd.set_color(0, 0, 0)
-        except:
-            self.log("LCD Keypad not found ...")
-            self.lcd = None
-            return
+        self.lcd = LCD.Adafruit_CharLCDPlate()
+        self.lcd.set_color(0, 0, 0)
         
         self.lcd.set_color(0, 0, 0)
         

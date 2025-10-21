@@ -1,10 +1,19 @@
 from .base import BaseInterface
 from core.engine import network
 
-import time, os
-import serial
-from serial.tools import list_ports
+import importlib
+import time
+import os
 from threading import Timer
+
+serial = None
+list_ports = None
+_TELECO_SERIAL_ERROR = None
+try:
+    serial = importlib.import_module("serial")
+    list_ports = importlib.import_module("serial.tools.list_ports")
+except ImportError as err:
+    _TELECO_SERIAL_ERROR = err
 
 PAGE_EXIT       = -3
 PAGE_WELCOME    = -2
@@ -20,6 +29,10 @@ SCREEN_REFRESH  = 0.1
 class TelecoInterface (BaseInterface):
 
     def  __init__(self, hplayer):
+        if _TELECO_SERIAL_ERROR:
+            raise RuntimeError("pyserial is required for TelecoInterface") from _TELECO_SERIAL_ERROR
+        if serial is None or list_ports is None:
+            raise RuntimeError("pyserial is unavailable for TelecoInterface")
         super().__init__(hplayer, "Teleco")
         self.port = None
         self.serial = None

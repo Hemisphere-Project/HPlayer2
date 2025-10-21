@@ -1,17 +1,69 @@
 from .base import BaseInterface
-import eventlet
-from watchdog.observers import Observer
-from watchdog.events import PatternMatchingEventHandler
-from flask import Flask, render_template, session, request, send_from_directory
-from flask_socketio import SocketIO, emit, join_room, leave_room, close_room, rooms, disconnect
-from werkzeug.utils import secure_filename
-import threading, os, time, queue
-import logging, sys, json
-
-from ..engine.network import get_allip, get_hostname
+import importlib
+import threading
+import os
+import time
+import queue
+import logging
+import sys
+import json
 import socket
 
-from zeroconf import ServiceInfo, Zeroconf 
+from ..engine.network import get_allip, get_hostname
+
+Observer = None
+PatternMatchingEventHandler = None
+Flask = None
+send_from_directory = None
+SocketIO = None
+emit = None
+join_room = None
+leave_room = None
+close_room = None
+rooms = None
+disconnect = None
+secure_filename = None
+ServiceInfo = None
+Zeroconf = None
+
+_REGIE_IMPORT_ERRORS = []
+
+try:
+    Observer = importlib.import_module("watchdog.observers").Observer
+    PatternMatchingEventHandler = importlib.import_module("watchdog.events").PatternMatchingEventHandler
+except ImportError as err:
+    _REGIE_IMPORT_ERRORS.append(("watchdog", err))
+
+try:
+    _flask = importlib.import_module("flask")
+    Flask = getattr(_flask, "Flask", None)
+    send_from_directory = getattr(_flask, "send_from_directory", None)
+except ImportError as err:
+    _REGIE_IMPORT_ERRORS.append(("flask", err))
+
+try:
+    _socketio = importlib.import_module("flask_socketio")
+    SocketIO = getattr(_socketio, "SocketIO", None)
+    emit = getattr(_socketio, "emit", None)
+    join_room = getattr(_socketio, "join_room", None)
+    leave_room = getattr(_socketio, "leave_room", None)
+    close_room = getattr(_socketio, "close_room", None)
+    rooms = getattr(_socketio, "rooms", None)
+    disconnect = getattr(_socketio, "disconnect", None)
+except ImportError as err:
+    _REGIE_IMPORT_ERRORS.append(("flask-socketio", err))
+
+try:
+    secure_filename = importlib.import_module("werkzeug.utils").secure_filename
+except ImportError as err:
+    _REGIE_IMPORT_ERRORS.append(("werkzeug", err))
+
+try:
+    _zeroconf = importlib.import_module("zeroconf")
+    ServiceInfo = getattr(_zeroconf, "ServiceInfo", None)
+    Zeroconf = getattr(_zeroconf, "Zeroconf", None)
+except ImportError as err:
+    _REGIE_IMPORT_ERRORS.append(("zeroconf", err))
 
 thread = None
 thread_lock = threading.Lock()
@@ -23,6 +75,12 @@ REGIE_PATH2 = '/data/RPi-Regie'
 class RegieInterface (BaseInterface):
 
     def  __init__(self, hplayer, port, datapath, latency=437):
+        if _REGIE_IMPORT_ERRORS:
+            missing = ", ".join(name for name, _ in _REGIE_IMPORT_ERRORS)
+            raise RuntimeError(f"RegieInterface requires optional packages: {missing}")
+        required = [Observer, PatternMatchingEventHandler, Flask, SocketIO, emit, join_room, leave_room, close_room, rooms, disconnect, secure_filename, ServiceInfo, Zeroconf]
+        if any(dep is None for dep in required):
+            raise RuntimeError("RegieInterface dependencies are unavailable")
         super(RegieInterface, self).__init__(hplayer, "Regie")
         self._port = port
         self._datapath = datapath

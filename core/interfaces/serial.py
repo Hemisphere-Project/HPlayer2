@@ -1,14 +1,27 @@
 from .base import BaseInterface
 
+import importlib
 import time
-import serial
-from serial.tools import list_ports
+
+serial = None
+list_ports = None
+_SERIAL_IMPORT_ERROR = None
+
+try:
+    serial = importlib.import_module("serial")
+    list_ports = importlib.import_module("serial.tools.list_ports")
+except ImportError as err:
+    _SERIAL_IMPORT_ERROR = err
 
 
 
 class SerialInterface (BaseInterface):
 
     def  __init__(self, hplayer, filter="", maxRetry=0):
+        if _SERIAL_IMPORT_ERROR:
+            raise RuntimeError("pyserial is required for SerialInterface") from _SERIAL_IMPORT_ERROR
+        if serial is None or list_ports is None:
+            raise RuntimeError("pyserial is unavailable for SerialInterface")
         super(SerialInterface, self).__init__(hplayer, "Serial")
         self.port = None
         self.serial = None

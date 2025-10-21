@@ -1,5 +1,4 @@
 from .gpio import GpioInterface
-import RPi.GPIO as GPIO
 
 class HconInterface (GpioInterface):
     
