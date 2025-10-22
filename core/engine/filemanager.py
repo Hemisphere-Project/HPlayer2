@@ -251,6 +251,8 @@ class FileManager(Module):
         liste = []
         if not isinstance(entries, (list,)):
             entries = [entries]
+            
+        self.log("Listing files for entries: "+str(entries))
 
         for entry in entries:
             if not entry: continue
@@ -304,18 +306,24 @@ class FileManager(Module):
                         else:
                             globlist = []
                             for root, dirs, files in os.walk(base, topdown=False):
-                               for name in files:
-                                  fpath = os.path.join(root, name)
-                                  match = re.fullmatch( r''+fullpath.replace('*','.*'), fpath, re.M|re.I)
-                                #   print(fpath, fullpath.replace('*','.*'), match)
-                                  if ('/.' not in fpath) and match:
-                                    	globlist.append(fpath)
-                            # print(globlist)
+                                for name in files:
+                                    fpath = os.path.join(root, name)
+                                    pattern = fullpath.replace('*','.*')
+                                    match = re.fullmatch(r''+pattern, fpath, re.M|re.I)
+                                    if match:
+                                        self.log(f"Pattern '{pattern}' matched file: {fpath}")
+                                    if not name.startswith('.') and match:
+                                        globlist.append(fpath)
+                            self.log(f"Globlist found {len(globlist)} files: {globlist}")
                             for e in globlist:
                                 if os.path.isfile(e) and self.validExt(e):
                                     liste.append(e)
+                                elif not self.validExt(e):
+                                    self.log(f"File {e} has invalid extension")
+                                elif not os.path.isfile(e):
+                                    self.log(f"Path {e} is not a file")
 
         liste.sort()
-        # print(liste)
+        self.log("Found "+str(len(liste))+" valid files.")
         return liste
 

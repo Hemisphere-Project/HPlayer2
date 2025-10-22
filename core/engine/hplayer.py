@@ -63,6 +63,10 @@ class HPlayer2(Module):
         self._samplers      = OrderedDict()
         self._interfaces    = OrderedDict()
 
+        # State flags
+        self.appReady = False      # Set when app-ready event is emitted
+        self.appRunning = False    # Set when app-run event is emitted
+
         # Determine datadir
         if datadir is None:
             datadir = user_data_dir("HPlayer2", "Hemisphere")
@@ -460,18 +464,22 @@ class HPlayer2(Module):
 
                 if not component.isRunning() and not component.isReady():
                     self.log(component.name, "failed to start correctly; continuing without waiting")
-
+            
+            self.appReady = True
             self.emit('app-ready')
 
             # LOAD persistent settings
             self.settings.load()
 
+            self.appRunning = True
             self.emit('app-run')
 
             while self._shutdown_event.is_set() and self.running():
                 sys.stdout.flush()
                 sleep(0.5)
         finally:
+            self.appRunning = False
+            self.appReady = False
             self._stop_components()
 
         return self._exit_code

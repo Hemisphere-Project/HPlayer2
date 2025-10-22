@@ -27,6 +27,7 @@ _PatternType = type(re.compile(""))
 class NowdeInterface(BaseInterface):
 
     PORT_LOOKUP_INTERVAL = 5.0
+    CONNECTION_CHECK_INTERVAL = 2.0  # Check connection health every 2 seconds
 
     def __init__(self, hplayer, player=None, port_name=None, max_retry=0):
         if _MIDO_IMPORT_ERROR:
@@ -60,6 +61,9 @@ class NowdeInterface(BaseInterface):
         self.didJump = False
         self.jumpFix = 500       # compensate the latency of jump (300ms for RockPro64 on timecode jump I.E. looping)
         self.kickStart = 0
+        self.isStopped = False   # Flag to ignore MTC when stopped
+        self.lastCC = None       # Track last CC#100 value to avoid redundant commands
+        self.lastPattern = None  # Remember last pattern for auto-restart on loop
 
         # Bind to our own events
         self.hplayer.on('nowde.qf')(self.handle_timecode)
@@ -67,9 +71,13 @@ class NowdeInterface(BaseInterface):
 
     # MTC receiver THREAD
     def listen(self):
-        self.log("starting MTC listener")
+        self.log("starting MTC listener with auto-reconnect")
 
         def clbck(message):
+            # Wait for app to be running before handling MIDI
+            if not self.hplayer.appRunning:
+                return
+                
             if message.type == 'quarter_frame':
                 self.quarter_frames[message.frame_type] = message.frame_value
                 if message.frame_type == 7:
@@ -80,32 +88,85 @@ class NowdeInterface(BaseInterface):
                     data = message.data[4:]
                     tc = mtc_decode(data)
                     self.emit('ff', tc)
+            elif message.type == 'control_change':
+                if message.control == 100:
+                    self.handle_media_selection(message.value)
 
-        try:
-            target_port = self._wait_for_port()
-            if not target_port:
-                self.log(f"no MIDI input matching {self._port_filter_label()} found; stopping")
-                return
-
-            self.log(f"listening on '{target_port}'")
+        # Main reconnection loop
+        while not self.stopped.is_set():
             try:
-                self.port = mido.open_input(target_port, callback=clbck)
-            except OSError as err:
-                self.log(f"failed to open '{target_port}': {err}")
-                return
+                target_port = self._wait_for_port()
+                if not target_port:
+                    if self.max_retry > 0:
+                        self.log(f"no MIDI input matching {self._port_filter_label()} found; stopping")
+                        break
+                    else:
+                        self.log(f"no MIDI input found, retrying...")
+                        self.stopped.wait(self.PORT_LOOKUP_INTERVAL)
+                        continue
 
-            self._resolved_port_name = target_port
-            self.stopped.wait()
-        except Exception as err:
-            self.log(f"listener error: {err}")
-        finally:
-            if self.port is not None:
+                self.log(f"connecting to '{target_port}'")
                 try:
-                    self.port.close()
-                except Exception:
-                    pass
-                self.port = None
+                    self.port = mido.open_input(target_port, callback=clbck)
+                    self._resolved_port_name = target_port
+                    self.log(f"successfully connected to '{target_port}'")
+                except OSError as err:
+                    self.log(f"failed to open '{target_port}': {err}")
+                    self.port = None
+                    self._resolved_port_name = None
+                    self.stopped.wait(self.PORT_LOOKUP_INTERVAL)
+                    continue
+
+                # Monitor connection health
+                while not self.stopped.is_set() and self.port is not None:
+                    # Check if port still exists in available ports
+                    available_ports = mido.get_input_names()
+                    if target_port not in available_ports:
+                        self.log(colored(f"WARNING: MIDI port '{target_port}' disconnected!", 'red'))
+                        break
+                    
+                    # Wait before next check
+                    self.stopped.wait(self.CONNECTION_CHECK_INTERVAL)
+                
+                # Clean up disconnected port
+                if self.port is not None:
+                    try:
+                        self.port.close()
+                    except Exception as close_err:
+                        self.log(f"error closing port: {close_err}")
+                    self.port = None
+                    self._resolved_port_name = None
+                    
+                # If we're not stopping, this was a disconnect - try to reconnect
+                if not self.stopped.is_set():
+                    self.log(colored("attempting to reconnect...", 'yellow'))
+                    self.stopped.wait(self.PORT_LOOKUP_INTERVAL)
+                    
+            except Exception as err:
+                self.log(colored(f"listener error: {err}", 'red'))
+                if self.port is not None:
+                    try:
+                        self.port.close()
+                    except Exception:
+                        pass
+                    self.port = None
+                    self._resolved_port_name = None
+                
+                # Retry on error unless stopping
+                if not self.stopped.is_set():
+                    self.log("retrying after error...")
+                    self.stopped.wait(self.PORT_LOOKUP_INTERVAL)
+        
+        # Final cleanup
+        if self.port is not None:
+            try:
+                self.port.close()
+            except Exception:
+                pass
+            self.port = None
             self._resolved_port_name = None
+        
+        self.log("MTC listener stopped")
 
     def _wait_for_port(self) -> Optional[str]:
         attempts = 0
@@ -148,9 +209,56 @@ class NowdeInterface(BaseInterface):
             return f"pattern '{self.port_filter.pattern}'"
         return f"'{self.port_filter}'"
 
+    def handle_media_selection(self, cc_value):
+        """Handle CC#100 for media selection"""
+        # Only process if CC value changed
+        if cc_value == self.lastCC:
+            return
+        
+        self.lastCC = cc_value
+        
+        if cc_value == 0:
+            # Stop playback
+            self.log("CC#100=0: Stopping playback")
+            if self.player:
+                self.player.stop()
+            self.isStopped = True
+            self.lastPattern = None  # Clear pattern when stopped
+        else:
+            # Build pattern with zero-padding support using glob-style wildcard
+            # The pattern uses regex alternation with glob wildcards
+            # For single digit: match X_*, 0X_*, or 00X_*
+            # For double digit: match XX_* or 0XX_*
+            # For triple digit: match XXX_*
+            if cc_value < 10:
+                pattern = f"(00{cc_value}_*|0{cc_value}_*|{cc_value}_*)"
+            elif cc_value < 100:
+                pattern = f"(0{cc_value}_*|{cc_value}_*)"
+            else:
+                pattern = f"{cc_value}_*"
+            
+            self.log(f"CC#100={cc_value}: Playing media matching pattern: {pattern}")
+            
+            # Try to play the media
+            self.hplayer.playlist.play(pattern)
+            if self.hplayer.playlist.size() > 0:
+                self.isStopped = False
+                self.kickStart = 20  # Reset kickStart for new media
+                self.lastPattern = pattern  # Remember this pattern
+            else:
+                self.log(colored(f"WARNING: No media found for CC#100={cc_value} (pattern: {pattern})", 'yellow'))
+                if self.player:
+                    self.player.stop()
+                self.isStopped = True
+                self.lastPattern = None
+
     def handle_timecode(self, ev, *args):
         """Handle timecode events and sync player"""
         if self.player is None:
+            return
+
+        # Ignore MTC when explicitly stopped via CC#100=0
+        if self.isStopped:
             return
 
         doLog = True
@@ -170,9 +278,19 @@ class NowdeInterface(BaseInterface):
             if self.kickStart < 0:
                 self.kickStart += 1
             else:
-                self.hplayer.playlist.playindex(0)
-                pos = 0
-                self.kickStart = 20
+                # Video ended locally - restart on timecode loop if we have a pattern
+                if self.lastPattern is not None and not self.isStopped:
+                    self.log(f"Video ended, restarting with pattern: {self.lastPattern}")
+                    self.hplayer.playlist.play(self.lastPattern)
+                    if self.hplayer.playlist.size() > 0:
+                        self.kickStart = 20
+                    else:
+                        # Pattern no longer matches, stop
+                        self.log(colored(f"WARNING: Pattern {self.lastPattern} no longer matches any files", 'yellow'))
+                        return
+                else:
+                    # No pattern to restart, just wait
+                    return
         else:
             self.kickStart = -3
 
