@@ -14,8 +14,10 @@ from threading import Timer, Event
 from termcolor import colored
 from time import sleep
 import signal
-import sys, os, platform, shutil, subprocess
+import sys, os, platform, shutil, subprocess, inspect
 from pymitter import EventEmitter
+from platformdirs import user_data_dir
+import tempfile
 
 
 _RUN_EVENT = Event()
@@ -30,7 +32,22 @@ signal.signal(signal.SIGINT, signal_handler)
 
 class HPlayer2(Module):
 
-    def __init__(self, basepath=None, settingspath=None):
+    def __init__(self, mediaPath=None, config=None, datadir=None, extraMediaPath=None):
+        # Backward compatibility: detect old API usage
+        # Old API: HPlayer2(basepath, settingspath)
+        # New API: HPlayer2(mediaPath=..., config=..., datadir=..., extraMediaPath=...)
+        
+        # If mediaPath is a string and config is also a string (old API pattern)
+        # OR if both positional args are provided as strings
+        if isinstance(mediaPath, str) and isinstance(config, str) and datadir is None and extraMediaPath is None:
+            # Old API: HPlayer2(basepath, settingspath)
+            old_basepath = mediaPath
+            old_settingspath = config
+            mediaPath = old_basepath
+            config = old_settingspath
+            datadir = None
+            extraMediaPath = None
+        
         # super().__init__(wildcard=True, delimiter=".")
         super().__init__(None, 'HPlayer2', 'green')
         self.nameP = colored(('[HPlayer2]').ljust(10, ' ')+' ', 'green')
@@ -46,6 +63,87 @@ class HPlayer2(Module):
         self._samplers      = OrderedDict()
         self._interfaces    = OrderedDict()
 
+        # State flags
+        self.appReady = False      # Set when app-ready event is emitted
+        self.appRunning = False    # Set when app-run event is emitted
+
+        # Determine datadir
+        if datadir is None:
+            datadir = user_data_dir("HPlayer2", "Hemisphere")
+        self.datadir = datadir
+
+        # Create datadir
+        try:
+            os.makedirs(self.datadir, exist_ok=True)
+        except Exception as e:
+            self.log(colored(f"ERROR: Failed to create datadir {self.datadir}: {e}", 'red'))
+
+        # Setup temp directory
+        self.tempdir = os.path.join(self.datadir, 'tmp')
+        try:
+            os.makedirs(self.tempdir, exist_ok=True)
+            tempfile.tempdir = self.tempdir
+        except Exception as e:
+            self.log(colored(f"ERROR: Failed to create temp directory {self.tempdir}: {e}", 'red'))
+
+        # Helper to normalize paths (resolve relative paths based on datadir)
+        def normalize_path(path):
+            if os.path.isabs(path):
+                return path
+            return os.path.join(self.datadir, path)
+
+        # Helper to normalize path list
+        def normalize_paths(paths):
+            if paths is None:
+                return []
+            if not isinstance(paths, list):
+                paths = [paths]
+            return [normalize_path(p) for p in paths]
+
+        # Build mediaPath list
+        if mediaPath is None:
+            # Use default: datadir/media
+            basepath = [os.path.join(self.datadir, 'media')]
+        else:
+            # Use provided mediaPath (normalized)
+            basepath = normalize_paths(mediaPath)
+
+        # Append extraMediaPath if provided
+        if extraMediaPath is not None:
+            basepath.extend(normalize_paths(extraMediaPath))
+
+        # Create media directories
+        for path in basepath:
+            try:
+                os.makedirs(path, exist_ok=True)
+            except Exception as e:
+                self.log(colored(f"ERROR: Failed to create media directory {path}: {e}", 'red'))
+
+        # Determine config file path
+        settingspath = None
+        if config is not None:
+            if config is True:
+                # Auto-detect profile name from calling file
+                try:
+                    frame = inspect.currentframe().f_back
+                    calling_file = frame.f_globals.get('__file__', None)
+                    if calling_file:
+                        profile_name = os.path.splitext(os.path.basename(calling_file))[0]
+                        settingspath = os.path.join(self.datadir, f'hplayer2-{profile_name}.cfg')
+                    else:
+                        self.log(colored("WARNING: Could not detect profile name for config auto-naming", 'yellow'))
+                except Exception as e:
+                    self.log(colored(f"WARNING: Failed to detect profile name: {e}", 'yellow'))
+            elif os.path.isabs(config):
+                # Absolute path provided
+                settingspath = config
+            else:
+                # Relative name or name.cfg
+                if not config.endswith('.cfg'):
+                    config = config + '.cfg'
+                settingspath = os.path.join(self.datadir, config)
+
+        # Initialize components
         self.settings       = Settings(self, settingspath)
         self.files          = FileManager(self)
         self.playlist       = Playlist(self)
@@ -366,18 +464,22 @@ class HPlayer2(Module):
 
                 if not component.isRunning() and not component.isReady():
                     self.log(component.name, "failed to start correctly; continuing without waiting")
-
+            
+            self.appReady = True
             self.emit('app-ready')
 
             # LOAD persistent settings
             self.settings.load()
 
+            self.appRunning = True
             self.emit('app-run')
 
             while self._shutdown_event.is_set() and self.running():
                 sys.stdout.flush()
                 sleep(0.5)
         finally:
+            self.appRunning = False
+            self.appReady = False
             self._stop_components()
 
         return self._exit_code

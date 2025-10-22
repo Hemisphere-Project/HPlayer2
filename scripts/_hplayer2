@@ -1,0 +1,17 @@
+#compdef hplayer2
+
+# Zsh completion for hplayer2
+
+_hplayer2() {
+    local -a profiles
+    local script_dir="${0:A:h}"
+    local profiles_dir="$script_dir/profiles"
+
+    if [[ -d "$profiles_dir" ]]; then
+        # Get all .py files in profiles directory, excluding those starting with __
+        profiles=(${(f)"$(cd "$profiles_dir" && ls -1 *.py 2>/dev/null | sed 's/\.py$//' | grep -v '^__')"})
+        _describe 'profile' profiles
+    fi
+}
+
+_hplayer2
