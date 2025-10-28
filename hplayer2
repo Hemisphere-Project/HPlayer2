@@ -3,20 +3,24 @@
 set -euo pipefail
 
 # Resolve repository root
-DIR="$(cd "$(dirname "$0")" && pwd)"
+SOURCE="${BASH_SOURCE[0]}"
+while [ -h "$SOURCE" ]; do
+  DIR="$( cd -P "$( dirname "$SOURCE" )" >/dev/null 2>&1 && pwd )"
+  SOURCE="$(readlink "$SOURCE")"
+  # if $SOURCE was relative symlink, resolve relative to symlink directory
+  [[ $SOURCE != /* ]] && SOURCE="$DIR/$SOURCE"
+done
+DIR="$( cd -P "$( dirname "$SOURCE" )" >/dev/null 2>&1 && pwd )"
 
 profile="${1:-default}"
 
 cd "$DIR"
 
 if command -v uv >/dev/null 2>&1; then
-    exec uv run python "$DIR/launcher.py" "$profile"
+    CMD="uv run python $DIR/launcher.py $profile"
+    echo "Starting HPlayer2: $CMD"
+    exec $CMD
+else
+    echo "uv is required to run HPlayer2. You should first run scripts/install.sh'." >&2
+    exit 1
 fi
-
-if [ -x "$DIR/.venv/bin/python" ]; then
-    source "$DIR/.venv/bin/activate"
-    exec python "$DIR/launcher.py" "$profile"
-fi
-
-echo "uv is required to run HPlayer2. You should first run scripts/install.sh'." >&2
-exit 1
