@@ -21,7 +21,7 @@ class MpvPlayer(BasePlayer):
         '--keep-open',
         '--hr-seek=yes',
         '--no-terminal',
-        # '--no-config',
+        '--no-config',
         '--profile=low-latency',
         '--log-file=/tmp/mpv.log',
     ]
