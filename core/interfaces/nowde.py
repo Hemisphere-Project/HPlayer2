@@ -331,15 +331,9 @@ class NowdeInterface(BaseInterface):
             if abs(diff + fix) <= 0.033:
                 speed = 1.0
             
-            # Hysteresis zone: very gentle corrections to prevent bouncing in/out of dead zone
-            # Relaxed speed check to capture minor corrections (0.96-1.04 range)
-            elif abs(diff + fix) <= 0.08 and abs(self.lastSpeed - 1.0) < 0.08:
-                # Within 2.4 frames AND we were nearly at 1.0 speed -> minimal correction
-                speed = 1.0  # Don't correct at all - let it stabilize
-            
-            # Aggressive acceleration/deceleration with progressive damping
+            # Aggressive acceleration/deceleration with faster correction
             elif (diff + fix) > 0:
-                # When late: aggressive acceleration with early damping
+                # When late: aggressive acceleration
                 if diff > 3.0:
                     # Very late: higher speed for faster catchup
                     speed = 8.0
@@ -348,52 +342,33 @@ class NowdeInterface(BaseInterface):
                     speed = round(1 + (diff + fix) ** 1.15 * 2.8, 2)
                     speed = min(speed, 8.0)
                 elif diff > 1.0:
-                    # Moderately late: start reducing - transition zone
-                    speed = round(1 + (diff + fix) * 3.5, 2)
+                    # Moderately late: strong acceleration
+                    speed = round(1 + (diff + fix) * 4.5, 2)
                     speed = min(speed, 6.0)
                 elif diff > 0.5:
-                    # Getting closer: significant reduction with momentum awareness
-                    # If we were going very fast, brake much harder
-                    momentum_brake = 0.3 if self.lastSpeed > 5.0 else 0.5 if self.lastSpeed > 3.0 else 0.7
-                    speed = round(1 + (diff + fix) * 2.5 * momentum_brake, 2)
-                    speed = min(speed, 3.0)
-                elif diff > 0.3:
-                    # Getting close: aggressive braking to prevent overshoot
-                    momentum_brake = 0.25 if self.lastSpeed > 2.5 else 0.4 if self.lastSpeed > 1.8 else 0.6
-                    speed = round(1 + (diff + fix) * 2.0 * momentum_brake, 2)
+                    # Getting closer: still accelerating
+                    speed = round(1 + (diff + fix) * 3.5, 2)
+                    speed = min(speed, 3.5)
+                elif diff > 0.2:
+                    # Medium distance: moderate acceleration
+                    speed = round(1 + (diff + fix) * 3.0, 2)
                     speed = min(speed, 2.0)
-                elif diff > 0.15:
-                    # Close to target: gentle approach with strong momentum braking
-                    momentum_brake = 0.3 if self.lastSpeed > 1.8 else 0.5 if self.lastSpeed > 1.3 else 0.7
-                    speed = round(1 + (diff + fix) * 1.5 * momentum_brake, 2)
+                elif diff > 0.1:
+                    # Close: gentle acceleration
+                    speed = round(1 + (diff + fix) * 2.5, 2)
                     speed = min(speed, 1.5)
-                    # Very close: minimal correction with heavy damping
-                    # Don't correct if coming from high speed - let momentum carry
-                    if self.lastSpeed > 1.5:
-                        speed = 1.0  # Coast to target
-                    else:
-                        momentum_brake = 0.4 if self.lastSpeed > 1.2 else 0.7
-                        speed = round(1 + (diff + fix) * 1.2 * momentum_brake, 2)
-                        speed = min(speed, 1.3)
-                elif diff > 0.08:
-                    # Approaching dead zone: very gentle to avoid overshooting
-                    if self.lastSpeed > 1.3:
-                        speed = 1.0  # Coast
-                    else:
-                        # Very gentle correction with smooth deceleration
-                        speed = round(1 + (diff + fix) * 0.6, 2)
-                        speed = min(speed, 1.15)
+                elif diff > 0.05:
+                    # Very close: minimal acceleration
+                    speed = round(1 + (diff + fix) * 2.0, 2)
+                    speed = min(speed, 1.2)
                 else:
-                    # Edge of dead zone: minimal correction
-                    if self.lastSpeed > 1.1:
-                        speed = 1.0  # Let it drift into dead zone
-                    else:
-                        speed = round(1 + (diff + fix) * 0.3, 2)
-                        speed = min(speed, 1.05)
+                    # Edge of dead zone: tiny correction
+                    speed = round(1 + (diff + fix) * 1.0, 2)
+                    speed = min(speed, 1.05)
 
             # decel
             elif (diff + fix) < 0:
-                # When ahead: more aggressive deceleration to prevent overshoot
+                # When ahead: aggressive deceleration
                 if diff < -1.0:
                     # Very ahead: minimum speed
                     speed = 0.15
@@ -401,40 +376,22 @@ class NowdeInterface(BaseInterface):
                     # Ahead: very strong deceleration
                     speed = round(1 + abs(diff + fix) ** 1.15 * (-2.8), 2)
                     speed = max(speed, 0.25)
-                elif diff < -0.3:
-                    # Moderately ahead: strong deceleration with momentum
-                    # If we were slow, don't over-correct
-                    momentum_factor = 1.0 if self.lastSpeed < 0.5 else 0.7
-                    speed = round(1 + (diff + fix) * 4.0 * momentum_factor, 2)
+                elif diff < -0.2:
+                    # Moderately ahead: strong deceleration
+                    speed = round(1 + (diff + fix) * 4.5, 2)
                     speed = max(speed, 0.4)
-                elif diff < -0.18:
-                    # Getting closer: reduce deceleration gain
-                    momentum_factor = 1.0 if self.lastSpeed < 0.7 else 0.8
-                    speed = round(1 + (diff + fix) * 3.0 * momentum_factor, 2)
+                elif diff < -0.1:
+                    # Getting closer: moderate deceleration
+                    speed = round(1 + (diff + fix) * 3.5, 2)
                     speed = max(speed, 0.6)
-                elif diff < -0.12:
-                    # Close to target: gentle approach
-                    # Don't correct if coming from low speed - let momentum carry
-                    if self.lastSpeed < 0.7:
-                        speed = 1.0  # Coast to target
-                    else:
-                        speed = round(1 + (diff + fix) * 2.0, 2)
-                        speed = max(speed, 0.75)
-                elif diff < -0.08:
-                    # Approaching dead zone: very gentle to avoid overcorrecting
-                    if self.lastSpeed < 0.7:
-                        speed = 1.0  # Coast
-                    else:
-                        # Very gentle correction with smooth acceleration
-                        speed = round(1 + (diff + fix) * 1.2, 2)
-                        speed = max(speed, 0.85)
+                elif diff < -0.05:
+                    # Close: gentle deceleration
+                    speed = round(1 + (diff + fix) * 3.0, 2)
+                    speed = max(speed, 0.8)
                 else:
-                    # Edge of dead zone: minimal correction
-                    if self.lastSpeed < 0.9:
-                        speed = 1.0  # Let it drift into dead zone
-                    else:
-                        speed = round(1 + (diff + fix) * 0.6, 2)
-                        speed = max(speed, 0.94)
+                    # Edge of dead zone: minimal deceleration
+                    speed = round(1 + (diff + fix) * 2.0, 2)
+                    speed = max(speed, 0.9)
 
         self.player.speed(speed)
 

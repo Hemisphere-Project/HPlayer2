@@ -21,7 +21,7 @@ class MpvPlayer(BasePlayer):
         '--keep-open',
         '--hr-seek=yes',
         '--no-terminal',
-        '--no-config',
+        # '--no-config',
         '--profile=low-latency',
         '--log-file=/tmp/mpv.log',
     ]
@@ -32,6 +32,13 @@ class MpvPlayer(BasePlayer):
         self._mpv_command = self._BASE_ARGS.copy()
         if sys.platform.startswith('linux'):
             self._mpv_command.append('--ao=alsa')
+            
+        # armv7l specific
+        if platform.machine().lower() in ['armv7l', 'armv6l']:
+            self._mpv_command += [
+                '--hwdec=mmal',
+                '--vo=rpi',
+            ]
 
         self._videoExt = ['mp4', 'm4v', 'mkv', 'avi', 'mov', 'flv', 'mpg', 'wmv', '3gp', 'webm']
         self._audioExt = ['mp3', 'aac', 'wma', 'wav', 'flac', 'aif', 'aiff', 'm4a', 'ogg', 'opus']
@@ -77,13 +84,14 @@ class MpvPlayer(BasePlayer):
             if poll_result:
                 out = self._mpv_subproc.stdout.readline()
                 if out.strip():
-                    # self.log("subproc says", out.strip())
+                    self.log("subproc says", out.strip())
                     pass
             # else:
             #     time.sleep(0.1)          ## TODO turn into ASYNC !!
 
 
         if self._mpv_subproc.poll():
+            self.log("mpv process exited with code:", self._mpv_subproc.poll())
             self._mpv_subproc.terminate()
             if not self._mpv_subproc.poll():
                 self.log("process terminated")
@@ -277,6 +285,7 @@ class MpvPlayer(BasePlayer):
         script_path = os.path.dirname(os.path.realpath(__file__))
         
         binary = self._resolve_mpv_binary()
+        self.log("using mpv binary:", binary)
 
         command = [
             binary,

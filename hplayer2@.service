@@ -3,11 +3,15 @@ Description=HPlayer
            
 [Service]
 Type=simple
+Environment="PATH=/root/.local/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
 WorkingDirectory=/opt/HPlayer2
 ExecStartPre=-hplayer2-kill
 ExecStart=/usr/local/bin/hplayer2 %i
-ExecStop=/usr/local/bin/hplayer2-kill
+ExecStopPost=/bin/sh -c '/opt/HPlayer2/hplayer2-kill %i || true'
 Restart=always
+Environment="HOME=/root"
+Environment="LD_LIBRARY_PATH=/usr/local/lib:/usr/local/lib"
+SupplementaryGroups=audio video render
            
 [Install]
 WantedBy=default.target
