@@ -4,7 +4,7 @@ import os, types, time
 from threading import Timer
 
 # INIT HPLAYER
-hplayer = HPlayer2(config=True, datadir='/data', mediaPath=['media'])
+hplayer = HPlayer2(config=True, datadir='/data', mediaPath=['media', 'usb'])
 
 # PLAYER
 player = hplayer.addPlayer('mpv', 'mpv')
@@ -18,39 +18,39 @@ keypad.draw( [".:: HPlayer2 ::.", "   Starting "+keypad.CHAR_LOVE+"   "] )
 
 # RSync USB (on start)
 #
-time.sleep(2.0)  	# wait for USB to get ready
-usbCount = len([name for name in os.listdir('/data/usb') if os.path.isfile( os.path.join('/data/usb', name) )])
-if usbCount > 0:
+# time.sleep(2.0)  	# wait for USB to get ready
+# usbCount = len([name for name in os.listdir('/data/usb') if os.path.isfile( os.path.join('/data/usb', name) )])
+# if usbCount > 0:
     
-	keypad.draw( [".:: HPlayer2 ::.", "    USB sync    "] )
+# 	keypad.draw( [".:: HPlayer2 ::.", "    USB sync    "] )
     
-	class RepeatTimer(Timer):
-		def run(self):
-			while not self.finished.wait(self.interval):
-				self.function(*self.args, **self.kwargs)
+# 	class RepeatTimer(Timer):
+# 		def run(self):
+# 			while not self.finished.wait(self.interval):
+# 				self.function(*self.args, **self.kwargs)
     
-	blink = False
-	def ledBLink():
-		global blink
-		blink = not blink
-		if blink: keypad.lcd.set_color( 100, 100, 0)
-		else: keypad.lcd.set_color( 100, 0, 0)
+# 	blink = False
+# 	def ledBLink():
+# 		global blink
+# 		blink = not blink
+# 		if blink: keypad.lcd.set_color( 100, 100, 0)
+# 		else: keypad.lcd.set_color( 100, 0, 0)
     
-	timer = RepeatTimer(0.2, ledBLink)
-	timer.start()
+# 	timer = RepeatTimer(0.2, ledBLink)
+# 	timer.start()
     
-	ellapsed = time.time()
+# 	ellapsed = time.time()
  
-	hplayer.log("USB detected: syncing !")
-	cmd = "rsync -rtv --exclude=\".*\" --delete /data/usb/ "+hplayer.mediaPath[0]
-	hplayer.log(cmd)
-	os.system(cmd)
+# 	hplayer.log("USB detected: syncing !")
+# 	cmd = "rsync -rtv --exclude=\".*\" --delete /data/usb/ "+hplayer.mediaPath[0]
+# 	hplayer.log(cmd)
+# 	os.system(cmd)
 
-	ellapsed = time.time()-ellapsed	
-	if ellapsed < 2:
-		print("WAIT", 2-ellapsed)
-		time.sleep(2-ellapsed)
-	timer.cancel()
+# 	ellapsed = time.time()-ellapsed	
+# 	if ellapsed < 2:
+# 		print("WAIT", 2-ellapsed)
+# 		time.sleep(2-ellapsed)
+# 	timer.cancel()
 
 
 

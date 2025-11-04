@@ -64,6 +64,11 @@ class NowdeInterface(BaseInterface):
         self.isStopped = False   # Flag to ignore MTC when stopped
         self.lastCC = None       # Track last CC#100 value to avoid redundant commands
         self.lastPattern = None  # Remember last pattern for auto-restart on loop
+        
+        # Speed smoothing for less oscillation
+        self.speedHistory = []   # Track recent speed values
+        self.speedSmoothingWindow = 3  # Number of frames to average (lower = more responsive, higher = smoother)
+        self.inDeadZone = False  # Track if we're currently in dead zone for hysteresis
 
         # Bind to our own events
         self.hplayer.on('nowde.qf')(self.handle_timecode)
@@ -325,73 +330,113 @@ class NowdeInterface(BaseInterface):
             # Jump correction
             if self.didJump:
                 self.didJump = False
+                # Clear speed history after jump
+                self.speedHistory = []
+                self.inDeadZone = False
 
-            # Dead zone: ±1 frame at 30fps (33ms)
-            # Use hysteresis: wider when entering, narrower when leaving to prevent oscillation
-            if abs(diff + fix) <= 0.033:
-                speed = 1.0
+            # Dead zone with hysteresis to prevent oscillation
+            # Use wider zone when already in sync, narrower when out of sync
+            dead_zone_enter = 0.025  # Need to be within 25ms to enter dead zone (±0.75 frames @ 30fps)
+            dead_zone_exit = 0.08    # Must drift beyond 80ms to exit dead zone (±2.4 frames @ 30fps)
             
-            # Aggressive acceleration/deceleration with faster correction
-            elif (diff + fix) > 0:
-                # When late: aggressive acceleration
-                if diff > 3.0:
-                    # Very late: higher speed for faster catchup
-                    speed = 8.0
-                elif diff > 1.8:
-                    # Late: strong acceleration with power curve
-                    speed = round(1 + (diff + fix) ** 1.15 * 2.8, 2)
-                    speed = min(speed, 8.0)
-                elif diff > 1.0:
-                    # Moderately late: strong acceleration
-                    speed = round(1 + (diff + fix) * 4.5, 2)
-                    speed = min(speed, 6.0)
-                elif diff > 0.5:
-                    # Getting closer: still accelerating
-                    speed = round(1 + (diff + fix) * 3.5, 2)
-                    speed = min(speed, 3.5)
-                elif diff > 0.2:
-                    # Medium distance: moderate acceleration
-                    speed = round(1 + (diff + fix) * 3.0, 2)
-                    speed = min(speed, 2.0)
-                elif diff > 0.1:
-                    # Close: gentle acceleration
-                    speed = round(1 + (diff + fix) * 2.5, 2)
-                    speed = min(speed, 1.5)
-                elif diff > 0.05:
-                    # Very close: minimal acceleration
-                    speed = round(1 + (diff + fix) * 2.0, 2)
-                    speed = min(speed, 1.2)
+            current_offset = abs(diff + fix)
+            
+            # Determine if we should apply corrections or stay at 1.0
+            apply_correction = True
+            
+            # Hysteresis logic
+            if self.inDeadZone:
+                # Already in dead zone - check if we should stay
+                if current_offset > dead_zone_exit:
+                    # Drifted too far, exit dead zone and apply corrections
+                    self.inDeadZone = False
+                    apply_correction = True
                 else:
-                    # Edge of dead zone: tiny correction
-                    speed = round(1 + (diff + fix) * 1.0, 2)
-                    speed = min(speed, 1.05)
+                    # Still within acceptable range, stay at 1.0
+                    speed = 1.0
+                    apply_correction = False
+            else:
+                # Not in dead zone - check if we should enter
+                if current_offset <= dead_zone_enter:
+                    # Close enough to enter dead zone
+                    speed = 1.0
+                    self.inDeadZone = True
+                    apply_correction = False
+                else:
+                    # Still outside dead zone, apply corrections
+                    apply_correction = True
+            
+            # Apply corrections only if outside dead zone
+            if apply_correction:
+                # More gradual speed adjustments with reduced gains
+                if (diff + fix) > 0:
+                    # When late: progressive acceleration
+                    if diff > 3.0:
+                        # Very late: maximum speed for fast catchup
+                        speed = 8.0
+                    elif diff > 1.5:
+                        # Late: strong acceleration with gentler curve
+                        speed = round(1 + (diff + fix) * 2.0, 2)
+                        speed = min(speed, 6.0)
+                    elif diff > 0.8:
+                        # Moderately late: moderate acceleration
+                        speed = round(1 + (diff + fix) * 1.5, 2)
+                        speed = min(speed, 3.0)
+                    elif diff > 0.4:
+                        # Getting closer: gentle acceleration
+                        speed = round(1 + (diff + fix) * 1.2, 2)
+                        speed = min(speed, 2.0)
+                    elif diff > 0.2:
+                        # Close: minimal acceleration
+                        speed = round(1 + (diff + fix) * 0.5, 2)
+                        speed = min(speed, 1.15)
+                    else:
+                        # Very close: tiny acceleration to prevent overshoot
+                        speed = round(1 + (diff + fix) * 0.25, 2)
+                        speed = min(speed, 1.05)
 
-            # decel
-            elif (diff + fix) < 0:
-                # When ahead: aggressive deceleration
-                if diff < -1.0:
-                    # Very ahead: minimum speed
-                    speed = 0.15
-                elif diff < -0.5:
-                    # Ahead: very strong deceleration
-                    speed = round(1 + abs(diff + fix) ** 1.15 * (-2.8), 2)
-                    speed = max(speed, 0.25)
-                elif diff < -0.2:
-                    # Moderately ahead: strong deceleration
-                    speed = round(1 + (diff + fix) * 4.5, 2)
-                    speed = max(speed, 0.4)
-                elif diff < -0.1:
-                    # Getting closer: moderate deceleration
-                    speed = round(1 + (diff + fix) * 3.5, 2)
-                    speed = max(speed, 0.6)
-                elif diff < -0.05:
-                    # Close: gentle deceleration
-                    speed = round(1 + (diff + fix) * 3.0, 2)
-                    speed = max(speed, 0.8)
-                else:
-                    # Edge of dead zone: minimal deceleration
-                    speed = round(1 + (diff + fix) * 2.0, 2)
-                    speed = max(speed, 0.9)
+                # decel
+                elif (diff + fix) < 0:
+                    # When ahead: progressive deceleration with VERY gentle corrections to prevent oscillation
+                    if diff < -1.5:
+                        # Very ahead: strong slowdown
+                        speed = 0.2
+                    elif diff < -0.8:
+                        # Ahead: strong deceleration with gentler curve
+                        speed = round(1 + (diff + fix) * 2.0, 2)
+                        speed = max(speed, 0.3)
+                    elif diff < -0.4:
+                        # Moderately ahead: moderate deceleration
+                        speed = round(1 + (diff + fix) * 1.5, 2)
+                        speed = max(speed, 0.5)
+                    elif diff < -0.2:
+                        # Getting closer: gentle deceleration
+                        speed = round(1 + (diff + fix) * 1.0, 2)
+                        speed = max(speed, 0.8)
+                    elif diff < -0.08:
+                        # Very close to boundary: ultra-gentle deceleration
+                        speed = round(1 + (diff + fix) * 0.3, 2)
+                        speed = max(speed, 0.975)
+                    else:
+                        # Inside near-dead-zone: minimal deceleration to coast to zero
+                        speed = round(1 + (diff + fix) * 0.15, 2)
+                        speed = max(speed, 0.99)
+                
+                # Apply speed smoothing to reduce oscillation
+                self.speedHistory.append(speed)
+                if len(self.speedHistory) > self.speedSmoothingWindow:
+                    self.speedHistory.pop(0)
+                
+                # Only apply smoothing when we have enough history and not in extreme situations
+                if len(self.speedHistory) >= 2 and abs(diff) < 1.0:
+                    # Weighted average favoring recent values
+                    weights = [i + 1 for i in range(len(self.speedHistory))]
+                    smoothed_speed = sum(s * w for s, w in zip(self.speedHistory, weights)) / sum(weights)
+                    speed = round(smoothed_speed, 2)
+            else:
+                # In dead zone - clear history to allow fresh start when exiting
+                if len(self.speedHistory) > 0:
+                    self.speedHistory = []
 
         self.player.speed(speed)
 
