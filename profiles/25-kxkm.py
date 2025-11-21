@@ -13,11 +13,8 @@ projectfolder = os.path.join('/data/sync', profilename)
 devicename = network.get_hostname()
 devicefolder = os.path.join('/data/sync/solo', devicename)
 
-base_path = ['/data/usb', projectfolder, devicefolder]
-
-
 # INIT HPLAYER
-hplayer = HPlayer2(base_path, "/data/hplayer2-"+profilename+".cfg")
+hplayer = HPlayer2(config=True, mediaPath=['/data/usb', projectfolder, devicefolder ])
 
 # ATTACHED ETENDARD: get ETENDARD from etendard.json
 myETEND = None
