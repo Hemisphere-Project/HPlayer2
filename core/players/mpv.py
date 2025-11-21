@@ -39,6 +39,13 @@ class MpvPlayer(BasePlayer):
                 '--hwdec=mmal',
                 '--vo=rpi',
             ]
+        
+        # intel gpu specific
+        elif platform.machine().lower() in ['x86_64', 'amd64']:
+            self._mpv_command += [
+                '--hwdec=vaapi',
+                '--vo=gpu',
+            ]
 
         self._videoExt = ['mp4', 'm4v', 'mkv', 'avi', 'mov', 'flv', 'mpg', 'wmv', '3gp', 'webm']
         self._audioExt = ['mp3', 'aac', 'wma', 'wav', 'flac', 'aif', 'aiff', 'm4a', 'ogg', 'opus']
@@ -298,6 +305,8 @@ class MpvPlayer(BasePlayer):
             command.append('--image-display-duration=' + str(self._mpv_imagetime))
         else:
             command.append('--image-display-duration=inf')
+
+        self.log("starting mpv subprocess:", ' '.join(command))
         
         self._mpv_subproc = subprocess.Popen(command,
                             stdout=subprocess.PIPE, stdin=subprocess.PIPE, stderr = subprocess.STDOUT,
