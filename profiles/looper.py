@@ -11,11 +11,10 @@ player 	= hplayer.addPlayer('mpv','looper')
 # INTERFACES
 #keypad 	= hplayer.addInterface('keypad')
 #keypad.draw( [".:: HPlayer2 ::.", "   Starting "+keypad.CHAR_LOVE+"   "] )
-sleep(2.0)  	# wait for USB to get ready
+# sleep(2.0)  	# wait for USB to get ready
 
 # LOOP usb
 def playloop():
-	sleep(1)
 	hplayer.playlist.play('/data/usb')
 
 # Ready -> player operational (no-op placeholder for clarity)

@@ -159,6 +159,9 @@ class BasePlayer(Module):
             self.update('speed', s)
             self._speed(s)
 
+    def shaderParam(self, param, value=None):
+        self._shaderParam(param, value)
+
     #
     # Player INTERNAL actions: Methods to overwrite !
     #
@@ -211,3 +214,8 @@ class BasePlayer(Module):
         
     def _applyContrast(self, contrast):
         self.log("contrast set to", contrast)
+
+    def _shaderParam(self, param, value=None):
+        if not isinstance(param, dict):
+            param = {param: value}
+        self.log("shaderParam", param)

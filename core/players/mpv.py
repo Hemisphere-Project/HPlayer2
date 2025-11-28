@@ -10,7 +10,8 @@ class MpvPlayer(BasePlayer):
 
     _mpv_scale = 1          # % image scale
     _mpv_imagetime = 5      # diaporama transition time (s)
-    
+    _shaders = {}
+
     _BASE_ARGS = [
         '--idle=yes',
         '-v',
@@ -32,7 +33,7 @@ class MpvPlayer(BasePlayer):
         self._mpv_command = self._BASE_ARGS.copy()
         if sys.platform.startswith('linux'):
             self._mpv_command.append('--ao=alsa')
-            
+
         # armv7l specific
         if platform.machine().lower() in ['armv7l', 'armv6l']:
             self._mpv_command += [
@@ -44,8 +45,14 @@ class MpvPlayer(BasePlayer):
         elif platform.machine().lower() in ['x86_64', 'amd64']:
             self._mpv_command += [
                 '--hwdec=vaapi',
-                '--vo=gpu',
+                '--vo=gpu-next',
             ]
+
+            # apply shaders and list params
+            self._shaders_prepare()
+            self.log("available shaders:", self._shaders)
+            self._mpv_command.append('--glsl-shaders=' + ':'.join([self._shaders[s]['path'] for s in self._shaders]))
+
 
         self._videoExt = ['mp4', 'm4v', 'mkv', 'avi', 'mov', 'flv', 'mpg', 'wmv', '3gp', 'webm']
         self._audioExt = ['mp3', 'aac', 'wma', 'wav', 'flac', 'aif', 'aiff', 'm4a', 'ogg', 'opus']
@@ -74,9 +81,80 @@ class MpvPlayer(BasePlayer):
     def imagetime(self, it):
         self._mpv_imagetime = it
 
+
     ############
     ## private METHODS
     ############
+
+    # SHADER list
+    def _shaders_prepare(self):
+        shader_dir = os.path.join(os.path.dirname(os.path.realpath(__file__)), 'shaders')
+        self._shaders = {}
+        if not os.path.exists(shader_dir):
+            return
+
+        shader_files = [f for f in os.listdir(shader_dir) if f.endswith('.glsl')]
+        shader_files.sort()
+        for shader_file in shader_files:
+            shader_path = os.path.join(shader_dir, shader_file)
+            shader_name = os.path.splitext(shader_file)[0]
+            self._shaders[shader_name] = {'name': shader_name, 'path': shader_path, 'params': {}, 'desc': '' }
+
+            # parse shader for params
+            with open(shader_path, 'r') as sf:
+                lines = sf.readlines()
+                current_param = None
+                for line in lines:
+                    line = line.strip()
+                    if not line: continue
+
+                    if line.startswith('//!PARAM'):
+                        parts = line.split()
+                        if len(parts) >= 2:
+                            param_name = parts[1]
+                            self._shaders[shader_name]['params'][param_name] = {}
+                            current_param = param_name
+                            if len(parts) >= 3:
+                                self._shaders[shader_name]['params'][param_name]['type'] = parts[2]
+                    
+                    elif line.startswith('//!TYPE') and current_param:
+                        parts = line.split()
+                        if len(parts) >= 2:
+                            self._shaders[shader_name]['params'][current_param]['type'] = parts[1]
+
+                    elif line.startswith('//!MINIMUM') and current_param:
+                        parts = line.split()
+                        if len(parts) == 2:
+                            self._shaders[shader_name]['params'][current_param]['min'] = float(parts[1])
+                    elif line.startswith('//!MAXIMUM') and current_param:
+                        parts = line.split()
+                        if len(parts) == 2:
+                            self._shaders[shader_name]['params'][current_param]['max'] = float(parts[1])
+                    elif line.startswith('//!DEFAULT') and current_param:
+                        parts = line.split()
+                        if len(parts) == 2:
+                            self._shaders[shader_name]['params'][current_param]['default'] = float(parts[1])
+                    elif line.startswith('//!DESC'):
+                        parts = line.split(' ', 1)
+                        if len(parts) == 2:
+                            self._shaders[shader_name]['desc'] = parts[1]
+                    
+                    # Try to capture default value if it's a number on its own line after a param definition
+                    elif current_param and not line.startswith('//') and not line.startswith('/*'):
+                        try:
+                            val = float(line)
+                            if 'default' not in self._shaders[shader_name]['params'][current_param]:
+                                self._shaders[shader_name]['params'][current_param]['default'] = val
+                        except ValueError:
+                            pass
+
+            # Set params 'value' from 'default' if exists, otherwise use 0.0
+            for param in self._shaders[shader_name]['params']:
+                if 'default' in self._shaders[shader_name]['params'][param]:
+                    self._shaders[shader_name]['params'][param]['value'] = self._shaders[shader_name]['params'][param]['default']
+                else:
+                    self._shaders[shader_name]['params'][param]['value'] = 0.0
+
 
     # MPV Process THREAD
     def _mpv_watchprocess(self):
@@ -454,3 +532,32 @@ class MpvPlayer(BasePlayer):
             subprocess.run([pkill, 'mpv'], check=False)
         else:
             self.log('pkill command not available; unable to force-stop mpv')
+
+    def _shaderParam(self, param, value=None):
+        # Support dict or key, value
+        updates = {}
+        if isinstance(param, dict):
+            updates = param
+        elif value is not None:
+            updates = {param: value}
+
+        # Update internal state
+        found_any = False
+        for name, val in updates.items():
+            # Find which shader has this param
+            for shader_name in self._shaders:
+                if name in self._shaders[shader_name]['params']:
+                    self._shaders[shader_name]['params'][name]['value'] = val
+                    found_any = True
+                    break
+            else:
+                self.log("shaderParam: unknown param", name)
+        
+        if found_any:
+            opts_list = []
+            for s in self._shaders.values():
+                for k, v in s['params'].items():
+                        opts_list.append(f"{k}={v['value']:.4f}")
+            
+            opts_string = ",".join(opts_list)
+            self._mpv_send(f'{{"command": ["set_property", "glsl-shader-opts", "{opts_string}"]}}')
