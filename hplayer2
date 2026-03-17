@@ -16,6 +16,9 @@ profile="${1:-default}"
 
 cd "$DIR"
 
+# push black image to framebuffer
+./scripts/color.sh 000000
+
 if command -v uv >/dev/null 2>&1; then
     CMD="uv run python $DIR/launcher.py $profile"
     echo "Starting HPlayer2: $CMD"

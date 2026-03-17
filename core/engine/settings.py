@@ -42,27 +42,37 @@ class Settings(Module):
         if persistent:
             self._settingspath = persistent
 
+        loaded_from_file = False
+
         if not self._settingspath:
-            self.log('no settings file defined')
-            return
+            self.log('no settings file defined; using default values')
         
-        if self._settingspath and os.path.isfile(self._settingspath):
+        elif os.path.isfile(self._settingspath):
             try:
                 with open(self._settingspath, 'r') as fd:
                     loaded = json.load(fd)
                     for key in loaded:
                         if key in self._settings:
                             self._settings[key] = loaded[key]
-                self.emit('loading')
-                for key in self._settings:
-                    self.emit('do-'+key, self._settings[key], self.export())
-                self.emit('updated', self.export())
-                self.emit('loaded', self.export())
-                self.log('settings loaded:', self._settings)
+                loaded_from_file = True
             except:
                 self.log('ERROR loading settings file', self._settingspath)  
+        else:
+            self.log('settings file not found, using default values', self._settingspath)
 
         self._ready = True
+
+        snapshot = self.export()
+        self.emit('loading')
+        for key in self._settings:
+            self.emit('do-'+key, self._settings[key], snapshot)
+        self.emit('updated', snapshot)
+        self.emit('loaded', snapshot)
+
+        if loaded_from_file:
+            self.log('settings loaded:', self._settings)
+        else:
+            self.log('settings ready (defaults):', self._settings)
 
 
     def export(self):
