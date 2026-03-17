@@ -136,6 +136,7 @@ class MpvPlayer(BasePlayer):
             self._mpv_send('{ "command": ["observe_property", 4, "duration"] }')
             self._mpv_send('{ "command": ["observe_property", 5, "eof-reached"] }')
             closeToTheEnd = False
+            nearendEmitted = False
             
             self.emit('status', self.status())
 
@@ -173,6 +174,7 @@ class MpvPlayer(BasePlayer):
 
                                 if self.status('isPlaying'): 
                                     closeToTheEnd = False
+                                    nearendEmitted = False
                                     self.emit('playing', self.status('media'))
                                     # self.log('play')
 
@@ -194,6 +196,9 @@ class MpvPlayer(BasePlayer):
                                     self.update('time', pos)
                                     duration = self.status('duration')
                                     closeToTheEnd = duration > 0 and abs(duration-pos) < 0.2
+                                    if closeToTheEnd and not nearendEmitted:
+                                        nearendEmitted = True
+                                        self.emit('nearend', self.status('media'))
                                     # print(abs(duration-pos))
 
                             elif mpvsays['name'] == 'duration':
