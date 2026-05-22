@@ -79,6 +79,10 @@ def masterLoop(ev, *args):
 	if masterLoopIndex > -1:
 		# broadcast('stop')
 		broadcast('playindex', masterLoopIndex)
+	elif hplayer.playlist.index() < hplayer.playlist.size() - 1:
+		track = hplayer.playlist.trackAtIndex(hplayer.playlist.index())
+		if not track or track.lower().find('_stop') < 0:
+			broadcast('playindex', hplayer.playlist.nextIndex())
 
 # Build playlist
 #
