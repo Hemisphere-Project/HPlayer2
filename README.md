@@ -116,19 +116,34 @@ The idea in a profile is:
 
 
 ## Interfaces
-A more complete documentation regarding the capabilities and the use of the different interface modules will be provided in the future (PR and help are welcome!).  
-Interfaces are available without the need of explicit inclusion, from directory **core/interfaces/**
+HPlayer2 ships a broad set of **interface modules** — the I/O bridges between the player and the
+outside world (networks, controllers, sensors, screens). They are optional and pluggable: a profile
+enables only what it needs, and an interface whose library or hardware is missing simply stays
+disabled (it won't crash the program), so the same profile can run on a Raspberry Pi, an N100, or a
+desktop.
 
-Please check the profiles examples to see how to use those interfaces.
+📖 **Full reference: [`docs/interfaces.md`](docs/interfaces.md)** — every interface's constructor
+arguments, dependencies, platform support, and the events it emits, with examples.
+
+Interfaces live in **core/interfaces/** and need no explicit import — add one in a profile with
+`hplayer.addInterface('name', ...)` and patch its events with `@hplayer.on('name.event')`.
 
 Available interfaces:
- - GPIO: allows patching RPi gpio event to player action
- - OSC: patching OSC message to player actions to control it from TouchOSC / MaxMSP / etc...
- - HTTP: bootstrap a basic HTTP server to enable network basic API
- - HTTP2: a nice web interface (responsive & websocket enabled) to setup an control HPlayer2
- - Keyboard: usb keyboard, numpad or infrared remotes like [this one](https://goo.gl/sz7rie)
- - Keypad: interface LCD+Keypad RPi shield like [this one](https://www.adafruit.com/product/1110)
- - NFC: interface RFID/NFC tag reader based on PN532 like [this one](https://www.adafruit.com/product/364)
+ - **osc** — OSC over UDP (TouchOSC, Max/MSP, lighting desks)
+ - **http** / **http2** — basic HTTP API / responsive WebSocket web UI
+ - **mqtt** — MQTT pub/sub bridge (e.g. ESP remotes, home automation)
+ - **zyre** — ZeroMQ/Zyre P2P discovery + synchronized triggers (multi-device shows)
+ - **regie** — multi-peer web control surface
+ - **midictrl** / **mtc** / **nowde** — MIDI control surface / MIDI Time Code / continuous MTC sync
+ - **gpio** / **hcon** — Raspberry Pi GPIO inputs & outputs
+ - **keypad** — Adafruit LCD+button RPi shield ([like this](https://www.adafruit.com/product/1110))
+ - **nfc** — PN532 RFID/NFC tag reader ([like this](https://www.adafruit.com/product/364))
+ - **keyboard** — USB keyboard, numpad, or infrared remote ([like this](https://goo.gl/sz7rie))
+ - **serial** / **btserial** / **teleco** — serial / Bluetooth / Arduino remote controls
+ - **ticker** — internal metronome for timed triggers
+
+For the bigger picture — how interfaces, players, overlays and the event bus fit together — see the
+**[architecture overview](docs/architecture.md)**.
 
 
 ## CREDITS
