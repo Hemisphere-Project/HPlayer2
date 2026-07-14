@@ -104,6 +104,7 @@ def main():
     last_st = last_net = last_flap = time.time()
     frozen_until = 0
     buf = b''
+    stdin_open = True
 
     while True:
         now = time.time()
@@ -135,8 +136,10 @@ def main():
             host.peers()
             print(f"-- peer {victim} link -> {host.links[victim]}")
 
-        if select.select([sys.stdin], [], [], 0)[0]:
-            sys.stdin.readline()
+        if stdin_open and select.select([sys.stdin], [], [], 0)[0]:
+            if not sys.stdin.readline():        # EOF (detached stdin): stop watching
+                stdin_open = False
+                continue
             frozen_until = time.time() + 10
             print("-- FROZEN 10s (device should show stale banner, then recover)")
 
