@@ -22,7 +22,6 @@ close_room = None
 rooms = None
 disconnect = None
 secure_filename = None
-Image = None
 ServiceInfo = None
 Zeroconf = None
 zero_enable = False
@@ -57,11 +56,6 @@ try:
     secure_filename = importlib.import_module("werkzeug.utils").secure_filename
 except ImportError as err:
     _HTTP2_IMPORT_ERRORS.append(("werkzeug", err))
-
-try:
-    Image = importlib.import_module("PIL.Image")
-except ImportError:
-    Image = None
 
 try:
     _zeroconf = importlib.import_module("zeroconf")
@@ -154,9 +148,12 @@ class ThreadedHTTPServer(object):
         def upload_target(filename):
             filepath = os.path.join(http2interface.hplayer.files.root_paths[0],
                                     secure_filename(filename))
-            if os.path.exists(filepath):
-                prefix, ext = os.path.splitext(filepath)
-                filepath = prefix + '-' + ext
+            # don't clobber a media already in the parc: clip.mp4 -> clip-2.mp4
+            prefix, ext = os.path.splitext(filepath)
+            n = 1
+            while os.path.exists(filepath):
+                n += 1
+                filepath = prefix + '-' + str(n) + ext
             return filepath
 
         class UploadStreamingRequest(Request):
@@ -252,19 +249,6 @@ class ThreadedHTTPServer(object):
                 # whose types vary with the installed watchdog version: ask for
                 # it explicitly rather than hope the right event fires
                 self.http2interface.hplayer.files.refresh()
-
-                if Image is not None:
-                    try:
-                        im = Image.load(filepath)
-                        im.verify()
-                        im.close()
-                        im = Image.open(filepath)
-                        im.thumbnail((1920, 1080), Image.ANTIALIAS)
-                        im.save(filepath)
-                    except IOError:
-                        print("cannot resize", filepath)
-                    except Exception:
-                        pass
 
                 fileslist_message()
                 self.http2interface.emit('file-uploaded', filepath)
