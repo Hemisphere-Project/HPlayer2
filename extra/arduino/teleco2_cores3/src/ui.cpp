@@ -23,9 +23,15 @@ static void microLabel(M5Canvas& c, const char* txt, int x, int y) {
 static void drawWifiBars(M5Canvas& c, int x, int base) {
     for (int b = 0; b < 4; b++) {
         int h = 3 + b * 3;
-        uint16_t col = (S.rssi > b * 25) ? C_AMBER : C_PANEL;
+        uint16_t col = (S.rssi > b * 25) ? C_CYAN : C_PANEL;
         c.fillRect(x + b * 5, base - h, 4, h, col);
     }
+}
+
+static void drawStateGlyph(M5Canvas& c, int x, int cy) {   // play/pause/stop, colored by state
+    if (S.pl == 1)      c.fillTriangle(x, cy - 6, x, cy + 6, x + 10, cy, C_GREEN);
+    else if (S.pl == 2) { c.fillRect(x, cy - 6, 4, 12, C_AMBER); c.fillRect(x + 6, cy - 6, 4, 12, C_AMBER); }
+    else                c.fillRect(x, cy - 5, 10, 10, C_RED);
 }
 
 static void drawBar() {
@@ -44,16 +50,17 @@ static void drawBar() {
             bar.drawString("NO LINK", 12, (BAR_H - 2) / 2);
         }
         if (S.hostName[0]) {
-            bar.setTextColor(C_DIM);
+            bar.setTextColor(C_CYAN);
             bar.drawString(S.hostName, 116, (BAR_H - 2) / 2);
         }
     } else {
-        // marquee title
+        // state glyph + marquee title (white content, colored state)
+        drawStateGlyph(bar, 3, (BAR_H - 2) / 2);
         bar.setFont(F_MONO);
         bar.setTextDatum(middle_left);
-        bar.setTextColor(S.pl == 1 ? C_GREEN : (S.pl == 2 ? C_AMBER : C_DIM));
+        bar.setTextColor(S.med[0] ? C_PAPER : C_DIM);
         const char* title = S.med[0] ? S.med : "-- NO MEDIA --";
-        const int winW = 168;
+        const int winX = 18, winW = 150;
         int tw = bar.textWidth(title);
         int off = 0;
         marqueeActive = tw > winW;
@@ -63,12 +70,12 @@ static void drawBar() {
             uint32_t period = 1500 + (uint32_t)span * 33;
             uint32_t ph = millis() % period;
             if (ph > 1500) off = (ph - 1500) / 33 % span;
-            bar.setClipRect(0, 0, winW, BAR_H - 2);
-            bar.drawString(title, 4 - off, (BAR_H - 2) / 2);
-            bar.drawString(title, 4 - off + span, (BAR_H - 2) / 2);
+            bar.setClipRect(winX, 0, winW, BAR_H - 2);
+            bar.drawString(title, winX + 2 - off, (BAR_H - 2) / 2);
+            bar.drawString(title, winX + 2 - off + span, (BAR_H - 2) / 2);
             bar.clearClipRect();
         } else {
-            bar.drawString(title, 4, (BAR_H - 2) / 2);
+            bar.drawString(title, winX + 2, (BAR_H - 2) / 2);
         }
 
         // labeled readouts: SYNC / RSSI / VOL
@@ -77,7 +84,7 @@ static void drawBar() {
 
         microLabel(bar, "SYNC", 192, 2);
         bar.setFont(F_MONO);
-        bar.setTextColor(S.peersTotal > 1 ? C_GREEN : C_DIM);
+        bar.setTextColor(S.peersTotal > 1 ? C_CYAN : C_DIM);
         snprintf(v, sizeof(v), "%d", S.peersTotal);
         bar.setTextDatum(bottom_center);
         bar.drawString(v, 192, BAR_H - 3);
@@ -121,7 +128,10 @@ static void drawWaiting(M5Canvas& c) {
     c.setFont(F_MONO);
     c.setTextColor(C_DIM);
     c.drawString(S.byed ? "player was shut down" : "waiting for HPlayer2...", SCREEN_W / 2, PAGE_H / 2 + 8);
-    if (S.hostName[0]) c.drawString(S.hostName, SCREEN_W / 2, PAGE_H / 2 + 32);
+    if (S.hostName[0]) {
+        c.setTextColor(C_CYAN);
+        c.drawString(S.hostName, SCREEN_W / 2, PAGE_H / 2 + 32);
+    }
     c.drawRect(24, 8, SCREEN_W - 48, PAGE_H - 16, C_LINE);
 }
 

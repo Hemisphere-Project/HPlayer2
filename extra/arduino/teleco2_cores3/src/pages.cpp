@@ -30,28 +30,28 @@ static void deckKey(M5Canvas& c, int x, int y, int w, int h, const char* label) 
 }
 
 static void iconPrev(M5Canvas& c, int cx, int cy) {
-    c.fillRect(cx - 22, cy - 12, 5, 24, C_AMBER);
-    c.fillTriangle(cx - 14, cy, cx + 2, cy - 12, cx + 2, cy + 12, C_AMBER);
-    c.fillTriangle(cx + 4, cy, cx + 20, cy - 12, cx + 20, cy + 12, C_AMBER);
+    c.fillRect(cx - 22, cy - 12, 5, 24, C_PAPER);
+    c.fillTriangle(cx - 14, cy, cx + 2, cy - 12, cx + 2, cy + 12, C_PAPER);
+    c.fillTriangle(cx + 4, cy, cx + 20, cy - 12, cx + 20, cy + 12, C_PAPER);
 }
 
 static void iconNext(M5Canvas& c, int cx, int cy) {
-    c.fillTriangle(cx - 20, cy - 12, cx - 20, cy + 12, cx - 4, cy, C_AMBER);
-    c.fillTriangle(cx - 2, cy - 12, cx - 2, cy + 12, cx + 14, cy, C_AMBER);
-    c.fillRect(cx + 17, cy - 12, 5, 24, C_AMBER);
+    c.fillTriangle(cx - 20, cy - 12, cx - 20, cy + 12, cx - 4, cy, C_PAPER);
+    c.fillTriangle(cx - 2, cy - 12, cx - 2, cy + 12, cx + 14, cy, C_PAPER);
+    c.fillRect(cx + 17, cy - 12, 5, 24, C_PAPER);
 }
 
 static void iconPlayPause(M5Canvas& c, int cx, int cy) {
     if (S.pl == 1) {    // playing -> key acts as PAUSE
-        c.fillRect(cx - 11, cy - 13, 8, 26, C_GREEN);
-        c.fillRect(cx + 3, cy - 13, 8, 26, C_GREEN);
+        c.fillRect(cx - 11, cy - 13, 8, 26, C_AMBER);
+        c.fillRect(cx + 3, cy - 13, 8, 26, C_AMBER);
     } else {            // stopped / paused -> key acts as PLAY
-        c.fillTriangle(cx - 9, cy - 13, cx - 9, cy + 13, cx + 13, cy, S.pl == 2 ? C_GREEN : C_AMBER);
+        c.fillTriangle(cx - 9, cy - 13, cx - 9, cy + 13, cx + 13, cy, C_GREEN);
     }
 }
 
 static void iconStop(M5Canvas& c, int cx, int cy) {
-    c.fillRect(cx - 12, cy - 12, 24, 24, C_AMBER);
+    c.fillRect(cx - 12, cy - 12, 24, 24, C_RED);
 }
 
 void drawTransport(M5Canvas& c) {
@@ -78,7 +78,7 @@ void drawTransport(M5Canvas& c) {
     c.setFont(F_7SEG);
     c.setTextSize(0.55f);
     c.setTextDatum(middle_center);
-    c.setTextColor(S.mute ? C_RED : C_GREEN);
+    c.setTextColor(S.mute ? C_RED : C_AMBER);
     c.drawString(S.mute ? "0" : v, VOL_X + VOL_W / 2, (BTN_Y0 + VOL_BTN_H + PROG_Y - VOL_BTN_H - 8) / 2);
     c.setTextSize(1.0f);
     c.setFont(F_MICRO);
@@ -88,7 +88,7 @@ void drawTransport(M5Canvas& c) {
     // progress strip: track counter + segment meter + time
     c.setFont(F_MONO);
     c.setTextDatum(middle_left);
-    c.setTextColor(C_AMBER);
+    c.setTextColor(C_PAPER);
     char nfo[16];
     if (S.idx >= 0) snprintf(nfo, sizeof(nfo), "%02d/%02d", S.idx + 1, S.count);
     else            snprintf(nfo, sizeof(nfo), "--/%02d", S.count);
@@ -175,11 +175,15 @@ void drawMedia(M5Canvas& c) {
             uint16_t rowCol = (S.pl == 1) ? C_GREEN : C_AMBER;
             c.fillRect(0, y + 1, SCREEN_W - 8, ROW_H - 2, rowCol);
             c.setTextColor(C_BG);
-        } else {
-            c.setTextColor(C_AMBER);
+            snprintf(txt, sizeof(txt), "%02d %s", i + 1, S.list[i]);
+            c.drawString(txt, 8, y + ROW_H / 2);
+        } else {                                // dim index, white name
+            snprintf(txt, sizeof(txt), "%02d", i + 1);
+            c.setTextColor(C_DIM);
+            c.drawString(txt, 8, y + ROW_H / 2);
+            c.setTextColor(C_PAPER);
+            c.drawString(S.list[i], 42, y + ROW_H / 2);
         }
-        snprintf(txt, sizeof(txt), "%02d %s", i + 1, S.list[i]);
-        c.drawString(txt, 8, y + ROW_H / 2);
     }
 
     // scrollbar
@@ -233,9 +237,9 @@ void drawPeers(M5Canvas& c) {
         c.fillRect(8, y + ROW_H / 2 - 5, 10, 10, LK_COL[p.lk & 3]);
         c.drawRect(7, y + ROW_H / 2 - 6, 12, 12, C_LINE);
         snprintf(txt, sizeof(txt), "%s%s", p.nm, p.me ? " *" : "");
-        c.setTextColor(p.me ? C_PAPER : C_AMBER);
+        c.setTextColor(p.me ? C_CYAN : C_PAPER);
         c.drawString(txt, 28, y + ROW_H / 2);
-        c.setTextColor(C_DIM);
+        c.setTextColor(LK_COL[p.lk & 3]);
         c.setTextDatum(middle_right);
         c.drawString(LK_TXT[p.lk & 3], SCREEN_W - 10, y + ROW_H / 2);
         c.setTextDatum(middle_left);
