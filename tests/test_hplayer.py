@@ -3,7 +3,7 @@ from core.engine.hplayer import HPlayer2
 
 
 def test_add_player_handles_runtime_error(monkeypatch):
-    hplayer = HPlayer2(basepath=[], settingspath=None)
+    hplayer = HPlayer2(mediaPath=[])
 
     class FailingPlayer:
         def __init__(self, *args, **kwargs):

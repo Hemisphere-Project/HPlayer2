@@ -8,7 +8,7 @@ class DummyInterface:
 
 
 def test_add_interface_handles_runtime_error(monkeypatch):
-    hplayer = HPlayer2(basepath=[], settingspath=None)
+    hplayer = HPlayer2(mediaPath=[])
 
     monkeypatch.setattr(ifacelib, "getInterface", lambda name: DummyInterface)
 
