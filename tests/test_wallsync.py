@@ -1,8 +1,8 @@
 """
 Wall-sync desk test: hardware-free validation of the wallclock continuous
-sync (core/engine/chaser.py + core/interfaces/wallclock.py).
+sync (core/engine/drifter.py + core/interfaces/wallclock.py).
 
-- Chaser servo simulation: convergence, loop-wrap without seek, hard-seek
+- Drifter servo simulation: convergence, loop-wrap without seek, hard-seek
   recovery (tests 1-3, fake player only).
 - Full master->slave path over loopback UDP (unicast mode), with a fake
   zyre node providing a simulated clockshift (test 4).
@@ -28,7 +28,7 @@ ni.interfaces = lambda: []
 ni.ifaddresses = lambda iface: {}
 sys.modules['netifaces'] = ni
 
-from core.engine.chaser import Chaser
+from core.engine.drifter import Drifter
 
 
 # --- fake player -------------------------------------------------------------
@@ -72,10 +72,10 @@ class FakePlayer():
         return None
 
 
-# --- TEST 1: Chaser convergence ----------------------------------------------
-print("== TEST 1: chaser converges from 0.3s offset with 0.05% crystal error ==")
+# --- TEST 1: Drifter convergence ----------------------------------------------
+print("== TEST 1: drifter converges from 0.3s offset with 0.05% crystal error ==")
 p = FakePlayer(duration=600.0, rateError=1.0005)
-c = Chaser(p); c.doLog = False
+c = Drifter(p); c.doLog = False
 c.arm()
 t0 = time.time(); clock0 = p.position() + 0.3   # master 0.3s ahead
 lastDiffs = []
@@ -94,7 +94,7 @@ print("   PASS")
 # --- TEST 2: loop wrap produces no seek --------------------------------------
 print("== TEST 2: loop wrap (10s media) crosses without seek ==")
 p = FakePlayer(duration=10.0, rateError=1.0)
-c = Chaser(p); c.doLog = False
+c = Drifter(p); c.doLog = False
 c.arm()
 t0 = time.time(); clock0 = p.position()
 jumps = 0
@@ -110,7 +110,7 @@ print("   PASS")
 # --- TEST 3: big desync triggers one seek then relock ------------------------
 print("== TEST 3: 5s desync -> single seek -> relock ==")
 p = FakePlayer(duration=600.0, rateError=1.0)
-c = Chaser(p); c.doLog = False
+c = Drifter(p); c.doLog = False
 c.arm()
 t0 = time.time(); clock0 = p.position() + 5.0
 for i in range(20 * 8):
@@ -180,7 +180,7 @@ slave = WallclockInterface(sHp, None, False, player=sPlayer, port=13737,
                            masterName='WALL-MASTER', staleness=1.0,
                            driftLog=driftCsv)
 slave._myName = 'WALL-SLAVE'
-slave.chaser.doLog = False
+slave.drifter.doLog = False
 
 # feed the master latch the way mpv status events would (20Hz), skewing 'at'
 # into the master's (simulated) clock: at = real_now + CS

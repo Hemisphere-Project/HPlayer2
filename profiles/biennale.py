@@ -132,25 +132,25 @@ def sync_init2(ev, *args):
 		doPlay(PLAY_PATTERN)
 
 
-# WALL: seamless loop + chaser arming + late-boot self-start
+# WALL: seamless loop + drifter arming + late-boot self-start
 if WALL:
 	@hplayer.on('player.playing')
 	def wall_playing(ev, *args):
 		# mpv loop=inf: blackless wrap, position wraps seamlessly on master
-		# and slaves alike; the chaser only trims the residual drift.
+		# and slaves alike; the drifter only trims the residual drift.
 		player._applyOneLoop(True)
 		if not SYNC_MASTER:
-			hplayer.interface('wallclock').chaser.arm()
+			hplayer.interface('wallclock').drifter.arm()
 
 	if not SYNC_MASTER:
 		# Slave boots after the master: no play broadcast will ever come
 		# (the master loops seamlessly, playlist.end never fires). The
-		# chaser sees a playing master clock but a stopped player, and
+		# drifter sees a playing master clock but a stopped player, and
 		# calls this hook: self-start the pattern, then chase-lock.
 		def wall_selfstart():
 			print('wallclock: master is playing, self-starting', PLAY_PATTERN)
 			hplayer.playlist.play(PLAY_PATTERN)
-		hplayer.interface('wallclock').chaser.onStalled = wall_selfstart
+		hplayer.interface('wallclock').drifter.onStalled = wall_selfstart
 
 
 if SYNC:

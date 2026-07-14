@@ -15,7 +15,7 @@ import datetime
 #  on master): dead zone with hysteresis, progressive speed curve, weighted
 #  speed smoothing. Added here: wrap-aware diff for looping media.
 #
-class Chaser():
+class Drifter():
 
     def __init__(self, player, log=None,
                     deadZoneEnter=0.025,    # s - enter dead zone (+-0.75 frame @30fps)

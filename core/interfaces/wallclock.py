@@ -1,6 +1,6 @@
 from .base import BaseInterface
 from ..engine import network
-from ..engine.chaser import Chaser
+from ..engine.drifter import Drifter
 from termcolor import colored
 import socket
 import json
@@ -20,7 +20,7 @@ PRECISION = 1000000     # us - same clock base as the zyre TimeClient
 #  clock correction: each packet timestamp is converted to local time
 #  with the zyre-measured peer clockshift, then extrapolated to 'now' -
 #  so network delivery delay/jitter never enters the position estimate.
-#  Slaves chase the estimated master position with the Chaser speed servo.
+#  Slaves chase the estimated master position with the Drifter speed servo.
 #
 #  Packet (JSON, ~140 bytes):
 #    v    protocol version (1)
@@ -59,7 +59,7 @@ class WallclockInterface (BaseInterface):
         self.player = player if player else (players[0] if players else None)
 
         if self.master:
-            self.chaser = None
+            self.drifter = None
             # Latch (pos, at) pairs from the player status events; the send
             # loop reads the latch at its own rate. No extrapolation here:
             # raw samples out, slaves extrapolate. Single-reference tuple:
@@ -68,7 +68,7 @@ class WallclockInterface (BaseInterface):
             if self.player:
                 self.hplayer.on(self.player.name + '.status')(self._onPlayerStatus)
         else:
-            self.chaser = Chaser(self.player, log=self.log) if self.player else None
+            self.drifter = Drifter(self.player, log=self.log) if self.player else None
             self._lockedName = None
             self._lastSeq = None
             self._lastAccept = 0
@@ -173,8 +173,8 @@ class WallclockInterface (BaseInterface):
         self._candName = None
         self._csClient = None
         self._csReady = False
-        if self.chaser:
-            self.chaser.arm()
+        if self.drifter:
+            self.drifter.arm()
         self.log('locked on wall clock master:', name)
 
     def _zyrePeer(self, name):
@@ -248,8 +248,8 @@ class WallclockInterface (BaseInterface):
             if self._lockedName and now - self._lastAccept > self.staleness:
                 if not self._freewheeling:
                     self._freewheeling = True
-                    if self.chaser:
-                        self.chaser.release()
+                    if self.drifter:
+                        self.drifter.release()
                     self.log(colored('master clock silent (' + self._lockedName + ') : freewheeling', 'yellow'))
                 # another master heard consistently while ours is silent -> switch
                 if self._candName and now - self._candSince > 1.0 and now - self._candLast < self.staleness:
@@ -301,7 +301,7 @@ class WallclockInterface (BaseInterface):
                 self.log('master clock is back:', name)
             self._candName = None
 
-            if not self.chaser:
+            if not self.drifter:
                 continue
 
             # Clockshift readiness: the zyre TimeClient needs its first
@@ -311,7 +311,7 @@ class WallclockInterface (BaseInterface):
             peer = self._zyrePeer(name)
             if not peer:
                 self._quietLog('waiting for zyre discovery of ' + name)
-                self.chaser.release()
+                self.drifter.release()
                 continue
             tc = getattr(peer, 'timeclient', None)
             if tc is not self._csClient:
@@ -323,12 +323,12 @@ class WallclockInterface (BaseInterface):
                     self.log('clock sync ready with', name, '( shift ' + str(peer.clockshift()) + 'us )')
                 else:
                     self._quietLog('waiting for clock sync with ' + name)
-                    self.chaser.release()
+                    self.drifter.release()
                     continue
 
             # Master not playing
             if not pkt.get('p', False):
-                self.chaser.release()
+                self.drifter.release()
                 continue
 
             # Media mismatch guard: never chase file A's clock on file B's timeline
@@ -338,7 +338,7 @@ class WallclockInterface (BaseInterface):
                 mine = os.path.basename(mine) if mine else ''
                 if mine and mine != m:
                     self._quietLog('media mismatch: master plays ' + m + ' / self plays ' + mine + ' -> not chasing')
-                    self.chaser.release()
+                    self.drifter.release()
                     continue
 
             # Estimate master position at local now:
@@ -351,7 +351,7 @@ class WallclockInterface (BaseInterface):
             if dur > 3:
                 clock = clock % dur
 
-            res = self.chaser.tick(clock, dur)
+            res = self.drifter.tick(clock, dur)
             if res:
                 res['seq'] = s
                 res['cs'] = cs
