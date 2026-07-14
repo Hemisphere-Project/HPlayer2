@@ -1,0 +1,192 @@
+from core.engine.hplayer import HPlayer2
+from core.engine import network
+import os
+import time
+
+# BIENNALE unified profile (merges biennale24.py + biennale26-wall.py)
+#
+# Per-device MODE, from /boot markers:
+#   (no marker)                              -> SOLO : local play, loop
+#   /boot/wifi/<iface>-sync-AP.nmconnection  -> SYNC master : zyre-synchronized start
+#   /boot/wifi/<iface>-sync-STA.nmconnection -> SYNC slave
+#   + /boot/wallsync                         -> WALL : continuous frame-lock
+#                                                     (wallclock clock + chase servo)
+# SYNC without wallsync keeps the 2024 behavior: loop 0, the master
+# re-broadcasts a synchronized play at every media end.
+# WALL runs a seamless mpv loop on every unit; slaves chase the master
+# clock continuously and self-start if they boot after the master.
+
+# EXTRA TMP UPLOAD
+import tempfile
+tempfile.tempdir = '/data/var/tmp'
+
+# MEDIA PATH
+mediaPath = ['/data/media', '/data/usb']
+
+# CHECK IF /etc/asound.conf contains "pcm.usb", otherwise copy from scripts/asound.conf-rpi3
+if not os.path.isfile('/etc/asound.conf') or not open('/etc/asound.conf').read().find('pcm.usb') > -1:
+	os.system('rw && cp /opt/HPlayer2/scripts/asound.conf-rpi3 /etc/asound.conf && sync && ro')
+
+# INIT HPLAYER
+hplayer = HPlayer2(mediaPath, '/data/hplayer2-biennale.cfg')
+
+
+# PLAYER
+player = hplayer.addPlayer('mpv', 'player')
+player.imagetime(15)
+
+player.doLog['events'] = True
+player.doLog['cmds'] = False
+
+PLAY_PATTERN = "[^1-9_]*.*"
+
+
+# ROLE detection (same /boot/wifi marker convention as biennale24)
+SYNC_BUFFER = 200
+SYNC = False
+SYNC_MASTER = False
+SYNC_IFACE = None
+if os.path.isfile('/boot/wifi/eth0-sync-AP.nmconnection') or os.path.isfile('/boot/wifi/eth0-sync-STA.nmconnection'):
+	SYNC = True
+	SYNC_MASTER = os.path.isfile('/boot/wifi/eth0-sync-AP.nmconnection')
+	SYNC_IFACE = 'eth0'
+
+elif os.path.isfile('/boot/wifi/wlan0-sync-AP.nmconnection') or os.path.isfile('/boot/wifi/wlan0-sync-STA.nmconnection'):
+	SYNC = True
+	SYNC_MASTER = os.path.isfile('/boot/wifi/wlan0-sync-AP.nmconnection')
+	if network.has_interface('wlan0'):
+		SYNC_IFACE = 'wlan0'
+	elif network.has_interface('wlan1'):
+		SYNC_IFACE = 'wlan1'
+
+WALL = SYNC and SYNC_IFACE and os.path.isfile('/boot/wallsync')
+
+if SYNC_MASTER: print("SYNC_MASTER!")
+if WALL: print("WALL mode: continuous sync")
+
+
+# Interfaces
+hplayer.addInterface('http2', 80, {'playlist': False, 'loop': False, 'mute': True})
+
+if SYNC and SYNC_IFACE:
+	# Zyre: peer discovery, clockshift measurement, synchronized start
+	hplayer.addInterface('zyre', SYNC_IFACE)
+
+if WALL:
+	# Wallclock: continuous position sync (master emits, slaves chase)
+	hplayer.addInterface('wallclock', SYNC_IFACE, SYNC_MASTER)
+
+
+# PLAY action
+debounceLastTime = 0
+debounceLastMedia = ""
+
+def doPlay(media, debounce=0):
+
+	# DEBOUNCE media
+	global debounceLastTime, debounceLastMedia
+	now = int(round(time.time() * 1000))
+	if debounce > 0 and debounceLastMedia == media and (now - debounceLastTime) < debounce:
+		return
+	debounceLastTime = now
+	debounceLastMedia = media
+
+	# PLAY SYNC -> forward to peers
+	if SYNC:
+		if SYNC_MASTER:
+			hplayer.interface('zyre').node.broadcast('stop')
+			hplayer.interface('zyre').node.broadcast('play', media, SYNC_BUFFER)
+			print('doPlay: sync master.. broadcast')
+		else:
+			print('doPlay: sync slave.. do nothing')
+
+	# PLAY SOLO
+	else:
+		hplayer.playlist.play(media)
+
+# SYNC_MASTER INIT: let slaves join zyre before the first broadcast
+@hplayer.on('app-run')
+def sync_init(ev, *args):
+	if SYNC_MASTER:
+		time.sleep(10)
+
+# DEFAULT File
+@hplayer.on('app-run')
+@hplayer.on('files.filelist-updated')
+@hplayer.on('playlist.end')
+def play0(ev, *args):
+	doPlay(PLAY_PATTERN)
+	if WALL or not SYNC:
+		hplayer.settings.set('loop', 2) # blackless loop (wall: mpv loop=inf below)
+	else:
+		hplayer.settings.set('loop', 0) # 2024 sync: re-broadcast a synced play each loop
+
+# SYNC_MASTER INIT PART 2
+@hplayer.on('app-run')
+def sync_init2(ev, *args):
+	if SYNC_MASTER:
+		time.sleep(1)
+		doPlay(PLAY_PATTERN)
+
+
+# WALL: seamless loop + chaser arming + late-boot self-start
+if WALL:
+	@hplayer.on('player.playing')
+	def wall_playing(ev, *args):
+		# mpv loop=inf: blackless wrap, position wraps seamlessly on master
+		# and slaves alike; the chaser only trims the residual drift.
+		player._applyOneLoop(True)
+		if not SYNC_MASTER:
+			hplayer.interface('wallclock').chaser.arm()
+
+	if not SYNC_MASTER:
+		# Slave boots after the master: no play broadcast will ever come
+		# (the master loops seamlessly, playlist.end never fires). The
+		# chaser sees a playing master clock but a stopped player, and
+		# calls this hook: self-start the pattern, then chase-lock.
+		def wall_selfstart():
+			print('wallclock: master is playing, self-starting', PLAY_PATTERN)
+			hplayer.playlist.play(PLAY_PATTERN)
+		hplayer.interface('wallclock').chaser.onStalled = wall_selfstart
+
+
+if SYNC:
+	# HTTP2 Ctrl unbind
+	uev = ['play', 'pause', 'resume', 'stop'] + (['volume'] if WALL else [])
+	for ev in uev:
+		for func in hplayer.interface('http2').listeners(ev):
+			hplayer.interface('http2').off(ev, func)
+
+	# HTTP2 Ctrl re-bind with Zyre
+	@hplayer.on('http2.play')
+	@hplayer.on('http2.pause')
+	@hplayer.on('http2.resume')
+	@hplayer.on('http2.stop')
+	def ctrl2(ev, *args):
+		ev = ev.replace('http2.', '')
+		if ev == 'play':
+			hplayer.interface('zyre').node.broadcast('stop')
+		hplayer.interface('zyre').node.broadcast(ev, args, SYNC_BUFFER)
+		if ev == 'play':
+			hplayer.interface('zyre').node.broadcast('loop', [2 if WALL else 0], SYNC_BUFFER)
+
+	if WALL:
+		@hplayer.on('http2.volume')
+		def vol2(ev, *args):
+			hplayer.interface('zyre').node.broadcast('volume', args[0], 0)
+
+
+# HTTP2 Logs
+@hplayer.on('player.*')
+@hplayer.on('sampler.*')
+@hplayer.on('gpio.*')
+@hplayer.on('serial.*')
+@hplayer.on('wallclock.*')
+def http2_logs(ev, *args):
+	if ev.startswith('gpio') and ev.find('-') == -1: return
+	if len(args) and args[0] == 'time': return
+	if ev.endswith('.drift'): return
+	hplayer.interface('http2').send('logs', [ev]+list(args))
+
+# RUN
+hplayer.run()
