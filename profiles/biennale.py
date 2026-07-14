@@ -9,12 +9,14 @@ import time
 #   (no marker)                              -> SOLO : local play, loop
 #   /boot/wifi/<iface>-sync-AP.nmconnection  -> SYNC master : zyre-synchronized start
 #   /boot/wifi/<iface>-sync-STA.nmconnection -> SYNC slave
-#   + /boot/wallsync                         -> WALL : continuous frame-lock
-#                                                     (wallclock clock + chase servo)
-# SYNC without wallsync keeps the 2024 behavior: loop 0, the master
-# re-broadcasts a synchronized play at every media end.
-# WALL runs a seamless mpv loop on every unit; slaves chase the master
-# clock continuously and self-start if they boot after the master.
+#
+# WALL_SYNC below upgrades every SYNC device to continuous frame-lock
+# (wallclock clock + chase servo, seamless mpv loop, slaves self-start
+# if they boot after the master). Comment it out to fall back to the
+# 2024 behavior: loop 0, the master re-broadcasts a synchronized play
+# at every media end.
+WALL_SYNC = True
+# WALL_SYNC = False
 
 # EXTRA TMP UPLOAD
 import tempfile
@@ -59,7 +61,8 @@ elif os.path.isfile('/boot/wifi/wlan0-sync-AP.nmconnection') or os.path.isfile('
 	elif network.has_interface('wlan1'):
 		SYNC_IFACE = 'wlan1'
 
-WALL = SYNC and SYNC_IFACE and os.path.isfile('/boot/wallsync')
+# (globals().get: commenting the WALL_SYNC line out entirely is safe)
+WALL = bool(SYNC and SYNC_IFACE and globals().get('WALL_SYNC'))
 
 if SYNC_MASTER: print("SYNC_MASTER!")
 if WALL: print("WALL mode: continuous sync")
