@@ -117,3 +117,8 @@ input[type=range]::-webkit-slider-runnable-track {
 .media .mb-2 {
     margin-bottom: 0.3rem!important;
 }
+
+/* Radar & Schedule panel (biennale-2026-module-radar) */
+#radar-panel input[type="range"] { width: 60%; vertical-align: middle; }
+#schedule_status.rtc-ok   { color: #7bd67b; }
+#schedule_status.rtc-warn { color: #e0b040; }

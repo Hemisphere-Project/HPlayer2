@@ -132,6 +132,35 @@
                 </div>
             </div>
 
+            <!-- Radar & Schedule (biennale-2026-module-radar) -->
+            <div class="row mt-2" id="radar-panel">
+                <div class="col-12">
+                    <div class="card-header text-white bg-dark">Radar &amp; Schedule</div>
+                    <div class="card-body row pt-3">
+                        <div class="col-lg-6 col-12">
+                            <div class="mb-2"><span class="badge badge-secondary mr-2">range (mm)</span><span id="radar_range_val"></span>
+                                <input type="range" id="radar_range" min="200" max="6000" step="100"></div>
+                            <div class="mb-2"><span class="badge badge-secondary mr-2">width &plusmn;x (mm)</span><span id="radar_width_val"></span>
+                                <input type="range" id="radar_width" min="100" max="3000" step="50"></div>
+                            <div class="mb-2"><span class="badge badge-secondary mr-2">enter (ms)</span><span id="radar_enter_val"></span>
+                                <input type="range" id="radar_enter" min="0" max="3000" step="50"></div>
+                            <div class="mb-2"><span class="badge badge-secondary mr-2">leave (ms)</span><span id="radar_leave_val"></span>
+                                <input type="range" id="radar_leave" min="0" max="10000" step="100"></div>
+                        </div>
+                        <div class="col-lg-6 col-12">
+                            <div class="mb-2">
+                                <label><input type="checkbox" id="schedule_enable"> restrict playback to a daily window</label>
+                            </div>
+                            <div class="mb-2"><span class="badge badge-secondary mr-2">open</span>
+                                <input type="time" id="schedule_open">
+                                <span class="badge badge-secondary mr-2 ml-3">close</span>
+                                <input type="time" id="schedule_close"></div>
+                            <div id="schedule_status" class="mt-2">RTC: &mdash;</div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
             <hr />
 
 

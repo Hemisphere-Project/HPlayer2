@@ -502,4 +502,41 @@ $(document).ready(function() {
         });
     });
 
+    // --- Radar & Schedule panel (biennale-2026-module-radar) ---
+    // Self-contained: a second settings.updated handler (coexists with the one above),
+    // reads the seeded radar-* / schedule-* keys, writes edits back via trigger().
+    (function() {
+        var radarKeys = {
+            'radar-range': 'radar_range', 'radar-width': 'radar_width',
+            'radar-enter-ms': 'radar_enter', 'radar-leave-ms': 'radar_leave'
+        };
+        socket.on('settings.updated', function(msg) {
+            for (var k in radarKeys) {
+                if (msg[k] !== undefined) {
+                    $('#' + radarKeys[k]).val(msg[k]);
+                    $('#' + radarKeys[k] + '_val').text(msg[k]);
+                }
+            }
+            if (msg['schedule-enable'] !== undefined) $('#schedule_enable').prop('checked', !!msg['schedule-enable']);
+            if (msg['schedule-open'] !== undefined) $('#schedule_open').val(msg['schedule-open']);
+            if (msg['schedule-close'] !== undefined) $('#schedule_close').val(msg['schedule-close']);
+        });
+        socket.on('schedule-status', function(st) {
+            var el = $('#schedule_status');
+            if (!st['rtc'])
+                el.text('RTC: not detected — using system clock').removeClass('rtc-ok').addClass('rtc-warn');
+            else
+                el.text('RTC: present' + (st['open'] ? ' — window open' : ' — window closed')).removeClass('rtc-warn').addClass('rtc-ok');
+        });
+        Object.keys(radarKeys).forEach(function(key) {
+            $('#' + radarKeys[key]).on('input change', function() {
+                $('#' + radarKeys[key] + '_val').text(this.value);
+                trigger(key, parseInt(this.value));
+            });
+        });
+        $('#schedule_enable').on('change', function() { trigger('schedule-enable', this.checked); });
+        $('#schedule_open').on('change', function() { trigger('schedule-open', this.value); });
+        $('#schedule_close').on('change', function() { trigger('schedule-close', this.value); });
+    })();
+
 });
