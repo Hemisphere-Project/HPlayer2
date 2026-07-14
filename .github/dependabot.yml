@@ -1,0 +1,25 @@
+version: 2
+
+# Only the real dependency manifest is pyproject.toml + uv.lock, which
+# scripts/install_xbian.sh installs from with `uv sync`.
+#
+# scripts/_legacy/requirements.txt is the frozen record of what the old
+# pipenv-built images contain -- it is deliberately kept, and deliberately not
+# installed from. Dependabot was raising duplicate advisories against it and
+# opened a PR to "fix" it (dependabot/pip/scripts/_legacy/zeroconf-0.149.16),
+# which would have changed a historical record and shipped nothing.
+#
+# Player dependencies are pinned on purpose: the parc runs on RPi 3B+ images
+# where an upgrade has to be validated on hardware before it reaches a fleet.
+# Updates are grouped and left for a human to take deliberately, not merged.
+
+updates:
+  - package-ecosystem: pip
+    directory: /
+    schedule:
+      interval: monthly
+    open-pull-requests-limit: 5
+    groups:
+      python-deps:
+        patterns:
+          - "*"
