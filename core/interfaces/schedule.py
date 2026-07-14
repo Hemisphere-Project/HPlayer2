@@ -29,11 +29,12 @@ class ScheduleInterface(BaseInterface):
         'schedule-close':  '19:00',     # daily window end   "HH:MM"
     }
 
-    def __init__(self, hplayer, tick=30):
+    def __init__(self, hplayer, tick=30, requireRtc=False):
         super().__init__(hplayer, "Schedule")
         for k, v in self.DEFAULTS.items():
             hplayer.settings._settings.setdefault(k, v)
         self.tick = tick
+        self.requireRtc = requireRtc    # if True, never gate without a real RTC (fail open + warn)
         self.rtcPresent = False
         self._lastOpen = None
 
@@ -44,6 +45,8 @@ class ScheduleInterface(BaseInterface):
     def isOpen(self):
         if not self._cfgBool('schedule-enable'):
             return True
+        if self.requireRtc and not self.rtcPresent:
+            return True                 # no trustworthy clock -> don't gate (see _checkRtc warning)
         o = self._parseHM(self.hplayer.settings.get('schedule-open'))
         c = self._parseHM(self.hplayer.settings.get('schedule-close'))
         if o is None or c is None or o == c:

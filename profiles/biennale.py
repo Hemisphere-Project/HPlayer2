@@ -191,5 +191,45 @@ def http2_logs(ev, *args):
 	if ev.endswith('.drift'): return
 	hplayer.interface('http2').send('logs', [ev]+list(args))
 
+# ─── RADAR proximity + SCHEDULE window (biennale-2026-module-radar) ──────────
+# Both optional and self-activating:
+#  - radar: the interface always listens on USB but only fires radar.enter once a
+#    box (extra/arduino/radar_c3) actually streams targets. Outdoor players carry
+#    only [1-9]_ pieces, so the default loop above matches nothing and they stay
+#    silent until someone enters range; then the piece plays once (play-out).
+#  - schedule: inert unless enabled from http2 AND an RTC is present (requireRtc).
+RADAR_PATTERN = "[1-9]_*.*"
+
+radar    = hplayer.addInterface('radar')
+schedule = hplayer.addInterface('schedule', 30, True)   # requireRtc: gate only with a real clock
+
+@hplayer.on('radar.enter')
+def radar_trigger(ev, *args):
+	if schedule.isOpen() and not player.isPlaying():
+		hplayer.settings.set('loop', -1)     # play the proximity piece once
+		doPlay(RADAR_PATTERN)
+
+@hplayer.on('schedule.open')
+def schedule_open(ev, *args):
+	doPlay(PLAY_PATTERN)                      # resume default content when the window opens
+
+@hplayer.on('schedule.close')
+def schedule_close(ev, *args):
+	if SYNC and SYNC_MASTER:
+		hplayer.interface('zyre').node.broadcast('stop')
+	elif not SYNC:
+		player.stop()                        # go silent when the window closes
+
+# persist radar + schedule tunables edited from the http2 web UI (interfaces read live)
+for _k in ('radar-range', 'radar-width', 'radar-enter-ms', 'radar-leave-ms',
+           'schedule-enable', 'schedule-open', 'schedule-close'):
+	hplayer.on('http2.' + _k)(lambda ev, *a, k=_k: hplayer.settings.set(k, a[0]))
+
+@hplayer.on('radar.*')
+@hplayer.on('schedule.*')
+def radar_schedule_logs(ev, *args):
+	hplayer.interface('http2').send('logs', [ev] + list(args))
+
+
 # RUN
 hplayer.run()
