@@ -18,14 +18,11 @@ class FileManager(Module):
         self.active_list = []
         self.refreshTimer = None
         self.pathObservers = []
-        
-        # self.logQuietEvents.append('file-changed')
-        
+
         # Defered update (file change might trigger multiple events)
         @self.on('file-changed')                # file changed on disk -> trigger full refresh
         def deferredUpdate(ev, *args):
             if args[0].event_type == 'modified':
-                print(args[0].event_type)
                 if self.refreshTimer:
                     self.refreshTimer.cancel()
                 self.refreshTimer = Timer(.5, self.refresh)
