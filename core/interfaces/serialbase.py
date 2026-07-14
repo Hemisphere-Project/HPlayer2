@@ -135,12 +135,15 @@ class SerialBase(BaseInterface):
                 try:
                     if self.dtrReset:
                         # dummy connection to receive all the watchdog gibberish (unplug + replug) and properly reset the arduino
-                        with serial.Serial(self.port) as s:
-                            s.setDTR(False)
-                            time.sleep(1)
-                            s.flushInput()
-                            s.setDTR(True)
-                            time.sleep(0.5)
+                        try:
+                            with serial.Serial(self.port) as s:
+                                s.setDTR(False)
+                                time.sleep(1)
+                                s.flushInput()
+                                s.setDTR(True)
+                                time.sleep(0.5)
+                        except (OSError, serial.SerialException) as e:
+                            self.log("DTR reset skipped:", e)   # ptys / bridges without modem lines
                     self.serial = serial.Serial(self.port, self.baud, timeout=.1)
                 except Exception as e:
                     if not connectFailLogged:
