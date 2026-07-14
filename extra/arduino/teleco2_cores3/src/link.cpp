@@ -14,6 +14,7 @@ static char     buf[RX_BUF];
 static size_t   bufLen = 0;
 static bool     overflow = false;
 static uint32_t lastHello = 0;
+static uint32_t lastResync = 0;
 
 void sendCmd(const char* cmd) {
     Serial.print(cmd);
@@ -68,6 +69,13 @@ static void parseLine(const char* line) {
         }
         S.listTotal = doc["n"] | 0;
         int i = doc["i"] | 0;
+        if (i > (int)S.listLoaded) {    // gap: a chunk was lost -> re-request the dump
+            if (millis() - lastResync > 2000) {
+                lastResync = millis();
+                sendCmd("getall");
+            }
+            return;
+        }
         for (JsonVariantConst it : doc["items"].as<JsonArrayConst>()) {
             if (i >= LIST_MAX) break;
             copyStr(S.list[i], NAME_LEN, it);
@@ -102,25 +110,31 @@ static void parseLine(const char* line) {
 }
 
 void linkBegin() {
-    Serial.setRxBufferSize(1024);
+    Serial.setRxBufferSize(4096);       // full dump bursts ~11KB; HWCDC drops on overflow
     Serial.begin(115200);
     sendCmd("hello " STR(PROTO_VERSION));
     lastHello = millis();
 }
 
 void linkLoop() {
-    while (Serial.available()) {
-        char c = Serial.read();
-        if (c == '\n') {
-            if (!overflow && bufLen) {
-                buf[bufLen] = 0;
-                parseLine(buf);
+    uint8_t chunk[256];
+    int n;
+    while ((n = Serial.available()) > 0) {
+        if (n > (int)sizeof(chunk)) n = sizeof(chunk);
+        n = Serial.read(chunk, n);      // bulk drain, keeps the ring buffer free during bursts
+        for (int k = 0; k < n; k++) {
+            char c = (char)chunk[k];
+            if (c == '\n') {
+                if (!overflow && bufLen) {
+                    buf[bufLen] = 0;
+                    parseLine(buf);
+                }
+                bufLen = 0;
+                overflow = false;
+            } else if (c != '\r') {
+                if (bufLen < RX_BUF - 1) buf[bufLen++] = c;
+                else overflow = true;   // oversize line: discard to next newline
             }
-            bufLen = 0;
-            overflow = false;
-        } else if (c != '\r') {
-            if (bufLen < RX_BUF - 1) buf[bufLen++] = c;
-            else overflow = true;       // oversize line: discard to next newline
         }
     }
 

@@ -86,6 +86,7 @@ class SerialBase(BaseInterface):
             except Empty:
                 break
             self.serial.write((msg + '\n').encode('utf-8'))
+            time.sleep(0.002)   # pace bursts: small MCUs drop RX on buffer overflow
 
     def _dropLink(self):
         try:

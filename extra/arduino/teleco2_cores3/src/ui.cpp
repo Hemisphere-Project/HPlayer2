@@ -60,7 +60,7 @@ static void drawBar() {
         bar.setTextDatum(middle_left);
         bar.setTextColor(S.med[0] ? C_PAPER : C_DIM);
         const char* title = S.med[0] ? S.med : "-- NO MEDIA --";
-        const int winX = 18, winW = 150;
+        const int winX = 18, winW = S.mute ? 130 : 190;
         int tw = bar.textWidth(title);
         int off = 0;
         marqueeActive = tw > winW;
@@ -78,31 +78,26 @@ static void drawBar() {
             bar.drawString(title, winX + 2, (BAR_H - 2) / 2);
         }
 
-        // labeled readouts: SYNC / RSSI / VOL
-        char v[8];
-        bar.setTextDatum(bottom_center);
+        // mute alert (volume itself lives on the PLAY page)
+        if (S.mute) {
+            bar.fillRect(152, 4, 44, BAR_H - 10, C_RED);
+            bar.setFont(F_MICRO);
+            bar.setTextDatum(middle_center);
+            bar.setTextColor(C_BG);
+            bar.drawString("MUTE", 174, (BAR_H - 2) / 2);
+        }
 
-        microLabel(bar, "SYNC", 192, 2);
+        // labeled readouts: SYNC / RSSI
+        char v[8];
+        microLabel(bar, "SYNC", 250, 2);
         bar.setFont(F_MONO);
         bar.setTextColor(S.peersTotal > 1 ? C_CYAN : C_DIM);
         snprintf(v, sizeof(v), "%d", S.peersTotal);
         bar.setTextDatum(bottom_center);
-        bar.drawString(v, 192, BAR_H - 3);
+        bar.drawString(v, 250, BAR_H - 3);
 
-        microLabel(bar, "RSSI", 232, 2);
-        drawWifiBars(bar, 222, BAR_H - 5);
-
-        microLabel(bar, "VOL", 280, 2);
-        bar.setFont(F_MONO);
-        bar.setTextDatum(bottom_center);
-        if (S.mute) {
-            bar.setTextColor(C_RED);
-            bar.drawString("MUTE", 280, BAR_H - 3);
-        } else {
-            bar.setTextColor(C_AMBER);
-            snprintf(v, sizeof(v), "%d", S.vol);
-            bar.drawString(v, 280, BAR_H - 3);
-        }
+        microLabel(bar, "RSSI", 291, 2);
+        drawWifiBars(bar, 282, BAR_H - 5);
     }
 
     if (S.locked) {     // inverted LOCK tag, far right
