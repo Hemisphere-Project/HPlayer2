@@ -113,7 +113,10 @@ def main():
             time.sleep(0.1)
             continue
 
-        data = host.ser.read(256)
+        try:
+            data = host.ser.read(256)
+        except serial.SerialException:
+            sys.exit("-- device unplugged, bye")
         if data:
             buf += data
             while b'\n' in buf:
