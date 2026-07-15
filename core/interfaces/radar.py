@@ -32,6 +32,7 @@ class RadarInterface(SerialBase):
             hplayer.settings._settings.setdefault(k, v)
         self._present = False       # committed, debounced presence
         self._edgeSince = None      # when raw first disagreed with committed
+        self._lastStatus = 0        # throttle the live http2 feedback
 
     # The scan loop reads .filter on every pass, so a 'radar-filter' setting in the
     # /data cfg lets one player match a non-production device (e.g. the M5 Atom desk
@@ -61,15 +62,33 @@ class RadarInterface(SerialBase):
         rng = self._cfg('radar-range')
         wid = self._cfg('radar-width')
         raw = False
+        count = 0
+        nearest = None              # nearest target overall (mm), even out of zone, for tuning
         for tok in parts[1:]:
             try:
                 x, y, v = (int(n) for n in tok.split(','))
             except ValueError:
                 continue
-            if 0 < y <= rng and abs(x) <= wid:
+            if y <= 0:
+                continue
+            count += 1
+            if nearest is None or y < nearest:
+                nearest = y
+            if y <= rng and abs(x) <= wid:
                 raw = True
-                break
         self._debounce(raw)
+        self._pushStatus(raw, count, nearest)
+
+    def _pushStatus(self, raw, count, nearest):
+        now = time.time()
+        if now - self._lastStatus < 0.2:        # ~5Hz to the UI
+            return
+        self._lastStatus = now
+        h = self.hplayer.interface('http2')
+        if h:
+            h.send('radar-status', {'connected': self.serial is not None,
+                                    'present': self._present, 'raw': raw,
+                                    'count': count, 'near': nearest})
 
     def _debounce(self, raw):
         now = time.time()
@@ -88,3 +107,7 @@ class RadarInterface(SerialBase):
         # box unplugged: forget presence so a reconnect re-arms cleanly
         self._present = False
         self._edgeSince = None
+        h = self.hplayer.interface('http2')
+        if h:
+            h.send('radar-status', {'connected': False, 'present': False,
+                                    'raw': False, 'count': 0, 'near': None})

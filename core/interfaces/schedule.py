@@ -70,6 +70,9 @@ class ScheduleInterface(BaseInterface):
             self.stopped.wait(self.tick)    # interruptible; returns at once on quit()
 
     def _evaluate(self):
+        # re-detect the RTC each tick: keeps the fail-open guarantee honest if a
+        # module is missing/removed at runtime, and the http2 badge accurate
+        self.rtcPresent = bool(glob.glob('/dev/rtc*'))
         openNow = self.isOpen()
         if self._lastOpen is None:
             self._lastOpen = openNow        # baseline, no edge at startup

@@ -51,6 +51,7 @@ class DmxInterface(BaseInterface):
         self._mediaLoaded = -1          # sentinel != any media (incl. None)
         self._lastLevelsEmit = 0
         self._lastStatus = None
+        self._lastStatusSent = 0
 
         self._bindHttp2()
 
@@ -146,6 +147,7 @@ class DmxInterface(BaseInterface):
             return
 
         self._emitLevels(frame, active and bool(media))
+        self._emitStatus()
 
         # pace to fps
         period = 1.0 / max(1, int(self._cfg('dmx-fps')))
@@ -251,8 +253,11 @@ class DmxInterface(BaseInterface):
             'channels':  self._conduite.activeChannels(),
             'errors':    self._conduite.errors,
         }
-        if st != self._lastStatus:
+        # change -> instant; otherwise re-send every 2s so a browser that
+        # connects after the adapter did still learns the current state
+        if st != self._lastStatus or time.time() - self._lastStatusSent > 2.0:
             self._lastStatus = st
+            self._lastStatusSent = time.time()
             h.send('dmx-status', st)
 
     def _emitLevels(self, frame, active):
