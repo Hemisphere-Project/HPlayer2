@@ -4,10 +4,13 @@ Applies to 2024-parc players (read-only rootfs, `rw`/`ro` helpers, code in
 `/opt/HPlayer2`, media in `/data/media`, http2 on :80). Order matters:
 **inventory before touching, regression before feature, solo before trio.**
 
-The per-player upgrade below is run BY HAND on the first player, corrections
-noted, then on the two others — once stable it gets frozen into a one-command
-script (`extra/utils/biennale26-upgrade.sh`) to apply to fleet players as we
-encounter them.
+The upgrade path was proven by hand on player-35 (2026-07-15, phases 0/A/B +
+cold reboot all green) and is frozen into the one-command script:
+
+    extra/utils/biennale26-upgrade.sh <player-ip> [--profile biennale] [--rtc]
+
+Default = fleet-bascule case (branch switch only, profile untouched).
+`--profile biennale` for dispositif C players, `--rtc` when a DS3231 is wired.
 
 ## Test media
 
@@ -32,24 +35,19 @@ Naming is functional: `ambient.mp4` / `wall.mp4` match `PLAY_PATTERN
    `mpv --version | head -1`,
    `python3 -c "import watchdog; print(watchdog.__version__)"`,
    `ls /dev/rtc*`.
-3. Switch code — this block is the future upgrade script, refine it as reality
-   pushes back:
-
-   ```bash
-   ssh root@<ip> '
-     set -e
-     echo "== $(hostname): was $(git -C /opt/HPlayer2 log -1 --format=%h) =="
-     rw
-     git -C /opt/HPlayer2 fetch origin
-     git -C /opt/HPlayer2 checkout -B biennale origin/biennale
-     mkdir -p /data/var/tmp
-     systemctl disable hplayer2@biennale24
-     systemctl enable  hplayer2@biennale
-     ro
-     systemctl restart hplayer2@biennale
-     echo "== now $(git -C /opt/HPlayer2 log -1 --format=%h) =="
-   '
-   ```
+3. Switch code — run `extra/utils/biennale26-upgrade.sh <ip> [...]` from the
+   laptop. Image facts the script encodes (learned on player-35):
+   - **clock first**: fake-hwclock + no NTP leaves the clock stale, and a
+     stale clock breaks github TLS ("repository not found" symptoms);
+   - `rw`/`ro` remount **/ and /boot**; the boot instance is chosen by
+     **`/boot/starter.txt`** (a `starter.service` reads it — NOT
+     `systemctl enable`); `setnet` imports `/boot/wifi/*.nmconnection` into
+     NetworkManager, so marker files must hold valid connection content;
+   - **system python 3.8, no pipenv** (the `hplayer2` wrapper falls back);
+     `hostname` doesn't exist (use `uname -n`); deps for the new interfaces
+     (pyserial, netifaces) are already on the image;
+   - timezone ships as UTC → the script sets **Europe/Paris** (schedule
+     times are player-local wall-clock).
 
    ⚠ If step 2 showed a commit ≠ `07ec1594`, the checkout also crosses
    shared-code commits (not the guaranteed-additive case) — watch the journal
@@ -83,8 +81,14 @@ silence. With the Atom desk rig, first set in `/data/hplayer2-biennale.cfg`:
 
 ## Phase B — schedule / RTC (player 1, solo)
 
-Fail-open is proven by A8. Gating needs a real `/dev/rtc*` (DS3231 →
-`dtoverlay=i2c-rtc,ds3231` in `/boot/config.txt`, reboot):
+Fail-open is proven by A8. Gating needs a real `/dev/rtc*` — the upgrade
+script's `--rtc` flag does all of this; by hand: `modprobe rtc-ds1307` +
+`echo ds3231 0x68 > /sys/class/i2c-adapter/i2c-1/new_device` attaches it
+live (no reboot), `dtoverlay=i2c-rtc,ds3231` in `/boot/config.txt` persists
+it. **⚠ Virgin-RTC trap (hit on player-35)**: a fresh DS3231 reads
+2000-01-01 and Arch's udev hctosys rule resets the SYSTEM clock the moment
+the device registers — always re-set the date, then `hwclock --systohc --utc`
+(with the fs rw so `/etc/adjtime` persists the UTC mode). Then:
 - ambient back in place; window closing in 2 min → player stops at close,
   resumes at open.
 - radar during closed window → NO trigger.
