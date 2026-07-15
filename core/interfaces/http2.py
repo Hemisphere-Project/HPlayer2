@@ -1,22 +1,72 @@
 from .base import BaseInterface
-import socketio
-import eventlet
-from flask import Flask, render_template, session, request, send_from_directory, send_file, redirect, url_for
-from flask_socketio import SocketIO, emit, join_room, leave_room, close_room, rooms, disconnect
-from werkzeug.utils import secure_filename
-import threading, os, time
+import importlib
+import threading
+import os
+import time
+import shutil
+import subprocess
 import queue
-from PIL import Image
+
+Flask = None
+Request = None
+request = None
+send_from_directory = None
+send_file = None
+redirect = None
+url_for = None
+SocketIO = None
+emit = None
+join_room = None
+leave_room = None
+close_room = None
+rooms = None
+disconnect = None
+secure_filename = None
+ServiceInfo = None
+Zeroconf = None
+zero_enable = False
+
+_HTTP2_IMPORT_ERRORS = []
+
+try:
+    _flask = importlib.import_module("flask")
+    Flask = getattr(_flask, "Flask", None)
+    Request = getattr(_flask, "Request", None)
+    request = getattr(_flask, "request", None)
+    send_from_directory = getattr(_flask, "send_from_directory", None)
+    send_file = getattr(_flask, "send_file", None)
+    redirect = getattr(_flask, "redirect", None)
+    url_for = getattr(_flask, "url_for", None)
+except ImportError as err:
+    _HTTP2_IMPORT_ERRORS.append(("flask", err))
+
+try:
+    _socketio = importlib.import_module("flask_socketio")
+    SocketIO = getattr(_socketio, "SocketIO", None)
+    emit = getattr(_socketio, "emit", None)
+    join_room = getattr(_socketio, "join_room", None)
+    leave_room = getattr(_socketio, "leave_room", None)
+    close_room = getattr(_socketio, "close_room", None)
+    rooms = getattr(_socketio, "rooms", None)
+    disconnect = getattr(_socketio, "disconnect", None)
+except ImportError as err:
+    _HTTP2_IMPORT_ERRORS.append(("flask-socketio", err))
+
+try:
+    secure_filename = importlib.import_module("werkzeug.utils").secure_filename
+except ImportError as err:
+    _HTTP2_IMPORT_ERRORS.append(("werkzeug", err))
+
+try:
+    _zeroconf = importlib.import_module("zeroconf")
+    ServiceInfo = getattr(_zeroconf, "ServiceInfo", None)
+    Zeroconf = getattr(_zeroconf, "Zeroconf", None)
+    zero_enable = ServiceInfo is not None and Zeroconf is not None
+except ImportError:
+    zero_enable = False
 
 from ..engine.network import get_allip, get_hostname
 import socket
-
-try:
-    from zeroconf import ServiceInfo, Zeroconf 
-    zero_enable = True
-except:
-    print("import error: zeroconf is missing")
-    zero_enable = False
 
 thread = None
 thread_lock = threading.Lock()
@@ -25,6 +75,12 @@ thread_lock = threading.Lock()
 class Http2Interface (BaseInterface):
 
     def  __init__(self, hplayer, port, confe={}):
+        if _HTTP2_IMPORT_ERRORS:
+            missing = ", ".join(name for name, _ in _HTTP2_IMPORT_ERRORS)
+            raise RuntimeError(f"Http2Interface requires optional packages: {missing}")
+        required = [Flask, Request, request, send_from_directory, send_file, redirect, url_for, SocketIO, emit, join_room, leave_room, close_room, rooms, disconnect, secure_filename]
+        if any(dep is None for dep in required):
+            raise RuntimeError("Http2Interface dependencies are unavailable")
         super(Http2Interface, self).__init__(hplayer, "HTTP2")
         self._port = port
 
@@ -87,6 +143,61 @@ class ThreadedHTTPServer(object):
         app.config['SECRET_KEY'] = 'secret!'
         socketio = SocketIO(app)
 
+        http2interface = self.http2interface
+
+        def upload_target(filename):
+            filepath = os.path.join(http2interface.hplayer.files.root_paths[0],
+                                    secure_filename(filename))
+            # don't clobber a media already in the parc: clip.mp4 -> clip-2.mp4
+            prefix, ext = os.path.splitext(filepath)
+            n = 1
+            while os.path.exists(filepath):
+                n += 1
+                filepath = prefix + '-' + str(n) + ext
+            return filepath
+
+        class UploadStreamingRequest(Request):
+            """Write uploaded media straight to the media directory.
+
+            Werkzeug spools every part above 500KB to a temp file, which
+            file.save() then copies over: the whole media is written to the SD
+            card twice and read back once. Handing the parser its destination
+            makes it a single write.
+
+            It lands on a hidden .part file (invisible to both the playlist and
+            the web file tree) and is renamed into place only once complete, so
+            an upload cut off mid-way -- a wifi drop, a closed tab -- never
+            leaves a truncated media behind for a player to pick up.
+            """
+
+            def _get_file_stream(self, total_content_length, content_type,
+                                 filename=None, content_length=None):
+                self.upload_path = None
+                self.upload_part = None
+                if not filename or not http2interface.hplayer.files.validExt(filename):
+                    # unusable anyway: spool it and let the route reject it
+                    return super()._get_file_stream(total_content_length, content_type,
+                                                    filename, content_length)
+
+                self.upload_path = upload_target(filename)
+                self.upload_part = os.path.join(
+                                        os.path.dirname(self.upload_path),
+                                        '.' + os.path.basename(self.upload_path) + '.part')
+                return open(self.upload_part, 'wb+')
+
+        app.request_class = UploadStreamingRequest
+
+        @app.teardown_request
+        def drop_partial_upload(exc):
+            # upload interrupted: the route never got to rename it into place
+            part = getattr(request, 'upload_part', None)
+            if part and os.path.exists(part):
+                try:
+                    os.remove(part)
+                    http2interface.log('dropped partial upload', part)
+                except OSError:
+                    pass
+
         #
         # FLASK Routing
         #
@@ -126,25 +237,18 @@ class ThreadedHTTPServer(object):
             if file.filename == '':
                 return 'No filename provided', 404
 
-            if file and self.http2interface.hplayer.files.validExt(file.filename):
-                filename = secure_filename(file.filename)
-                filepath = os.path.join(self.http2interface.hplayer.files.root_paths[0], filename)
-                if os.path.exists(filepath):
-                    prefix, ext = os.path.splitext(filepath)
-                    filepath = prefix + '-' + ext
-                file.save(filepath)
-                
-                try:
-                    im = Image.load(filepath)
-                    im.verify() #I perform also verify, don't know if he sees other types o defects
-                    im.close() #reload is necessary in my case
-                    im = Image.open(filepath)
-                    im.thumbnail((1920, 1080), Image.ANTIALIAS)
-                    im.save(filepath)
-                except IOError:
-                    print("cannot resize", filepath)
-                except:
-                    pass
+            filepath = getattr(request, 'upload_path', None)
+            partpath = getattr(request, 'upload_part', None)
+
+            if file and filepath:
+                # streamed to partpath by UploadStreamingRequest: publish it
+                file.close()
+                os.replace(partpath, filepath)
+
+                # the media list is otherwise refreshed off watchdog events,
+                # whose types vary with the installed watchdog version: ask for
+                # it explicitly rather than hope the right event fires
+                self.http2interface.hplayer.files.refresh()
 
                 fileslist_message()
                 self.http2interface.emit('file-uploaded', filepath)
@@ -152,6 +256,40 @@ class ThreadedHTTPServer(object):
                 return 'ok'
 
             return 'No valid file provided', 404
+
+        @app.route('/uploadraw/<path:filename>', methods=['PUT'])
+        def files_upload_raw(filename):
+            # werkzeug 1.0's multipart parser tops out ~1.2MB/s on a Pi3 core
+            # (100MB = 83s of pure boundary scanning, whatever the link). A raw
+            # PUT body reads at SD speed. Same .part staging as /upload above;
+            # the web uploader is rerouted here by an ajaxPrefilter shim.
+            if not self.http2interface.hplayer.files.validExt(filename):
+                return 'No valid file provided', 404
+
+            filepath = upload_target(filename)
+            partpath = os.path.join(os.path.dirname(filepath),
+                                    '.' + os.path.basename(filepath) + '.part')
+            try:
+                with open(partpath, 'wb') as out:
+                    while True:
+                        chunk = request.stream.read(1024 * 1024)
+                        if not chunk:
+                            break
+                        out.write(chunk)
+                    out.flush()
+                    os.fsync(out.fileno())   # a power cut must never publish a truncated media
+                os.replace(partpath, filepath)
+            except Exception:
+                try:
+                    os.remove(partpath)
+                except OSError:
+                    pass
+                raise
+
+            self.http2interface.hplayer.files.refresh()
+            fileslist_message()
+            self.http2interface.emit('file-uploaded', filepath)
+            return 'ok'
 
 
         @app.route('/<path:path>')
@@ -198,7 +336,11 @@ class ThreadedHTTPServer(object):
 
         @socketio.on('reboot')
         def reboot_message():
-            os.system('reboot')
+            reboot_cmd = shutil.which('reboot')
+            if reboot_cmd:
+                subprocess.run([reboot_cmd], check=False)
+            else:
+                self.http2interface.log('reboot requested but command is unavailable')
 
 
         @socketio.on('restart')
