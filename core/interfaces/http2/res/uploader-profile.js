@@ -91,6 +91,21 @@ $(function() {
      *   - assets/demo/uploader/js/ui-multiple.js
      *   - assets/demo/uploader/js/ui-single.js
      */
+
+    // Reroute dm-uploader's multipart POST to the raw-PUT endpoint: werkzeug's
+    // multipart parser caps uploads at ~1MB/s on a Pi3, the raw body streams at
+    // link speed (see /uploadraw in http2.py). Progress/queue UI is untouched.
+    $.ajaxPrefilter(function(options) {
+        if (options.url === '/upload' && options.data instanceof FormData) {
+            var f = options.data.get('file');
+            if (f && f.name) {
+                options.url = '/uploadraw/' + encodeURIComponent(f.name);
+                options.type = options.method = 'PUT';
+                options.data = f;
+                options.contentType = 'application/octet-stream';
+            }
+        }
+    });
     $('#drag-and-drop-zone').dmUploader({ //
         url: '/upload',
         auto: true,

@@ -257,6 +257,40 @@ class ThreadedHTTPServer(object):
 
             return 'No valid file provided', 404
 
+        @app.route('/uploadraw/<path:filename>', methods=['PUT'])
+        def files_upload_raw(filename):
+            # werkzeug 1.0's multipart parser tops out ~1.2MB/s on a Pi3 core
+            # (100MB = 83s of pure boundary scanning, whatever the link). A raw
+            # PUT body reads at SD speed. Same .part staging as /upload above;
+            # the web uploader is rerouted here by an ajaxPrefilter shim.
+            if not self.http2interface.hplayer.files.validExt(filename):
+                return 'No valid file provided', 404
+
+            filepath = upload_target(filename)
+            partpath = os.path.join(os.path.dirname(filepath),
+                                    '.' + os.path.basename(filepath) + '.part')
+            try:
+                with open(partpath, 'wb') as out:
+                    while True:
+                        chunk = request.stream.read(1024 * 1024)
+                        if not chunk:
+                            break
+                        out.write(chunk)
+                    out.flush()
+                    os.fsync(out.fileno())   # a power cut must never publish a truncated media
+                os.replace(partpath, filepath)
+            except Exception:
+                try:
+                    os.remove(partpath)
+                except OSError:
+                    pass
+                raise
+
+            self.http2interface.hplayer.files.refresh()
+            fileslist_message()
+            self.http2interface.emit('file-uploaded', filepath)
+            return 'ok'
+
 
         @app.route('/<path:path>')
         def send_static(path):
