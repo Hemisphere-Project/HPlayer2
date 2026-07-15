@@ -137,8 +137,22 @@ wifi is the on-site lever, so measure for real:
 5. Re-upload the SAME filename → on this branch it silently overwrites
    (known); don't use it as a retry strategy on precious media.
 
+## Fleet rollout
+
+Per-player upgrades are driven by the `/biennale-pi-upgrade` skill
+(`.claude/skills/biennale-pi-upgrade/`) wrapping the script above, and
+recorded in `extra/biennale26-fleet.md` — one row per CPU serial, `was`
+column = parc-inventory data. Exotic hostnames: ask for the sticker number.
+
 ## Known gotchas (old 2024 images)
 
+- `hplayer2-kill` (ExecStartPre) kill -9's ANY process whose cmdline greps
+  hplayer2/HPlayer2/mpv — an ssh session spanning a service restart dies
+  with exit 137 (looks like a failure, usually isn't). Keep remote code in
+  `bash -s` heredocs (invisible to ps) and verify in a fresh session.
+- `git checkout <tree-ish> -- <file>` also STAGES the file; a later
+  `git checkout -- <file>` restores the staged version and `git pull`
+  refuses quietly. On players prefer `git fetch` + `git reset --hard`.
 - Media added while running may go unnoticed (watchdog pin) → always restart
   after scp/upload.
 - The modern-mpv `KeyError: 'data'` does NOT apply here (images pin old mpv).
