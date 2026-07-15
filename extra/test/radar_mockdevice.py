@@ -2,7 +2,7 @@
 """
 Mock LD2450 radar box for the `radar` interface (core/interfaces/radar.py) — stdlib only.
 
-Plays the DEVICE side over a pty — exactly what extra/arduino/radar_c3 would send:
+Plays the DEVICE side over a pty — exactly what extra/arduino/radar_ld2450 would send:
 
     socat -d pty,raw,echo=0,link=/tmp/hp2-radar-host pty,raw,echo=0,link=/tmp/hp2-radar-dev &
     python3 extra/test/radar_mockdevice.py [/tmp/hp2-radar-dev]

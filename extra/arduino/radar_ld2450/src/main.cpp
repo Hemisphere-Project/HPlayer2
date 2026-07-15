@@ -1,4 +1,4 @@
-// radar_c3 — read an HLK-LD2450 over UART, forward its targets to HPlayer2 over USB.
+// radar_ld2450 — read an HLK-LD2450 over UART, forward its targets to HPlayer2 over USB.
 //
 // Dumb by design (Thomas, 2026-07-13): no range, no threshold, no hysteresis here —
 // nobody reflashes 6 sealed IP55 boxes on site. Every decision lives on the Pi, in
@@ -34,6 +34,16 @@
 #define STR_(x) #x
 #define STR(x) STR_(x)
 
+#if LED_MATRIX
+// Desk-debug display (env:atom, M5 Atom Matrix): each raw target plotted on the
+// 5x5 grid — x ±2 m -> column, y 0..4 m -> row (radar at the top edge), one color
+// per LD2450 slot. Dim red center dot = frames flowing but zone empty. Display
+// only, still zero decisions here; the production C3 box compiles without this.
+#include <FastLED.h>
+static CRGB leds[25];
+static const CRGB SLOT_COLOR[3] = {CRGB::Green, CRGB::Blue, CRGB::Yellow};
+#endif
+
 // LD2450 target frame: AA FF 03 00 | 3 targets x 8 bytes | 55 CC  = 30 bytes.
 static const uint8_t HDR[4] = {0xAA, 0xFF, 0x03, 0x00};
 static const int FRAME_LEN = 30;
@@ -50,6 +60,9 @@ static int decode(uint8_t lo, uint8_t hi) {
 static void emitFrame(const uint8_t* f) {
   String line = "T";
   bool anyActive = false;
+#if LED_MATRIX
+  FastLED.clear();
+#endif
   for (int t = 0; t < 3; t++) {
     const uint8_t* p = f + 4 + t * 8;
     int x = decode(p[0], p[1]);
@@ -60,14 +73,31 @@ static void emitFrame(const uint8_t* f) {
     anyActive = true;
     line += ' ';
     line += x; line += ','; line += y; line += ','; line += v;
+#if LED_MATRIX
+    int col = constrain((x + 2000) / 800, 0, 4);  // x: -2 m .. +2 m
+    int row = constrain(y / 800, 0, 4);           // y: 0 .. 4 m, radar = top row
+    leds[row * 5 + col] = SLOT_COLOR[t];
+#endif
   }
   Serial.println(line);
+#if LED_MATRIX
+  if (!anyActive) leds[12] = CRGB(16, 0, 0);      // heartbeat: frames flow, zone empty
+  FastLED.show();
+#else
   digitalWrite(LED_PIN, anyActive ? LED_ON : LED_OFF);
+#endif
 }
 
 void setup() {
+#if LED_MATRIX
+  FastLED.addLeds<WS2812, LED_PIN, GRB>(leds, 25);
+  FastLED.setBrightness(20);                      // 25 LEDs on USB power — keep it low
+  leds[0] = CRGB::Blue;                           // boot dot: alive but no radar frame yet;
+  FastLED.show();                                 // the first valid frame overwrites it
+#else
   pinMode(LED_PIN, OUTPUT);
   digitalWrite(LED_PIN, LED_OFF);
+#endif
 
   Serial.begin(115200);                                    // USB CDC to the Pi
   Serial1.begin(256000, SERIAL_8N1, RADAR_RX, RADAR_TX);   // LD2450 ships at 256000 baud

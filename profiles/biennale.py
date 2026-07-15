@@ -194,7 +194,7 @@ def http2_logs(ev, *args):
 # ─── RADAR proximity + SCHEDULE window (biennale-2026-module-radar) ──────────
 # Both optional and self-activating:
 #  - radar: the interface always listens on USB but only fires radar.enter once a
-#    box (extra/arduino/radar_c3) actually streams targets. Outdoor players carry
+#    box (extra/arduino/radar_ld2450) actually streams targets. Outdoor players carry
 #    only [1-9]_ pieces, so the default loop above matches nothing and they stay
 #    silent until someone enters range; then the piece plays once (play-out).
 #  - schedule: inert unless enabled from http2 AND an RTC is present (requireRtc).

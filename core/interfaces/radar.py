@@ -5,7 +5,7 @@ import time
 
 class RadarInterface(SerialBase):
     """
-    HLK-LD2450 24GHz radar presence, read over USB from an ESP32-C3 (extra/arduino/radar_c3).
+    HLK-LD2450 24GHz radar presence, read over USB from an ESP32-C3 (extra/arduino/radar_ld2450).
 
     The firmware is dumb: it streams one line per radar frame,
         T <x>,<y>,<v> <x>,<y>,<v> ...       (mm, mm, cm/s; bare "T" = empty)
