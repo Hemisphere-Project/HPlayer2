@@ -3,12 +3,18 @@ name: biennale-pi-upgrade
 description: Upgrade a Biennale pool RPi 3B+ to the biennale branch (code, TZ, RTC, optional profile switch), verify it, and record it in the fleet ledger. Use when a pool player is plugged on the LAN and Thomas says to upgrade it, gives an IP, or asks for the fleet status. Handles partially-upgraded players (idempotent) and exotic hostnames (asks for the sticker number).
 ---
 
-# /biennale-pi-upgrade — upgrade one pool player, keep the fleet ledger true
+# /biennale-pi-upgrade — in-place upgrade one player, keep the fleet ledger true
 
 Wraps `extra/utils/biennale26-upgrade.sh` (detect-then-apply, idempotent,
-proven on player-35 2026-07-15). The pool is ~35 RPi 3B+ from the 2024 parc,
-arriving progressively; the ledger `extra/biennale26-fleet.md` is the single
-source of truth of who's been upgraded (keyed on CPU serial).
+proven on player-35 2026-07-15). The ledger `extra/biennale26-fleet.md` is the
+single source of truth of which cards are done (keyed on CPU serial).
+
+**Scope note (decided 2026-07-15):** the mission's mass convergence method is
+a **golden-image reflash** (clone the validated player-35 SD), NOT this
+in-place upgrade. So this skill is now the **prep / test / one-off** path:
+bring player-35 (or a test unit) to the exact state that gets cloned, iterate
+during dev, or fix a single reachable card — not the way the 65 RPi 3B+
+converge. Still record whatever it touches in the ledger.
 
 ## Inputs
 

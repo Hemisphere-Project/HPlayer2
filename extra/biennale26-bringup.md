@@ -4,8 +4,26 @@ Applies to 2024-parc players (read-only rootfs, `rw`/`ro` helpers, code in
 `/opt/HPlayer2`, media in `/data/media`, http2 on :80). Order matters:
 **inventory before touching, regression before feature, solo before trio.**
 
-The upgrade path was proven by hand on player-35 (2026-07-15, phases 0/A/B +
-cold reboot all green) and is frozen into the one-command script:
+## Fleet convergence method (decided 2026-07-15)
+
+The mission's mass method is **reflash a golden image**, NOT in-place upgrade.
+Once player-35 finishes testing (DMX on a real fixture + wall-sync on real
+screens), its SD is cloned to a **golden image** — THE biennale reference for
+all 65 RPi 3B+: the 30 new (must be flashed anyway) and the 35 existing
+(reflashed on physical access — quoted + accepted, #t-015). The 8 N100 are a
+separate x86 track (can't take the ARM image).
+
+So the **in-place upgrade script below is no longer the bascule method** — its
+role is now (a) **prepping player-35 into the golden image** and (b) test/dev
++ reachable one-offs. It stays proven and useful; it's just not how the 65
+cards converge. The **serial-keyed ledger** (`extra/biennale26-fleet.md`)
+still earns its keep either way: it tracks which physical cards were
+reflashed, keyed on CPU serial.
+
+### The in-place script (prep / test path)
+
+Proven by hand on player-35 (2026-07-15, phases 0/A/B + cold reboot all
+green), frozen into a one-command script:
 
     extra/utils/biennale26-upgrade.sh <player-ip> [--status] [--profile <name>]
 
@@ -138,12 +156,14 @@ wifi is the on-site lever, so measure for real:
 5. Re-upload the SAME filename → on this branch it silently overwrites
    (known); don't use it as a retry strategy on precious media.
 
-## Fleet rollout
+## Fleet tracking
 
-Per-player upgrades are driven by the `/biennale-pi-upgrade` skill
-(`.claude/skills/biennale-pi-upgrade/`) wrapping the script above, and
-recorded in `extra/biennale26-fleet.md` — one row per CPU serial, `was`
-column = parc-inventory data. Exotic hostnames: ask for the sticker number.
+However a card converges — golden reflash (the mission method) or the in-place
+`/biennale-pi-upgrade` skill (`.claude/skills/biennale-pi-upgrade/`) — record
+it in `extra/biennale26-fleet.md`, one row per CPU serial (`was` column =
+parc-inventory data from before the change). Exotic hostnames: ask for the
+sticker number. The ledger is the single source of truth of which physical
+cards are done, whichever path put them there.
 
 ## Known gotchas (old 2024 images)
 
