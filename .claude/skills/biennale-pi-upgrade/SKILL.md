@@ -15,9 +15,11 @@ source of truth of who's been upgraded (keyed on CPU serial).
 An IP (required — ask if not given). SSH as `root` with the usual parc
 password (never write it into this repo — it's public; Thomas provides it,
 or it's in the session's private memory); if `sshpass` is absent use the
-`SSH_ASKPASS` + `setsid` trick. Default is branch-only (the fleet-bascule
-case keeps the running `biennale24` profile); pass `--profile biennale` only
-for dispositif C / wall players or when Thomas says so.
+`SSH_ASKPASS` + `setsid` trick. **Default switches the profile to
+`biennale`** — biennale24 is deprecated (Thomas, 2026-07-15); the script
+carries the per-player audio calibration (volume/audioout/audiomode/pan/
+flip) from the old biennale24 cfg into the fresh biennale cfg. `--profile`
+remains only as an override for exotic cases.
 
 ## Procedure
 
@@ -72,7 +74,9 @@ for dispositif C / wall players or when Thomas says so.
 
 ## NEVER
 
-- Switch a player's profile without an explicit decision (default keeps it).
+- Leave a player on the deprecated `biennale24` instance (the default
+  switch to `biennale` is Thomas's 2026-07-15 ruling); only an *exotic*
+  instance (neither biennale24 nor biennale) pauses for a question.
 - Rename a host, delete media, or touch `/boot/wifi` markers (wall roles are
   phase C, done deliberately, not by this skill).
 - Create more than one ledger row per serial, or overwrite a row's `was`.

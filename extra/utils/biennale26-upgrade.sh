@@ -5,8 +5,11 @@
 #     extra/utils/biennale26-upgrade.sh <player-ip> [--status] [--profile <name>]
 #
 #   --status          detect & print the player's state, change nothing
-#   --profile <name>  also switch the hplayer2@ instance in /boot/starter.txt
-#                     (dispositif C outdoor players: --profile biennale)
+#   --profile <name>  override the target hplayer2@ instance. DEFAULT is
+#                     `biennale` — biennale24 is deprecated (Thomas,
+#                     2026-07-15): every player switches to the unified
+#                     profile. Audio calibration (volume/audioout/audiomode/
+#                     pan/flip) is carried over from the old biennale24 cfg.
 #
 # Detect-then-apply: every step checks before it acts, so partially-upgraded
 # players are fine and re-runs are no-ops. RTC is AUTO-probed: a DS3231 found
@@ -24,7 +27,7 @@
 
 set -e
 IP="$1"; shift || { echo "usage: $0 <player-ip> [--status] [--profile <name>]"; exit 1; }
-PROFILE=""; STATUS=0
+PROFILE="biennale"; STATUS=0
 while [ $# -gt 0 ]; do case "$1" in
   --profile) PROFILE="$2"; shift 2;;
   --status)  STATUS=1; shift;;
@@ -98,6 +101,19 @@ if [ -n "$PROFILE" ] && [ "\$CUR" != "hplayer2@$PROFILE" ]; then
   cp /boot/starter.txt "/boot/starter.txt.bak-\$(date +%Y%m%d)"
   sed -i "s|^\$CUR\\\$|hplayer2@$PROFILE|" /boot/starter.txt
   echo "== starter.txt: \$CUR -> hplayer2@$PROFILE"
+fi
+
+# profile switch starts a fresh cfg: carry the per-player audio calibration
+# over from the deprecated biennale24 cfg (never the playlist/loop, which the
+# profile manages)
+if [ "$PROFILE" = "biennale" ] && [ -f /data/hplayer2-biennale24.cfg ] && [ ! -f /data/hplayer2-biennale.cfg ]; then
+  python3 - <<'PY'
+import json
+old = json.load(open('/data/hplayer2-biennale24.cfg'))
+keep = {k: old[k] for k in ('volume', 'audioout', 'audiomode', 'pan', 'flip') if k in old}
+json.dump(keep, open('/data/hplayer2-biennale.cfg', 'w'), indent=1)
+print('== cfg carry-over:', keep)
+PY
 fi
 ro
 EOF

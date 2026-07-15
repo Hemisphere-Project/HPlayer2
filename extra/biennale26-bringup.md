@@ -7,10 +7,11 @@ Applies to 2024-parc players (read-only rootfs, `rw`/`ro` helpers, code in
 The upgrade path was proven by hand on player-35 (2026-07-15, phases 0/A/B +
 cold reboot all green) and is frozen into the one-command script:
 
-    extra/utils/biennale26-upgrade.sh <player-ip> [--profile biennale] [--rtc]
+    extra/utils/biennale26-upgrade.sh <player-ip> [--status] [--profile <name>]
 
-Default = fleet-bascule case (branch switch only, profile untouched).
-`--profile biennale` for dispositif C players, `--rtc` when a DS3231 is wired.
+Default: branch `biennale` AND profile `hplayer2@biennale` — biennale24 is
+deprecated (Thomas, 2026-07-15); audio calibration carries over from the old
+cfg. RTC is auto-probed (a DS3231 on i2c-1 gets configured, no flag needed).
 
 ## Test media
 
