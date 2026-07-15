@@ -377,6 +377,7 @@ class ThreadedHTTPServer(object):
                 else:
                     d['selectable'] = True
                     d['text'] += ' <div class="media-edit float-right">'
+                    d['text'] += '  <span class="badge badge-info ml-2"  onClick="dmxEdit(\''+path+'\'); event.stopPropagation();" title="edit DMX conduite">DMX</span>';
                     d['text'] += '  <span class="badge badge-success ml-2"  onClick="mediaDownload(\''+path+'\'); event.stopPropagation();"> <i class="fas fa-download"></i> </span>';
                     d['text'] += '  <span class="badge badge-warning ml-2"  onClick="mediaEdit(\''+path+'\'); event.stopPropagation();" ><i class="far fa-edit"></i> </span>'
                     d['text'] += '  <span class="badge badge-danger ml-2"  onClick="mediaRemove(\''+path+'\'); event.stopPropagation();" ><i class="far fa-trash-alt"></i> </span>';

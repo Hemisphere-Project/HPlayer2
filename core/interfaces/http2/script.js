@@ -539,4 +539,78 @@ $(document).ready(function() {
         $('#schedule_close').on('change', function() { trigger('schedule-close', this.value); });
     })();
 
+    // --- DMX conduite panel (biennale-2026-module-dmx) ---
+    // Self-contained: connection/meter come from the dmx interface over dedicated
+    // socket events; the conduite editor targets a media path (current media by default,
+    // or any file via dmxEdit(path)). Edits write the sidecar .dmx via trigger('dmx-save').
+    (function() {
+        var editMedia = null;    // media whose sidecar is in the textarea
+        var dirty = false;
+        $('#dmx_text').on('input', function() { dirty = true; });
+
+        // protocol toggle (persisted setting, echoed back via settings.updated)
+        socket.on('settings.updated', function(msg) {
+            if (msg['dmx-protocol'] !== undefined) $('#dmx_protocol').val(msg['dmx-protocol']);
+        });
+        $('#dmx_protocol').on('change', function() { trigger('dmx-protocol', this.value); });
+
+        function shortName(p) { return p ? p.split('/').pop() : '—'; }
+
+        // adapter + current-media status
+        socket.on('dmx-status', function(st) {
+            var c = $('#dmx_conn');
+            if (st['connected'])
+                c.text(shortName(st['port']) + ' · ' + st['protocol']).removeClass('badge-secondary badge-danger').addClass('badge-success');
+            else
+                c.text('no adapter').removeClass('badge-success badge-danger').addClass('badge-secondary');
+            // auto-load the playing media's conduite when it changes and the user isn't editing
+            if (st['media'] && st['media'] !== editMedia && !dirty)
+                dmxEdit(st['media']);
+        });
+
+        // live meter (~5Hz), one bar per active channel
+        socket.on('dmx-levels', function(msg) {
+            var m = $('#dmx_meter').empty();
+            var levels = msg['levels'] || {};
+            var keys = Object.keys(levels);
+            if (!keys.length) { m.append('<span class="text-muted" style="font-size:.8em;">idle</span>'); return; }
+            keys.forEach(function(ch) {
+                var v = levels[ch];
+                var bar = $('<div>').css({
+                    'flex': '1 1 0', 'minWidth': '6px', 'maxWidth': '22px',
+                    'height': Math.max(2, Math.round(v / 255 * 76)) + 'px',
+                    'background': msg['active'] ? '#7cc' : '#556',
+                    'position': 'relative'
+                }).attr('title', 'ch ' + ch + ' = ' + v);
+                m.append(bar);
+            });
+        });
+
+        // editor load / save
+        socket.on('dmx-conduite', function(d) {
+            editMedia = d['media'];
+            dirty = false;
+            $('#dmx_media').text(shortName(d['media']) + (d['file'] ? '' : '  (no media)'));
+            $('#dmx_text').val(d['text'] || '');
+            $('#dmx_errors').text('');
+        });
+        socket.on('dmx-saved', function(d) { showErrors(d['errors']); dirty = false; });
+
+        function showErrors(errs) {
+            if (errs && errs.length)
+                $('#dmx_errors').text(errs.map(function(e) { return 'line ' + e[0] + ': ' + e[1]; }).join('\n'));
+            else
+                $('#dmx_errors').text('');
+        }
+
+        // global: open any media's conduite in the editor (used by the file-list badge too)
+        window.dmxEdit = function(path) { trigger('dmx-edit', path || ''); };
+
+        $('#dmx_reload').click(function() { trigger('dmx-edit', editMedia || ''); });
+        $('#dmx_save').click(function() {
+            if (!editMedia) { $('#dmx_errors').text('no media selected — play a file or use its DMX badge'); return; }
+            trigger('dmx-save', { media: editMedia, text: $('#dmx_text').val() });
+        });
+    })();
+
 });

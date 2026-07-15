@@ -236,6 +236,22 @@ for _k in ('radar-range', 'radar-width', 'radar-enter-ms', 'radar-leave-ms',
 def radar_schedule_logs(ev, *args):
 	hplayer.interface('http2').send('logs', [ev] + list(args))
 
+# ─── DMX conduite (biennale-2026-module-dmx) ─────────────────────────────────
+# Self-activating like the radar: the interface always scans USB for a cheap
+# FTDI->DMX adapter; with none plugged it just idles. When present it drives DMX
+# from the sidecar conduite of the media currently playing (vague.mp4 -> vague.dmx),
+# evaluated against the player's wall-synced clock, so DMX follows loops/seeks/sync.
+dmx = hplayer.addInterface('dmx')
+
+# persist dmx tunables edited from http2 (interface reads them live)
+for _k in ('dmx-protocol', 'dmx-fps', 'dmx-filter'):
+	hplayer.on('http2.' + _k)(lambda ev, *a, k=_k: hplayer.settings.set(k, a[0]))
+
+@hplayer.on('dmx.*')
+def dmx_logs(ev, *args):
+	if ev.endswith('.status') or ev.endswith('.levels'): return   # high-rate: UI only
+	hplayer.interface('http2').send('logs', [ev] + list(args))
+
 
 # RUN
 hplayer.run()

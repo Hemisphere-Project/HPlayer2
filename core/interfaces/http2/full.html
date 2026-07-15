@@ -161,6 +161,41 @@
                 </div>
             </div>
 
+            <!-- DMX conduite (biennale-2026-module-dmx) -->
+            <div class="row mt-2" id="dmx-panel">
+                <div class="col-12">
+                    <div class="card-header text-white bg-dark">
+                        DMX
+                        <span id="dmx_conn" class="badge badge-secondary float-right ml-2">no adapter</span>
+                        <span class="float-right">
+                            <span class="badge badge-secondary mr-1">protocol</span>
+                            <select id="dmx_protocol" class="custom-select custom-select-sm" style="width:auto;display:inline-block;">
+                                <option value="open">Open DMX (FTDI)</option>
+                                <option value="pro">DMX USB Pro</option>
+                            </select>
+                        </span>
+                    </div>
+                    <div class="card-body row pt-3">
+                        <div class="col-lg-5 col-12">
+                            <div class="mb-2 text-muted" style="font-size:.85em;">live output</div>
+                            <div id="dmx_meter" class="d-flex align-items-end" style="height:80px;gap:2px;"></div>
+                        </div>
+                        <div class="col-lg-7 col-12">
+                            <div class="mb-1">
+                                <span class="badge badge-secondary mr-2">conduite</span>
+                                <span id="dmx_media" class="text-muted">—</span>
+                                <button type="button" class="btn btn-sm btn-outline-success float-right ml-1" id="dmx_save">save</button>
+                                <button type="button" class="btn btn-sm btn-outline-secondary float-right" id="dmx_reload">reload</button>
+                            </div>
+                            <textarea id="dmx_text" class="form-control" spellcheck="false" wrap="off"
+                                      style="height:150px;font-family:monospace;font-size:.85em;white-space:pre;"
+                                      placeholder="# 0:03  1@255  fade 3&#10;# def wash 1-4&#10;# 0:00 wash@0"></textarea>
+                            <div id="dmx_errors" class="mt-1 text-danger" style="font-size:.8em;white-space:pre;"></div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
             <hr />
 
 
