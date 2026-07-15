@@ -502,9 +502,9 @@ $(document).ready(function() {
         });
     });
 
-    // --- Radar & Schedule panel (biennale-2026-module-radar) ---
-    // Self-contained: a second settings.updated handler (coexists with the one above),
-    // reads the seeded radar-* / schedule-* keys, writes edits back via trigger().
+    // --- Radar panel (biennale-2026-module-radar) ---
+    // Tuning sliders + live presence feedback from the radar interface. A second
+    // settings.updated handler (coexists with the one above) syncs the radar-* keys.
     (function() {
         var radarKeys = {
             'radar-range': 'radar_range', 'radar-width': 'radar_width',
@@ -517,22 +517,59 @@ $(document).ready(function() {
                     $('#' + radarKeys[k] + '_val').text(msg[k]);
                 }
             }
-            if (msg['schedule-enable'] !== undefined) $('#schedule_enable').prop('checked', !!msg['schedule-enable']);
-            if (msg['schedule-open'] !== undefined) $('#schedule_open').val(msg['schedule-open']);
-            if (msg['schedule-close'] !== undefined) $('#schedule_close').val(msg['schedule-close']);
-        });
-        socket.on('schedule-status', function(st) {
-            var el = $('#schedule_status');
-            if (!st['rtc'])
-                el.text('RTC: not detected — using system clock').removeClass('rtc-ok').addClass('rtc-warn');
-            else
-                el.text('RTC: present' + (st['open'] ? ' — window open' : ' — window closed')).removeClass('rtc-warn').addClass('rtc-ok');
         });
         Object.keys(radarKeys).forEach(function(key) {
             $('#' + radarKeys[key]).on('input change', function() {
                 $('#' + radarKeys[key] + '_val').text(this.value);
                 trigger(key, parseInt(this.value));
             });
+        });
+        // live presence feedback (~5Hz from the radar interface)
+        socket.on('radar-status', function(st) {
+            var badge = $('#radar_state');
+            if (!st['connected']) {
+                badge.text('no adapter').removeClass('badge-success badge-danger').addClass('badge-secondary');
+                $('#radar_presence').text('—').css('color', '');
+                $('#radar_detail').text('radar not connected');
+                $('#radar_live').css('background', '#eee');
+                return;
+            }
+            badge.text('connected').removeClass('badge-secondary badge-danger').addClass('badge-success');
+            var present = st['present'];
+            $('#radar_presence').text(present ? 'IN ZONE' : 'clear').css('color', present ? '#1a7d4f' : '#888');
+            $('#radar_live').css('background', present ? '#d6f5e6' : (st['raw'] ? '#fff6d6' : '#eee'));
+            var n = st['count'] || 0;
+            var d = n + ' target' + (n === 1 ? '' : 's');
+            if (st['near'] != null) d += ' · nearest ' + (st['near'] / 1000).toFixed(2) + ' m';
+            $('#radar_detail').text(d);
+        });
+    })();
+
+    // --- Schedule panel (biennale-2026-module-radar #t-005) ---
+    // RTC-gated daily playback window. The interface fails OPEN without a real
+    // clock (never gates), so the panel makes that explicit rather than pretend.
+    (function() {
+        socket.on('settings.updated', function(msg) {
+            if (msg['schedule-enable'] !== undefined) $('#schedule_enable').prop('checked', !!msg['schedule-enable']);
+            if (msg['schedule-open'] !== undefined) $('#schedule_open').val(msg['schedule-open']);
+            if (msg['schedule-close'] !== undefined) $('#schedule_close').val(msg['schedule-close']);
+        });
+        socket.on('schedule-status', function(st) {
+            var rtc = $('#schedule_rtc'), status = $('#schedule_status');
+            if (!st['rtc']) {
+                rtc.text('no RTC').removeClass('badge-success').addClass('badge-warning');
+                $('#schedule-panel').addClass('no-rtc');
+                status.html('⚠ no RTC module — <b>restriction inactive</b>: playback is never gated without a trustworthy clock')
+                      .removeClass('rtc-ok').addClass('rtc-warn');
+                return;
+            }
+            rtc.text('RTC ok').removeClass('badge-warning').addClass('badge-success');
+            $('#schedule-panel').removeClass('no-rtc');
+            if (!st['enabled'])
+                status.text('restriction off — always playing').removeClass('rtc-warn').addClass('rtc-ok');
+            else
+                status.text(st['open'] ? 'window OPEN — playing' : 'window CLOSED — silent')
+                      .removeClass('rtc-warn').addClass('rtc-ok');
         });
         $('#schedule_enable').on('change', function() { trigger('schedule-enable', this.checked); });
         $('#schedule_open').on('change', function() { trigger('schedule-open', this.value); });
@@ -568,21 +605,31 @@ $(document).ready(function() {
                 dmxEdit(st['media']);
         });
 
-        // live meter (~5Hz), one bar per active channel
+        // live meter (~5Hz), one bar per active channel — bars are keyed and
+        // updated in place (a full rebuild at 5Hz flickers visibly)
         socket.on('dmx-levels', function(msg) {
-            var m = $('#dmx_meter').empty();
+            var m = $('#dmx_meter');
             var levels = msg['levels'] || {};
             var keys = Object.keys(levels);
-            if (!keys.length) { m.append('<span class="text-muted" style="font-size:.8em;">idle</span>'); return; }
+            if (!keys.length) {
+                m.data('sig', '').html('<span class="text-muted" style="font-size:.8em;">idle</span>');
+                return;
+            }
+            if (m.data('sig') !== keys.join(',')) {     // channel set changed -> rebuild once
+                m.data('sig', keys.join(',')).empty();
+                keys.forEach(function(ch) {
+                    $('<div>').attr('data-ch', ch).css({
+                        'flex': '1 1 0', 'minWidth': '6px', 'maxWidth': '22px',
+                        'height': '2px', 'transition': 'height .15s linear'
+                    }).appendTo(m);
+                });
+            }
             keys.forEach(function(ch) {
                 var v = levels[ch];
-                var bar = $('<div>').css({
-                    'flex': '1 1 0', 'minWidth': '6px', 'maxWidth': '22px',
+                m.children('[data-ch="' + ch + '"]').css({
                     'height': Math.max(2, Math.round(v / 255 * 76)) + 'px',
-                    'background': msg['active'] ? '#7cc' : '#556',
-                    'position': 'relative'
+                    'background': msg['active'] ? '#7cc' : '#556'
                 }).attr('title', 'ch ' + ch + ' = ' + v);
-                m.append(bar);
             });
         });
 
@@ -594,7 +641,11 @@ $(document).ready(function() {
             $('#dmx_text').val(d['text'] || '');
             $('#dmx_errors').text('');
         });
-        socket.on('dmx-saved', function(d) { showErrors(d['errors']); dirty = false; });
+        socket.on('dmx-saved', function(d) {
+            showErrors(d['errors']);
+            dirty = false;
+            socket.emit('fileslist');   // refresh the tree so the DMX chip reflects the new sidecar
+        });
 
         function showErrors(errs) {
             if (errs && errs.length)

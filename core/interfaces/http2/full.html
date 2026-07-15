@@ -132,10 +132,13 @@
                 </div>
             </div>
 
-            <!-- Radar & Schedule (biennale-2026-module-radar) -->
+            <!-- Radar (biennale-2026-module-radar) -->
             <div class="row mt-2" id="radar-panel">
                 <div class="col-12">
-                    <div class="card-header text-white bg-dark">Radar &amp; Schedule</div>
+                    <div class="card-header text-white bg-dark d-flex align-items-center">
+                        <span class="mr-auto">Radar</span>
+                        <span id="radar_state" class="badge badge-secondary">no adapter</span>
+                    </div>
                     <div class="card-body row pt-3">
                         <div class="col-lg-6 col-12">
                             <div class="mb-2"><span class="badge badge-secondary mr-2">range (mm)</span><span id="radar_range_val"></span>
@@ -148,15 +151,32 @@
                                 <input type="range" id="radar_leave" min="0" max="10000" step="100"></div>
                         </div>
                         <div class="col-lg-6 col-12">
-                            <div class="mb-2">
-                                <label><input type="checkbox" id="schedule_enable"> restrict playback to a daily window</label>
+                            <div class="mb-2 text-muted" style="font-size:.85em;">live</div>
+                            <div id="radar_live" class="p-3 text-center" style="border-radius:.3rem;background:#eee;">
+                                <div id="radar_presence" style="font-size:1.3em;font-weight:bold;">&mdash;</div>
+                                <div id="radar_detail" class="text-muted" style="font-size:.85em;">waiting for radar&hellip;</div>
                             </div>
-                            <div class="mb-2"><span class="badge badge-secondary mr-2">open</span>
-                                <input type="time" id="schedule_open">
-                                <span class="badge badge-secondary mr-2 ml-3">close</span>
-                                <input type="time" id="schedule_close"></div>
-                            <div id="schedule_status" class="mt-2">RTC: &mdash;</div>
                         </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Schedule (biennale-2026-module-radar #t-005) -->
+            <div class="row mt-2" id="schedule-panel">
+                <div class="col-12">
+                    <div class="card-header text-white bg-dark d-flex align-items-center">
+                        <span class="mr-auto">Schedule</span>
+                        <span id="schedule_rtc" class="badge badge-secondary">RTC &mdash;</span>
+                    </div>
+                    <div class="card-body pt-3">
+                        <div class="mb-2">
+                            <label><input type="checkbox" id="schedule_enable"> restrict playback to a daily window</label>
+                        </div>
+                        <div id="schedule_ctrls" class="mb-2"><span class="badge badge-secondary mr-2">open</span>
+                            <input type="time" id="schedule_open">
+                            <span class="badge badge-secondary mr-2 ml-3">close</span>
+                            <input type="time" id="schedule_close"></div>
+                        <div id="schedule_status" class="mt-2">RTC: &mdash;</div>
                     </div>
                 </div>
             </div>
@@ -164,16 +184,13 @@
             <!-- DMX conduite (biennale-2026-module-dmx) -->
             <div class="row mt-2" id="dmx-panel">
                 <div class="col-12">
-                    <div class="card-header text-white bg-dark">
-                        DMX
-                        <span id="dmx_conn" class="badge badge-secondary float-right ml-2">no adapter</span>
-                        <span class="float-right">
-                            <span class="badge badge-secondary mr-1">protocol</span>
-                            <select id="dmx_protocol" class="custom-select custom-select-sm" style="width:auto;display:inline-block;">
-                                <option value="open">Open DMX (FTDI)</option>
-                                <option value="pro">DMX USB Pro</option>
-                            </select>
-                        </span>
+                    <div class="card-header text-white bg-dark d-flex align-items-center">
+                        <span class="mr-auto">DMX</span>
+                        <select id="dmx_protocol" class="custom-select custom-select-sm mr-2" style="width:auto;">
+                            <option value="open">Open DMX (FTDI)</option>
+                            <option value="pro">DMX USB Pro</option>
+                        </select>
+                        <span id="dmx_conn" class="badge badge-secondary">no adapter</span>
                     </div>
                     <div class="card-body row pt-3">
                         <div class="col-lg-5 col-12">
