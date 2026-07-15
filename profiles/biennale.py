@@ -19,7 +19,13 @@ WALL_SYNC = True
 # WALL_SYNC = False
 
 # EXTRA TMP UPLOAD
+# spool http2 uploads on the /data partition (not tmpfs /tmp: a media-sized upload
+# would eat the RPi's RAM). The dir must exist or werkzeug's spooling crashes.
 import tempfile
+try:
+	os.makedirs('/data/var/tmp', exist_ok=True)
+except OSError:
+	pass                                   # dev machine without /data: profile won't run anyway
 tempfile.tempdir = '/data/var/tmp'
 
 # MEDIA PATH
