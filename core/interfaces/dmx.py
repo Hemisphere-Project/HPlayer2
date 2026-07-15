@@ -43,6 +43,7 @@ class DmxInterface(BaseInterface):
         self.serial = None
         self.port = None
         self._openProto = None          # protocol the current link was opened with
+        self._openFilter = None         # filter the current port was matched with
 
         self._conduite = Conduite()
         self._conduiteFile = None
@@ -103,6 +104,7 @@ class DmxInterface(BaseInterface):
                 timeout=0)
             self.port = port
             self._openProto = proto
+            self._openFilter = flt
             self.log("connected to", port, "as", proto)
             self._emitStatus(connected=True)
         except Exception as e:
@@ -117,6 +119,14 @@ class DmxInterface(BaseInterface):
         # protocol switched live in http2 -> reopen with the new line settings
         if self._cfg('dmx-protocol') != self._openProto:
             self.log("protocol changed -> reconnect")
+            self._drop()
+            return
+
+        # filter changed -> re-scan: the first scan can beat settings.load() and
+        # connect with the production fallback (seen grabbing the radar's Atom on
+        # a desk rig); this also applies dmx-filter edits from http2 live.
+        if self.filter != self._openFilter:
+            self.log("filter changed -> reconnect")
             self._drop()
             return
 
