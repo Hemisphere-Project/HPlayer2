@@ -13,4 +13,4 @@ this is parc-inventory data, never overwrite it on re-runs.
 
 | # | hostname | serial | was | now | instance | RTC | notes | date |
 |---|----------|--------|-----|-----|----------|-----|-------|------|
-| 35 | player-35 | 00000000ce8fc39a | 07ec1594 | a58c51f | hplayer2@biennale | DS3231 ✓ | desk pilot: radar+schedule validated, upload-fix pilot, reboot-proven | 2026-07-15 |
+| 35 | player-35 | 00000000ce8fc39a | 07ec1594 | 1fd4693 | hplayer2@biennale | DS3231 ✓ | desk pilot: radar+schedule validated, upload-fix pilot, reboot-proven; re-run via own wint AP → tip (DMX + fleet tooling), 3.8 pre-flight green | 2026-07-15 |
