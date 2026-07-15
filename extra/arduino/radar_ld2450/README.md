@@ -56,10 +56,11 @@ firmware crashes and flashing needs no button dance. It enumerates as Espressif
 carry no remote, so there's no collision. If a player ever needs both, give one a
 distinct USB product string via a TinyUSB build env and tighten the host filters.
 
-The Atom rig instead enumerates through its CH9102 converter ("M5 Serial Converter",
-`1a86:55d4`) — NOT matched by the host interface's default filter (on purpose: it
-stays production-shaped). To point a player at the test rig, pass a filter:
-`hplayer.addInterface('radar', "M5 Serial|1a86:55d4")`.
+The Atom rig instead enumerates through its USB converter — an FTDI FT232 with
+M5-branded strings ("M5 Serial Converter", `0403:6001`) — NOT matched by the host
+interface's default filter (on purpose: it stays production-shaped). To point a
+player at the test rig, set `"radar-filter": "M5 Serial|0403:6001"` in its
+`/data/hplayer2-<profile>.cfg` and restart — no code change needed.
 
 ## LD2450 mode
 

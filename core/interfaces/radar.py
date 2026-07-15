@@ -18,6 +18,7 @@ class RadarInterface(SerialBase):
     """
 
     DEFAULTS = {
+        'radar-filter':    '',      # USB device filter override (test rigs); empty = production default
         'radar-range':     3000,    # max distance y, mm
         'radar-width':     1500,    # max lateral |x|, mm
         'radar-enter-ms':  300,     # presence must hold this long to fire enter
@@ -31,6 +32,21 @@ class RadarInterface(SerialBase):
             hplayer.settings._settings.setdefault(k, v)
         self._present = False       # committed, debounced presence
         self._edgeSince = None      # when raw first disagreed with committed
+
+    # The scan loop reads .filter on every pass, so a 'radar-filter' setting in the
+    # /data cfg lets one player match a non-production device (e.g. the M5 Atom desk
+    # rig, FTDI-branded) without touching code — the production default stays intact.
+    @property
+    def filter(self):
+        try:
+            custom = self.hplayer.settings.get('radar-filter')
+        except Exception:
+            custom = None
+        return custom if custom else self._filter
+
+    @filter.setter
+    def filter(self, value):
+        self._filter = value
 
     def _cfg(self, key):
         try:
