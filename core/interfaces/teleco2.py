@@ -236,6 +236,9 @@ class Teleco2Interface(SerialBase):
         # once stale; if nothing comes in 10s, dump anyway (tick fallback).
         self._helloWait = time.time()
 
+    def onDisconnect(self):
+        self._helloWait = None      # don't let the dump fallback race a dropped link
+
     def fullDump(self):
         self._helloWait = None
         now = time.time()

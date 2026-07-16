@@ -9,3 +9,4 @@ python-rtmidi
 paho-mqtt
 timecode
 pilmoji
+esptool          # teleco2: auto-flash the CoreS3 remote from the player
