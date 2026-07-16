@@ -194,6 +194,7 @@ class Teleco2Interface(SerialBase):
             return False
 
         self._flashTried[port] = self._flashTried.get(port, 0) + 1
+        self._helloWait = None      # dump fallback must not fire across the flash
         self.log("device fw", fw, "!= expected", self._fwExpected,
                  "-> auto-flash", os.path.basename(self._fwBin), "on", port)
         try:
