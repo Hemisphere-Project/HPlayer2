@@ -1,13 +1,23 @@
-from pilmoji import Pilmoji
+# pilmoji is only needed by txt2img: keep it optional so players imaged
+# without it (pre-anna_2025 installs) still boot — the emoji-less audio
+# parcs never call txt2img
+try:
+    from pilmoji import Pilmoji
+except ImportError:
+    Pilmoji = None
 from PIL import Image, ImageDraw, ImageFont
 from ..module import Module
 import os, sys
 
 class ImGen(Module):
     def __init__(self, hplayer):
-      super().__init__(hplayer, 'ImGen', 'yellow')  
-    
+      super().__init__(hplayer, 'ImGen', 'yellow')
+
     def txt2img(self, text, encoding = None, suffix=''):
+
+      if Pilmoji is None:
+        self.log("pilmoji not installed: cannot render text to image (pip3 install pilmoji)")
+        return None
       
       if encoding == 'UCS2':
         text = bytes.fromhex(text).decode('utf-16-be')
