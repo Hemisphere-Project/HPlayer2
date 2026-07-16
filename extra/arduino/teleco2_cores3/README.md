@@ -17,6 +17,19 @@ pio run -e cores3 -t upload        # default env
 pio device monitor                 # optional, same CDC as the protocol link
 ```
 
+## Auto-flash from the player
+
+The repo ships a merged flash image `dist/teleco2_cores3-v<N>.bin` (bootloader +
+partitions + app, flashable at `0x0`). The firmware announces its version in the
+hello beacon (`hello <proto> <fw>`, see `src/version.h`); when the player sees an
+off-version remote and `esptool` is installed, it reflashes it on sight over the
+ROM USB-Serial/JTAG CDC — buttonless, works whatever state the firmware is in.
+Updating a deployed remote, or enrolling a blank spare that already carries any
+teleco2 firmware, costs nothing but plugging it into an up-to-date player.
+
+To release a new firmware: bump `FW_VERSION` in `src/version.h`, rebuild, rebuild
+the merged image into `dist/` (recipe in `version.h`), commit both.
+
 ## Host side
 
 Profile: `hplayer.addInterface('teleco2')` (see `profiles/anna.py`), or

@@ -2,6 +2,7 @@
 #include <ArduinoJson.h>
 #include "state.h"
 #include "link.h"
+#include "version.h"
 
 #define RX_BUF      640
 #define STALE_MS    8000
@@ -112,7 +113,7 @@ static void parseLine(const char* line) {
 void linkBegin() {
     Serial.setRxBufferSize(4096);       // full dump bursts ~11KB; HWCDC drops on overflow
     Serial.begin(115200);
-    sendCmd("hello " STR(PROTO_VERSION));
+    sendCmd("hello " STR(PROTO_VERSION) " " STR(FW_VERSION));
     lastHello = millis();
 }
 
@@ -145,6 +146,6 @@ void linkLoop() {
 
     if (!S.linked && millis() - lastHello > HELLO_MS) { // beacon doubles as dump request
         lastHello = millis();
-        sendCmd("hello " STR(PROTO_VERSION));
+        sendCmd("hello " STR(PROTO_VERSION) " " STR(FW_VERSION));
     }
 }

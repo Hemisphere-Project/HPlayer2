@@ -2,8 +2,11 @@ from .serialbase import SerialBase
 from core.engine import network
 
 import os
+import re
+import sys
 import json
 import time
+import subprocess
 import unicodedata
 
 """
@@ -27,9 +30,19 @@ HOST -> DEVICE : NDJSON, one object per line, typed by "t"
   {"t":"bye"}                                                   player shutting down
 
 DEVICE -> HOST : plain text  CMD [intarg]
-  hello <proto>      on boot + every 3s while no host line for >8s (doubles as dump request)
+  hello <proto> [fw] on boot + every 3s while no host line for >8s (doubles as dump request)
+                     fw: firmware version (absent on fw<=1, parsed as 0)
   getall             request full dump
   prev / next / playpause / stop / playindex <i> / volup / voldown
+
+AUTO-FLASH (policy: any off-version remote is flashed on sight, erasure assumed)
+  The repo ships a merged flash image dist/teleco2_cores3-v<N>.bin (see
+  extra/arduino/teleco2_cores3/src/version.h for the build recipe). When a device
+  hello announces fw != N and esptool is installed, the host closes the link and
+  reflashes the remote at 0x0 over the ROM USB-Serial/JTAG CDC (buttonless, survives
+  any firmware state), then lets the normal hotplug rescan pick the device back up.
+  One attempt per port per session; a failed flash leaves the ROM CDC alive but the
+  device silent (no hello) -> replug or flash manually.
 
 Device declares the link stale after 8s without a valid host line (net's 2s cadence = 4 missed).
 """
@@ -64,6 +77,21 @@ class Teleco2Interface(SerialBase):
         self._peersDirty = False
         self._peersLast = 0
         self._netLast = 0
+
+        # embedded firmware: highest dist/teleco2_cores3-v<N>.bin wins
+        self._fwBin = None
+        self._fwExpected = 0
+        self._flashTried = {}       # port -> attempts (1 max per session)
+        distdir = os.path.join(os.path.dirname(os.path.abspath(__file__)),
+                               '..', '..', 'extra', 'arduino', 'teleco2_cores3', 'dist')
+        try:
+            for f in os.listdir(distdir):
+                m = re.match(r'teleco2_cores3-v(\d+)\.bin$', f)
+                if m and int(m.group(1)) > self._fwExpected:
+                    self._fwExpected = int(m.group(1))
+                    self._fwBin = os.path.join(distdir, f)
+        except OSError:
+            pass
 
         self.bind()
 
@@ -117,6 +145,8 @@ class Teleco2Interface(SerialBase):
         args = parts[1:]
 
         if cmd in ('hello', 'getall'):
+            if cmd == 'hello' and self._fwCheck(args):
+                return              # link dropped for reflash, device will be back
             self.fullDump()
         elif cmd in self.CMDS:
             try:
@@ -128,6 +158,55 @@ class Teleco2Interface(SerialBase):
             else:
                 self.emit('remote-' + cmd, *args)
         # else: not for us (boot spew, debug prints..) -> drop
+
+    #
+    # AUTO-FLASH: off-version remote -> reflash from the embedded dist image
+    #
+
+    def _fwCheck(self, args):
+        """called on device hello; returns True if a reflash was initiated
+        (link is closed, hotplug rescan will pick the device back up)"""
+        if not self._fwBin:
+            return False
+        try:
+            fw = int(args[1]) if len(args) > 1 else 0
+        except ValueError:
+            fw = 0
+        if fw == self._fwExpected:
+            return False
+
+        port = self.port
+        if self._flashTried.get(port, 0) >= 1:
+            return False        # already tried this session: run with the old remote
+
+        # esptool present? (checked before dropping a working link)
+        probe = subprocess.run([sys.executable, '-m', 'esptool', 'version'],
+                               capture_output=True)
+        if probe.returncode != 0:
+            self.log("device fw", fw, "!= expected", self._fwExpected,
+                     "but esptool is not installed: auto-flash disabled")
+            self._fwBin = None
+            return False
+
+        self._flashTried[port] = self._flashTried.get(port, 0) + 1
+        self.log("device fw", fw, "!= expected", self._fwExpected,
+                 "-> auto-flash", os.path.basename(self._fwBin), "on", port)
+        try:
+            self.serial.close()     # free the port; pump will see the broken link and rescan
+        except Exception:
+            pass
+        try:
+            r = subprocess.run([sys.executable, '-m', 'esptool', '--chip', 'esp32s3',
+                                '--port', port, '--baud', '921600',
+                                'write_flash', '0x0', self._fwBin],
+                               capture_output=True, text=True, timeout=300)
+            if r.returncode == 0:
+                self.log("auto-flash done, device rebooting")
+            else:
+                self.log("auto-flash FAILED:", (r.stdout + r.stderr).strip()[-300:])
+        except Exception as e:
+            self.log("auto-flash error:", e)
+        return True
 
     def _execLocal(self, cmd, *args):
         if cmd == 'playpause':      # autoBind 'playpause' means play-paused, roll the toggle
