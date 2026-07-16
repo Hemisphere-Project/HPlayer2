@@ -32,4 +32,20 @@ Test without a player: `python3 extra/test/teleco2_mockhost.py`.
   Cleaner descriptor, but a crashed firmware drops the port: re-flash may need
   manual download mode (hold RST until the LED turns green, check M5 docs).
 
-Pick after the on-player robustness test (replug, service restart, fw crash).
+`cores3` stays the shipped default: player-driven auto-flash of a plugged remote
+needs the ROM CDC port, which survives any firmware state and flashes without a
+button dance — a crashed tinyusb remote drops off the bus and needs hands on RST.
+The tinyusb env is kept maintained as the descriptor-level fallback.
+
+### The `303a:1001` collision
+
+`303a:1001` is not unique to this remote — it is the generic Espressif
+USB-Serial/JTAG ID, shared by **any** ESP32-S3-family device in ROM CDC mode
+that may sit on the same player (JTAG-mode dev boards, other project hardware).
+Two consequences on the host side:
+
+- protocol v1 is self-identifying: the remote repeats `hello 1` every 3 s until
+  answered, so the host can drop a port that yields no valid protocol line
+  within ~10 s and rescan excluding it;
+- the per-player `teleco2-filter` setting remains the manual escape hatch —
+  key it on the USB **serial string** (`SER=<chip MAC>`), never on VID:PID.
