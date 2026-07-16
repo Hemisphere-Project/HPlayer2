@@ -148,7 +148,7 @@ static void drawPage() {
         if (S.toastKind != TOAST_UNLOCKED) {
             page.setFont(F_MICRO);
             page.setTextColor(C_PAPER);
-            page.drawString("hold PLAY + PEERS to unlock", SCREEN_W / 2, by + 48);
+            page.drawString("tap PLAY 5x fast to unlock", SCREEN_W / 2, by + 48);
         }
     }
 
@@ -191,15 +191,13 @@ static struct {
     uint32_t startMs = 0;
 } T;
 
-static struct {         // two-finger [PLAY]+[PEERS] chord
-    bool     active = false;
-    bool     fired = false;
-    uint32_t startMs = 0;
-} H;
+static struct {         // fast-tap sequence on the [PLAY] tab toggles the lock
+    uint8_t  count = 0;
+    uint32_t lastMs = 0;
+} K;
 
 static void setLock(bool on) {
     S.locked = on;
-    M5.Display.setBrightness(on ? BRIGHT_LOCKED : BRIGHT_NORMAL);
     S.dBar = S.dPage = true;
 }
 
@@ -209,17 +207,21 @@ static void toast(uint8_t kind) {
     S.dPage = true;
 }
 
-static bool lockChord() {   // both outer tabs held: one finger on [PLAY], one on [PEERS]
-    int n = M5.Touch.getCount();
-    if (n < 2) return false;
-    bool onPlay = false, onPeers = false;
-    for (int i = 0; i < n; i++) {
-        auto d = M5.Touch.getDetail(i);
-        if (!d.isPressed() || d.y < TAB_Y - 16) continue;   // fat-finger tolerance above the tabs
-        if (d.x < SCREEN_W / 3) onPlay = true;
-        else if (d.x >= 2 * SCREEN_W / 3) onPeers = true;
+static bool lockTap(int x, int y) {     // counts fast taps on [PLAY]; true when the lock toggled
+    uint32_t now = millis();
+    if (y >= TAB_Y && x < SCREEN_W / 3 && now - K.lastMs < LOCK_TAP_MS) {
+        K.lastMs = now;
+        if (++K.count >= LOCK_TAP_N) {
+            K.count = 0;
+            setLock(!S.locked);
+            toast(S.locked ? TOAST_LOCKED : TOAST_UNLOCKED);
+            return true;
+        }
+        return false;
     }
-    return onPlay && onPeers;
+    K.count = (y >= TAB_Y && x < SCREEN_W / 3) ? 1 : 0;
+    K.lastMs = now;
+    return false;
 }
 
 static void tap(int x, int y) {
@@ -237,23 +239,6 @@ static void tap(int x, int y) {
 }
 
 static void handleTouch() {
-
-    // lock chord: hold [PLAY]+[PEERS] tabs LOCK_HOLD_MS to toggle, swallow until all released
-    if (H.active || lockChord()) {
-        T.pressed = false;                          // cancel any single-touch gesture
-        if (lockChord()) {
-            if (!H.active) { H.active = true; H.fired = false; H.startMs = millis(); }
-            else if (!H.fired && millis() - H.startMs > LOCK_HOLD_MS) {
-                H.fired = true;
-                setLock(!S.locked);
-                toast(S.locked ? TOAST_LOCKED : TOAST_UNLOCKED);
-            }
-        } else if (M5.Touch.getCount() == 0) {
-            H.active = false;                       // chord fully released
-        }
-        return;
-    }
-
     auto t = M5.Touch.getDetail();
 
     if (t.wasPressed()) {
@@ -273,6 +258,8 @@ static void handleTouch() {
     if (T.pressed && t.wasReleased()) {
         T.pressed = false;
         if (!T.dragged && millis() - T.startMs < 500) {     // a tap
+            if (lockTap(T.startX, T.startY))                // fast-tap [PLAY] toggles the lock
+                return;
             if (S.locked && T.startY < TAB_Y) {             // locked: only page change allowed
                 toast(TOAST_DENIED);
                 return;
@@ -287,7 +274,7 @@ static void handleTouch() {
 //
 
 void uiBegin() {
-    M5.Display.setBrightness(S.locked ? BRIGHT_LOCKED : BRIGHT_NORMAL);
+    M5.Display.setBrightness(BRIGHT_NORMAL);
     M5.Display.fillScreen(C_BG);
     bar.createSprite(SCREEN_W, BAR_H);
     page.createSprite(SCREEN_W, PAGE_H);

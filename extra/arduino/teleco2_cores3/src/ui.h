@@ -33,10 +33,10 @@
 #define F_7SEG      (&fonts::Font7)
 
 #define BRIGHT_NORMAL   200
-#define BRIGHT_LOCKED   30
 
-// screen lock: hold [PLAY]+[PEERS] tabs together to toggle
-#define LOCK_HOLD_MS    1200
+// screen lock: LOCK_TAP_N fast taps on the [PLAY] tab to toggle
+#define LOCK_TAP_N      5
+#define LOCK_TAP_MS     600     // max gap between taps of the sequence
 #define TOAST_NONE      0
 #define TOAST_LOCKED    1
 #define TOAST_UNLOCKED  2
