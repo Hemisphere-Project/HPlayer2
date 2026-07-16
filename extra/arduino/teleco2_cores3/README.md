@@ -6,7 +6,9 @@ Speaks **protocol v1** — authoritative spec in `core/interfaces/teleco2.py` (h
 - **Status bar**: scrolling current-media title, peer count, wifi rssi, volume.
 - **3 pages**: transport (PREV / PLAY-PAUSE / STOP / NEXT + volume), media list
   (drag to scroll, tap to play), peers (name + zyre link health, self marked).
-- **Screen lock**: double-tap the status bar to lock, double-tap anywhere to unlock.
+- **Screen lock**: hold the [PLAY] and [PEERS] tabs together (~1.2 s) to lock or
+  unlock. Locked: only page switching stays active, a padlock shows in the status
+  bar, and touching anything else pops a "LOCKED" alert with the unlock hint.
 - **Hotplug**: powered by the player's USB port; shows "waiting for HPlayer2..." until
   the host talks, greys out after 8 s of silence (player rebooting), recovers alone.
 

@@ -51,6 +51,8 @@ struct AppState {
 
     // ui
     bool     locked = false;
+    uint8_t  toastKind = 0;             // TOAST_* (ui.h), 0 = none
+    uint32_t toastUntil = 0;
     uint8_t  page = 0;                  // 0 transport / 1 media / 2 peers
     int      listScroll = 0;            // first visible media row
 

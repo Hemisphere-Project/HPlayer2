@@ -100,12 +100,10 @@ static void drawBar() {
         drawWifiBars(bar, 282, BAR_H - 5);
     }
 
-    if (S.locked) {     // inverted LOCK tag, far right
-        bar.fillRect(304, 3, 16, BAR_H - 8, C_AMBER);
-        bar.setFont(F_MICRO);
-        bar.setTextColor(C_BG);
-        bar.setTextDatum(middle_center);
-        bar.drawString("L", 312, (BAR_H - 2) / 2);
+    if (S.locked) {     // padlock, far right
+        bar.drawRoundRect(306, 3, 11, 11, 3, C_AMBER);      // shackle
+        bar.fillRoundRect(302, 10, 19, 12, 2, C_AMBER);     // body
+        bar.fillRect(310, 14, 3, 5, C_BG);                  // keyhole
     }
 
     bar.pushSprite(0, 0);
@@ -136,6 +134,24 @@ static void drawPage() {
     else if (S.page == 0) drawTransport(page);
     else if (S.page == 1) drawMedia(page);
     else drawPeers(page);
+
+    if (S.toastKind != TOAST_NONE) {    // lock feedback overlay
+        uint16_t col = (S.toastKind == TOAST_UNLOCKED) ? C_GREEN : C_AMBER;
+        int by = PAGE_H / 2 - 34;
+        page.fillRoundRect(36, by, SCREEN_W - 72, 68, 6, C_PANEL);
+        page.drawRoundRect(36, by, SCREEN_W - 72, 68, 6, col);
+        page.setTextDatum(middle_center);
+        page.setFont(F_MONO_BIG);
+        page.setTextColor(col);
+        page.drawString(S.toastKind == TOAST_UNLOCKED ? "UNLOCKED" : "LOCKED",
+                        SCREEN_W / 2, by + (S.toastKind == TOAST_UNLOCKED ? 34 : 24));
+        if (S.toastKind != TOAST_UNLOCKED) {
+            page.setFont(F_MICRO);
+            page.setTextColor(C_PAPER);
+            page.drawString("hold PLAY + PEERS to unlock", SCREEN_W / 2, by + 48);
+        }
+    }
+
     page.pushSprite(0, PAGE_Y);
 }
 
@@ -173,14 +189,37 @@ static struct {
     bool     dragged = false;
     int      startX = 0, startY = 0, lastY = 0;
     uint32_t startMs = 0;
-    uint32_t lastTapMs = 0;
-    int      lastTapX = 0, lastTapY = 0;
 } T;
+
+static struct {         // two-finger [PLAY]+[PEERS] chord
+    bool     active = false;
+    bool     fired = false;
+    uint32_t startMs = 0;
+} H;
 
 static void setLock(bool on) {
     S.locked = on;
     M5.Display.setBrightness(on ? BRIGHT_LOCKED : BRIGHT_NORMAL);
     S.dBar = S.dPage = true;
+}
+
+static void toast(uint8_t kind) {
+    S.toastKind = kind;
+    S.toastUntil = millis() + 1500;
+    S.dPage = true;
+}
+
+static bool lockChord() {   // both outer tabs held: one finger on [PLAY], one on [PEERS]
+    int n = M5.Touch.getCount();
+    if (n < 2) return false;
+    bool onPlay = false, onPeers = false;
+    for (int i = 0; i < n; i++) {
+        auto d = M5.Touch.getDetail(i);
+        if (!d.isPressed() || d.y < TAB_Y) continue;
+        if (d.x < SCREEN_W / 3) onPlay = true;
+        else if (d.x >= 2 * SCREEN_W / 3) onPeers = true;
+    }
+    return onPlay && onPeers;
 }
 
 static void tap(int x, int y) {
@@ -198,6 +237,23 @@ static void tap(int x, int y) {
 }
 
 static void handleTouch() {
+
+    // lock chord: hold [PLAY]+[PEERS] tabs LOCK_HOLD_MS to toggle, swallow until all released
+    if (H.active || lockChord()) {
+        T.pressed = false;                          // cancel any single-touch gesture
+        if (lockChord()) {
+            if (!H.active) { H.active = true; H.fired = false; H.startMs = millis(); }
+            else if (!H.fired && millis() - H.startMs > LOCK_HOLD_MS) {
+                H.fired = true;
+                setLock(!S.locked);
+                toast(S.locked ? TOAST_LOCKED : TOAST_UNLOCKED);
+            }
+        } else if (M5.Touch.getCount() == 0) {
+            H.active = false;                       // chord fully released
+        }
+        return;
+    }
+
     auto t = M5.Touch.getDetail();
 
     if (t.wasPressed()) {
@@ -217,18 +273,8 @@ static void handleTouch() {
     if (T.pressed && t.wasReleased()) {
         T.pressed = false;
         if (!T.dragged && millis() - T.startMs < 500) {     // a tap
-            uint32_t now = millis();
-            bool dbl = (now - T.lastTapMs < 400)
-                    && abs(T.startX - T.lastTapX) < 40
-                    && abs(T.startY - T.lastTapY) < 40;
-            T.lastTapMs = now; T.lastTapX = T.startX; T.lastTapY = T.startY;
-
-            if (S.locked) {                                 // locked: only unlock double-tap
-                if (dbl) setLock(false);
-                return;
-            }
-            if (dbl && T.startY < BAR_H) {                  // lock: double-tap the status bar
-                setLock(true);
+            if (S.locked && T.startY < TAB_Y) {             // locked: only page change allowed
+                toast(TOAST_DENIED);
                 return;
             }
             tap(T.startX, T.startY);
@@ -256,6 +302,11 @@ void uiLoop() {
 
     uint32_t now = millis();
     static uint32_t lastBarMs = 0;
+
+    if (S.toastKind != TOAST_NONE && (int32_t)(now - S.toastUntil) >= 0) {
+        S.toastKind = TOAST_NONE;
+        S.dPage = true;
+    }
 
     // bar: on change, marquee tick, or slow heartbeat
     if (S.dBar || (marqueeActive && now - lastBarMs > 33) || now - lastBarMs > 500) {

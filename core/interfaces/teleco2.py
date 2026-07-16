@@ -78,6 +78,8 @@ class Teleco2Interface(SerialBase):
         self._peersLast = 0
         self._netLast = 0
 
+        self._helloWait = None      # connect-time silence window (see onConnect)
+
         # embedded firmware: highest dist/teleco2_cores3-v<N>.bin wins
         self._fwBin = None
         self._fwExpected = 0
@@ -229,9 +231,13 @@ class Teleco2Interface(SerialBase):
     #
 
     def onConnect(self):
-        self.fullDump()
+        # stay silent until the device introduces itself: its hello carries the
+        # firmware version (auto-flash check). A plugged device beacons within 3s
+        # once stale; if nothing comes in 10s, dump anyway (tick fallback).
+        self._helloWait = time.time()
 
     def fullDump(self):
+        self._helloWait = None
         now = time.time()
         self.send(json.dumps({'t': 'hello', 'proto': PROTO,
                               'name': network.get_hostname(),
@@ -246,6 +252,11 @@ class Teleco2Interface(SerialBase):
         self._stLast = self._peersLast = self._netLast = now
 
     def tick(self):
+        if self._helloWait:
+            if time.time() - self._helloWait > 10:
+                self.log("no hello from device, dumping anyway")
+                self.fullDump()
+            return
         now = time.time()
 
         if self._stDirty and now - self._stLast >= ST_PERIOD:

@@ -35,6 +35,13 @@
 #define BRIGHT_NORMAL   200
 #define BRIGHT_LOCKED   30
 
+// screen lock: hold [PLAY]+[PEERS] tabs together to toggle
+#define LOCK_HOLD_MS    1200
+#define TOAST_NONE      0
+#define TOAST_LOCKED    1
+#define TOAST_UNLOCKED  2
+#define TOAST_DENIED    3   // touched a locked control
+
 void uiBegin();
 void uiLoop();
 

@@ -12,4 +12,4 @@
 //     0x0 .pio/build/cores3/bootloader.bin 0x8000 .pio/build/cores3/partitions.bin \
 //     0xe000 <framework>/tools/partitions/boot_app0.bin 0x10000 .pio/build/cores3/firmware.bin
 
-#define FW_VERSION 2
+#define FW_VERSION 3
