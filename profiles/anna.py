@@ -23,7 +23,7 @@ teleco2		= hplayer.addInterface('teleco2')				# USB remote (M5Stack CoreS3)
 # keyboard 	= hplayer.addInterface('keyboard')
 # osc		= hplayer.addInterface('osc', 4000).hostOut = '10.0.0.255'
 
-keypad.lcd.set_color( 100, 0, 100)
+if keypad.lcd: keypad.lcd.set_color( 100, 0, 100)
 keypad.draw( [".:: HPlayer2 ::.", "   Starting "+keypad.CHAR_LOVE+"   "] )
 time.sleep(2.0)  	# wait for USB to get ready
 
@@ -46,6 +46,7 @@ if usbSync:
 	def ledBLink():
 		global blink
 		blink = not blink
+		if not keypad.lcd: return
 		if blink: keypad.lcd.set_color( 100, 100, 0)
 		else: keypad.lcd.set_color( 100, 0, 0)
     
