@@ -215,7 +215,7 @@ static bool lockChord() {   // both outer tabs held: one finger on [PLAY], one o
     bool onPlay = false, onPeers = false;
     for (int i = 0; i < n; i++) {
         auto d = M5.Touch.getDetail(i);
-        if (!d.isPressed() || d.y < TAB_Y) continue;
+        if (!d.isPressed() || d.y < TAB_Y - 16) continue;   // fat-finger tolerance above the tabs
         if (d.x < SCREEN_W / 3) onPlay = true;
         else if (d.x >= 2 * SCREEN_W / 3) onPeers = true;
     }
@@ -287,7 +287,7 @@ static void handleTouch() {
 //
 
 void uiBegin() {
-    M5.Display.setBrightness(BRIGHT_NORMAL);
+    M5.Display.setBrightness(S.locked ? BRIGHT_LOCKED : BRIGHT_NORMAL);
     M5.Display.fillScreen(C_BG);
     bar.createSprite(SCREEN_W, BAR_H);
     page.createSprite(SCREEN_W, PAGE_H);

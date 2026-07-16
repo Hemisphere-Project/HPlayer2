@@ -147,8 +147,15 @@ class Teleco2Interface(SerialBase):
         args = parts[1:]
 
         if cmd in ('hello', 'getall'):
-            if cmd == 'hello' and self._fwCheck(args):
-                return              # link dropped for reflash, device will be back
+            if cmd == 'hello':
+                try:
+                    proto = int(args[0]) if args else 0
+                    fw = int(args[1]) if len(args) > 1 else 0
+                except ValueError:
+                    proto, fw = 0, 0
+                self.log("device hello: proto", proto, "fw", fw)
+                if self._fwCheck(fw):
+                    return          # link dropped for reflash, device will be back
             self.fullDump()
         elif cmd in self.CMDS:
             try:
@@ -165,15 +172,11 @@ class Teleco2Interface(SerialBase):
     # AUTO-FLASH: off-version remote -> reflash from the embedded dist image
     #
 
-    def _fwCheck(self, args):
+    def _fwCheck(self, fw):
         """called on device hello; returns True if a reflash was initiated
         (link is closed, hotplug rescan will pick the device back up)"""
         if not self._fwBin:
             return False
-        try:
-            fw = int(args[1]) if len(args) > 1 else 0
-        except ValueError:
-            fw = 0
         if fw == self._fwExpected:
             return False
 
