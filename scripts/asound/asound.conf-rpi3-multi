@@ -1,0 +1,171 @@
+# HPlayer2 always-on multi-output graph — Raspberry Pi 3 (legacy/mmal stack)
+#
+# mpv plays pcm.hplayer (also the !default): a single static 8ch/48kHz fan-out
+#
+#   mpv --> plug --> route --> multi --> jack  (bcm2835 Headphones, dmix, ch 0/1)
+#                                    --> hdmi  (bcm2835 HDMI "b1",  dmix, ch 0/1)
+#                                    --> aloop (snd-aloop card, all 8 channels)
+#
+# The three sinks always exist (both bcm2835 cards are firmware devices present
+# with or without cables; snd-aloop is a kernel module loaded at boot), so the
+# open never fails and playback never depends on what is plugged.
+#
+# A USB card is NOT part of the graph: the audiohub interface supervises an
+# alsaloop process mirroring the loopback to the USB card when one is present
+# (adaptive resample: the USB clock domain never drifts against the graph).
+#
+# Static by design — nothing here is ever rewritten at runtime.
+
+# ---- always-present hardware sinks, shared through dmix -----------------
+
+pcm.jackout {
+    type dmix
+    ipc_key 3278
+    slave {
+        pcm "hw:Headphones"
+        rate 48000
+        channels 2
+        format S16_LE
+        period_size 1024
+        buffer_size 4096
+    }
+}
+
+pcm.hdmiout {
+    type dmix
+    ipc_key 3279
+    slave {
+        # legacy (non-KMS) firmware HDMI card: present even with no display,
+        # stereo on the bcm2835 driver (bench-check: raise channels if >2)
+        pcm "hw:b1"
+        rate 48000
+        channels 2
+        format S16_LE
+        period_size 1024
+        buffer_size 4096
+    }
+}
+
+# ---- the fan-out ---------------------------------------------------------
+
+pcm.hplayer_multi {
+    type multi
+    slaves.a.pcm "jackout"
+    slaves.a.channels 2
+    slaves.b.pcm "hdmiout"
+    slaves.b.channels 2
+    slaves.c.pcm "hw:Loopback,0,0"
+    slaves.c.channels 8
+    bindings.0.slave a
+    bindings.0.channel 0
+    bindings.1.slave a
+    bindings.1.channel 1
+    bindings.2.slave b
+    bindings.2.channel 0
+    bindings.3.slave b
+    bindings.3.channel 1
+    bindings.4.slave c
+    bindings.4.channel 0
+    bindings.5.slave c
+    bindings.5.channel 1
+    bindings.6.slave c
+    bindings.6.channel 2
+    bindings.7.slave c
+    bindings.7.channel 3
+    bindings.8.slave c
+    bindings.8.channel 4
+    bindings.9.slave c
+    bindings.9.channel 5
+    bindings.10.slave c
+    bindings.10.channel 6
+    bindings.11.slave c
+    bindings.11.channel 7
+}
+
+# 8 input channels -> 12 slave channels.
+# jack and hdmi carry ch 0/1 at unity: stereo media behaves exactly as the
+# single-output config did (levels untouched — fleet volume calibrations hold).
+# Multichannel media: ch 0/1 on jack/hdmi, all channels on the loopback/USB.
+# (Downmix-to-stereo variant: replace the four unity rows of outputs 0-3 with
+# 0.25-weighted sums of all 8 inputs.)
+pcm.hplayer_route {
+    type route
+    slave.pcm "hplayer_multi"
+    slave.channels 12
+    ttable.0.0 1
+    ttable.1.1 1
+    ttable.0.2 1
+    ttable.1.3 1
+    ttable.0.4 1
+    ttable.1.5 1
+    ttable.2.6 1
+    ttable.3.7 1
+    ttable.4.8 1
+    ttable.5.9 1
+    ttable.6.10 1
+    ttable.7.11 1
+}
+
+pcm.hplayer {
+    type plug
+    slave.pcm "hplayer_route"
+}
+
+pcm.!default hplayer
+ctl.!default {
+    type hw
+    card Headphones
+}
+
+# ---- USB egress for the audiohub forwarder -------------------------------
+# alsaloop reads hw:Loopback,1,0 (8ch) and plays one of these:
+#   usbout8:CARD=<id>  — card with >= 8 outputs, discrete channels
+#   usbout2:CARD=<id>  — stereo card, ch 0/1 (same policy as jack)
+
+pcm.usbout8 {
+    @args [ CARD ]
+    @args.CARD { type string }
+    type plug
+    slave.pcm {
+        type hw
+        card $CARD
+    }
+}
+
+pcm.usbout2 {
+    @args [ CARD ]
+    @args.CARD { type string }
+    type route
+    slave.pcm {
+        type plug
+        slave.pcm {
+            type hw
+            card $CARD
+        }
+    }
+    slave.channels 2
+    ttable.0.0 1
+    ttable.1.1 1
+}
+
+# ---- legacy names kept for hand tools (aplay -D jack ...) ----------------
+
+pcm.jack {
+    type hw
+    card Headphones
+}
+
+ctl.jack {
+    type hw
+    card Headphones
+}
+
+pcm.hdmi0 {
+    type hw
+    card b1
+}
+
+ctl.hdmi0 {
+    type hw
+    card b1
+}

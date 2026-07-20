@@ -110,7 +110,7 @@ if [ "$PROFILE" = "biennale" ] && [ -f /data/hplayer2-biennale24.cfg ] && [ ! -f
   python3 - <<'PY'
 import json
 old = json.load(open('/data/hplayer2-biennale24.cfg'))
-keep = {k: old[k] for k in ('volume', 'audioout', 'audiomode', 'pan', 'flip') if k in old}
+keep = {k: old[k] for k in ('volume', 'audiomode', 'pan', 'flip') if k in old}
 json.dump(keep, open('/data/hplayer2-biennale.cfg', 'w'), indent=1)
 print('== cfg carry-over:', keep)
 PY

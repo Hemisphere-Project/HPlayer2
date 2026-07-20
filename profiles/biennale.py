@@ -31,9 +31,11 @@ tempfile.tempdir = '/data/var/tmp'
 # MEDIA PATH
 mediaPath = ['/data/media', '/data/usb']
 
-# CHECK IF /etc/asound.conf contains "pcm.usb", otherwise copy from scripts/asound.conf-rpi3
-if not os.path.isfile('/etc/asound.conf') or not open('/etc/asound.conf').read().find('pcm.usb') > -1:
-	os.system('rw && cp /opt/HPlayer2/scripts/asound.conf-rpi3 /etc/asound.conf && sync && ro')
+# ALWAYS-ON AUDIO GRAPH: jack + HDMI + loopback fan-out, USB mirrored by the
+# audiohub interface. Deploy the static asound.conf once (marker: pcm.hplayer);
+# it is never rewritten afterwards.
+if not os.path.isfile('/etc/asound.conf') or not 'pcm.hplayer' in open('/etc/asound.conf').read():
+	os.system('rw && cp /opt/HPlayer2/scripts/asound/asound.conf-rpi3-multi /etc/asound.conf && sync && ro')
 
 # INIT HPLAYER
 hplayer = HPlayer2(mediaPath, '/data/hplayer2-biennale.cfg')
@@ -248,6 +250,12 @@ dmx = hplayer.addInterface('dmx')
 # device is never touched: virgin units take one manual first flash)
 teleco2 = hplayer.addInterface('teleco2')
 
+# Audio hub: supervises the always-on graph — mirrors the loopback to a USB
+# audio card when one is plugged (alsaloop side-car, adaptive resample) and
+# pushes output health to the http2 chips. No card, no forwarder: playback
+# never blocks on audio hardware.
+audiohub = hplayer.addInterface('audiohub')
+
 # persist dmx tunables edited from http2 (interface reads them live)
 for _k in ('dmx-protocol', 'dmx-fps', 'dmx-filter'):
 	hplayer.on('http2.' + _k)(lambda ev, *a, k=_k: hplayer.settings.set(k, a[0]))
@@ -255,6 +263,10 @@ for _k in ('dmx-protocol', 'dmx-fps', 'dmx-filter'):
 @hplayer.on('dmx.*')
 def dmx_logs(ev, *args):
 	if ev.endswith('.status') or ev.endswith('.levels'): return   # high-rate: UI only
+	hplayer.interface('http2').send('logs', [ev] + list(args))
+
+@hplayer.on('audiohub.*')
+def audiohub_logs(ev, *args):
 	hplayer.interface('http2').send('logs', [ev] + list(args))
 
 
