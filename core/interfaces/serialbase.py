@@ -38,6 +38,7 @@ class SerialBase(BaseInterface):
 
         self.port = None
         self.serial = None
+        self._matchedFilter = None      # filter the current port was matched with
         self._txQueue = Queue(100)
 
     #
@@ -122,8 +123,20 @@ class SerialBase(BaseInterface):
 
         while self.isRunning():
 
+            # filter changed (settings.load beaten by the first scan, or live
+            # edit) -> forget the port matched under the old filter and re-scan
+            if self.port and self.filter != self._matchedFilter:
+                self.log("filter changed -> re-scan")
+                retryCount = 0
+                noDeviceLogged = False
+                if self.serial:
+                    self._dropLink()
+                else:
+                    self.port = None
+
             # find port
             if not self.port:
+                self._matchedFilter = self.filter
                 if self.filter.startswith('/'):
                     self.port = self.filter
                 else:
