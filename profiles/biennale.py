@@ -36,6 +36,9 @@ mediaPath = ['/data/media', '/data/usb']
 # it is never rewritten afterwards.
 if not os.path.isfile('/etc/asound.conf') or not 'pcm.hplayer' in open('/etc/asound.conf').read():
 	os.system('rw && cp /opt/HPlayer2/scripts/asound/asound.conf-rpi3-multi /etc/asound.conf && sync && ro')
+# the graph's loopback slave must exist BEFORE mpv's first open (autoplay can
+# hit within a second of boot): load it here, not just in the audiohub thread
+os.system('modprobe snd-aloop 2>/dev/null')
 
 # INIT HPLAYER
 hplayer = HPlayer2(mediaPath, '/data/hplayer2-biennale.cfg')
