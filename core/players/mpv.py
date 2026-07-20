@@ -255,6 +255,8 @@ class MpvPlayer(BasePlayer):
                                 self.emit('idle')
 
                             elif mpvsays['name'] == 'core-idle':
+                                if 'data' not in mpvsays:
+                                    continue
                                 self.update('isPlaying', not mpvsays['data'])
 
                                 if self.status('isPlaying'): 
