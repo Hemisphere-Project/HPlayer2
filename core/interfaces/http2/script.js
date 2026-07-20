@@ -121,9 +121,6 @@ $(document).ready(function() {
         autoBtn.setState(msg['autoplay'])
         muteBtn.setState(msg['mute'])
         monoBtn.setState((msg['audiomode'] == 'mono'))
-        jackBtn.setState((msg['audioout'] == 'jack'))
-        hdmiBtn.setState((msg['audioout'] == 'hdmi'))
-        usbBtn.setState((msg['audioout'] == 'usb'))
 
         $('#volume_range').val(msg['volume'])
         $('#volumeMain').html(msg['volume'])
@@ -325,25 +322,28 @@ $(document).ready(function() {
         else trigger('audiomode', 'mono');
     });
 
-    // JACK
-    var jackBtn = new Button('#jack_btn', 'info')
-    jackBtn.btn.click(event => {
-        if (confirm("Switch audio to Jack ?\nHplayer2 will restart ... (~15s) "))
-            trigger('audioout', 'jack');
-    });
-
-    // HDMI
-    var hdmiBtn = new Button('#hdmi_btn', 'info')
-    hdmiBtn.btn.click(event => {
-        if (confirm("Switch audio to HDMI ?\nHplayer2 will restart ... (~15s) "))
-            trigger('audioout', 'hdmi');
-    });
-
-    // USB
-    var usbBtn = new Button('#usb_btn', 'info')
-    usbBtn.btn.click(event => {
-        if (confirm("Switch audio to USB ?\nHplayer2 will restart ... (~15s) "))
-            trigger('audioout', 'usb');
+    // AUDIO OUTPUT STATUS (always-on graph: every present output plays;
+    // chips reflect pipeline health pushed by the audiohub interface)
+    function audioChip(sel, state, html) {
+        var cls = { 'on': 'badge-success', 'active': 'badge-success',
+                    'absent': 'badge-light', 'off': 'badge-light',
+                    'error': 'badge-danger', 'legacy': 'badge-secondary'
+                  }[state] || 'badge-secondary';
+        $(sel).removeClass('badge-success badge-light badge-danger badge-secondary')
+              .addClass(cls);
+        if (html) $(sel).html(html);
+    }
+    socket.on('audio-status', function(msg) {
+        audioChip('#jack_status', msg['jack']);
+        audioChip('#hdmi_status', msg['hdmi']);
+        var usb = '<i class="fab fa-usb"></i> USB';
+        if (msg['usb'] == 'active' && msg['usb-channels'])
+            usb += ' ' + msg['usb-channels'] + 'ch';
+        if (msg['usb'] == 'error') usb += ' &#9888;';
+        audioChip('#usb_status', msg['usb'], usb);
+        $('#usb_status').attr('title', 'USB audio mirror'
+            + (msg['usb-card'] ? ' — ' + msg['usb-card'] : '')
+            + (msg['usb-xruns'] ? ' — ' + msg['usb-xruns'] + ' xruns' : ''));
     });
 
     // REBOOT

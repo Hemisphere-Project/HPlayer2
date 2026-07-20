@@ -127,3 +127,6 @@ input[type=range]::-webkit-slider-runnable-track {
 #schedule-panel.no-rtc #schedule_ctrls,
 #schedule-panel.no-rtc label { opacity: .5; }
 #schedule-panel.no-rtc #schedule_status { opacity: 1; }
+/* Always-on audio graph: output status chips (audiohub interface) */
+.audio-status { vertical-align: middle; margin-right: .3rem; padding: .5em .6em; }
+.audio-status.badge-light { opacity: .5; }

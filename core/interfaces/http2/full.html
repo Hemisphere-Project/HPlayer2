@@ -63,9 +63,10 @@
 
                 <div class="col-lg-4 col-12 text-lg-right">
                     <div class="form-group">
-                        <button type="button" class="btn audio-element" id="jack_btn"><i class="fas fa-headphones"></i> Jack</button>
-                        <button type="button" class="btn audio-element" id="usb_btn"><i class="fab fa-usb"></i> USB</button>
-                        <button type="button" class="btn audio-element" id="hdmi_btn"><i class="fas fa-desktop"></i> HDMI</button>
+                        <!-- always-on audio graph: outputs are indicators, not selectors -->
+                        <span class="badge badge-secondary audio-status" id="jack_status" title="internal jack"><i class="fas fa-headphones"></i> Jack</span>
+                        <span class="badge badge-secondary audio-status" id="hdmi_status" title="HDMI audio"><i class="fas fa-desktop"></i> HDMI</span>
+                        <span class="badge badge-secondary audio-status" id="usb_status" title="USB audio mirror"><i class="fab fa-usb"></i> USB</span>
                         <button type="button" class="btn mute-element"  id="mute_btn"><i class="fas fa-volume-mute"></i> Mute</button>
                         <button type="button" class="btn audio-element" id="mono_btn"><i class="fas fa-rss"></i> Mono</button>
                     </div>
