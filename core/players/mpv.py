@@ -6,6 +6,33 @@ from pathlib import Path
 from shutil import which
 from .base import BasePlayer
 
+
+def build_pan_filter(pan, channels):
+    """mpv 'af' string for the mono/pan feature, adapted to the source layout.
+
+    channels <= 2 keeps the historical stereo matrices untouched. Above that
+    (multichannel media on the always-on graph) mono becomes an equal-weight
+    mix replicated to every channel, and L/R pan has no meaning on discrete
+    zone feeds: unity passes through, anything else returns None so the
+    caller can warn and clear the filter instead of collapsing the layout.
+    """
+    if not channels or channels <= 2:
+        if pan == 'mono':
+            return "lavfi=[pan=stereo|c0=.5*c0+.5*c1|c1=.5*c0+.5*c1]"
+        left = pan[0]/100.0
+        right = pan[1]/100.0
+        return "lavfi=[pan=stereo|c0="+str(left)+"*c0|c1="+str(right)+"*c1]"
+
+    if pan == 'mono':
+        mix = '+'.join('%.4f*c%d' % (1.0/channels, j) for j in range(channels))
+        outs = '|'.join('c%d=%s' % (i, mix) for i in range(channels))
+        return "lavfi=[pan=%dc|%s]" % (channels, outs)
+
+    if list(pan) == [100, 100]:
+        return ""           # unity: no filter, discrete channels pass through
+    return None             # L/R balance is undefined on >2ch: caller warns
+
+
 class MpvPlayer(BasePlayer):
 
     _mpv_scale = 1          # % image scale
@@ -33,6 +60,15 @@ class MpvPlayer(BasePlayer):
         self._mpv_command = self._BASE_ARGS.copy()
         if sys.platform.startswith('linux'):
             self._mpv_command.append('--ao=alsa')
+            # always-on multi-output graph (asound.conf-rpi3-multi): play the
+            # fan-out PCM explicitly, and let multichannel media keep its
+            # layout so all channels reach the loopback/USB (stereo media
+            # still negotiates stereo; the graph's plug pads the rest)
+            if self._alsa_has_hplayer_graph():
+                self._mpv_command += [
+                    '--audio-device=alsa/hplayer',
+                    '--audio-channels=auto',
+                ]
 
         # armv7l specific
         if platform.machine().lower() in ['armv7l', 'armv6l']:
@@ -69,6 +105,9 @@ class MpvPlayer(BasePlayer):
 
         self._mpv_lockedout = 0
 
+        self._audio_channels = 2    # current track layout (observed live)
+        self._pan_current = None    # last mono/pan request, re-applied on layout change
+
 
     ############
     ## public METHODS
@@ -85,6 +124,14 @@ class MpvPlayer(BasePlayer):
     ############
     ## private METHODS
     ############
+
+    # Always-on multi-output graph deployed on this machine ?
+    def _alsa_has_hplayer_graph(self):
+        try:
+            with open('/etc/asound.conf') as fd:
+                return 'pcm.hplayer' in fd.read()
+        except OSError:
+            return False
 
     # SHADER list
     def _shaders_prepare(self):
@@ -220,6 +267,7 @@ class MpvPlayer(BasePlayer):
             self._mpv_send('{ "command": ["observe_property", 3, "time-pos"] }')
             self._mpv_send('{ "command": ["observe_property", 4, "duration"] }')
             self._mpv_send('{ "command": ["observe_property", 5, "eof-reached"] }')
+            self._mpv_send('{ "command": ["observe_property", 6, "audio-params/channel-count"] }')
             closeToTheEnd = False
             nearendEmitted = False
             
@@ -291,6 +339,16 @@ class MpvPlayer(BasePlayer):
                             elif mpvsays['name'] == 'duration':
                                 if 'data' in mpvsays and mpvsays['data']:
                                     self.update('duration', round(float(mpvsays['data']),2))
+
+                            elif mpvsays['name'] == 'audio-params/channel-count':
+                                if 'data' in mpvsays and mpvsays['data']:
+                                    channels = int(mpvsays['data'])
+                                    if channels != self._audio_channels:
+                                        self._audio_channels = channels
+                                        # the mono/pan matrix is layout-shaped:
+                                        # rebuild it for the new track
+                                        if self._pan_current is not None:
+                                            self._applyPan(self._pan_current)
 
                             elif mpvsays['name'] == 'eof-reached':
                                 if 'data' in mpvsays and mpvsays['data'] == True:
@@ -478,14 +536,16 @@ class MpvPlayer(BasePlayer):
         # self.log("VOLUME to", volume)
 
     def _applyPan(self, pan):
+        self._pan_current = pan
+        af = build_pan_filter(pan, self._audio_channels)
+        if af is None:
+            self.log("PAN ignored:", pan, "(%dch media has no L/R balance)" % self._audio_channels)
+            af = ""
+        self._mpv_send(json.dumps({"command": ["set_property", "af", af]}))
         if pan == 'mono':
-            self._mpv_send('{"command": ["set_property", "af", "lavfi=[pan=stereo|c0=.5*c0+.5*c1|c1=.5*c0+.5*c1]"]}')        
-            self.log("MONO")    
+            self.log("MONO", "(%dch)" % self._audio_channels)
         else:
-            left = pan[0]/100.0
-            right = pan[1]/100.0
-            self._mpv_send('{"command": ["set_property", "af", "lavfi=[pan=stereo|c0='+str(left)+'*c0|c1='+str(right)+'*c1]"]}')
-            self.log("PAN to", left, right, '{"command": ["set_property", "af", "lavfi=[pan=stereo|c0='+str(left)+'*c0|c1='+str(right)+'*c1]"]}')
+            self.log("PAN to", pan, af)
     
     def _applyFlip(self, flip):
         if flip:
