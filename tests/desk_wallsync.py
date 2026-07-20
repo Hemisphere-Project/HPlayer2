@@ -12,7 +12,7 @@ Only termcolor + pymitter are required:
 
     python3 -m venv /tmp/wallsync-venv
     /tmp/wallsync-venv/bin/pip install termcolor pymitter
-    /tmp/wallsync-venv/bin/python tests/test_wallsync.py
+    /tmp/wallsync-venv/bin/python tests/desk_wallsync.py
 
 Takes ~90s (real-time sleeps: the servo is exercised at its real cadence).
 """

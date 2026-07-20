@@ -5,7 +5,7 @@ No hardware, no player, no serial. Exercises the text parser, channel/alias
 addressing, value scales, snap vs fade interpolation, per-channel fade override,
 hold-until-next semantics and error reporting.
 
-    python3 tests/test_conduite.py
+    python3 tests/desk_conduite.py
 """
 import sys, os
 

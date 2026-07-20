@@ -5,7 +5,7 @@ Validates the import chain (core.interfaces.dmx via the registry), the per-media
 sidecar load, the pure-function frame evaluation against a fake player clock, the
 http2 status/level bridge, and the exact bytes each protocol writes to the wire.
 
-    /tmp/dmx-venv/bin/python tests/test_dmx_offline.py
+    /tmp/dmx-venv/bin/python tests/desk_dmx_offline.py
 """
 import sys, os, types, tempfile
 
