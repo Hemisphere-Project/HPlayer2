@@ -3,6 +3,7 @@ from ..engine.conduite import Conduite
 
 import os
 import time
+import termios
 import serial
 from serial.tools import list_ports
 
@@ -141,7 +142,9 @@ class DmxInterface(BaseInterface):
 
         try:
             self._write(frame)
-        except (serial.SerialException, OSError):
+        except (serial.SerialException, OSError, termios.error):
+            # termios.error: pyserial's flush() is a raw tcdrain and raises it
+            # bare when the adapter vanishes mid-frame (seen on a USB renumber)
             self.log("broken link..")
             self._drop()
             return

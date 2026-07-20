@@ -243,6 +243,11 @@ def radar_schedule_logs(ev, *args):
 # evaluated against the player's wall-synced clock, so DMX follows loops/seeks/sync.
 dmx = hplayer.addInterface('dmx')
 
+# CoreS3 USB remote: same self-activating pattern — hotplug 303a:1001, NDJSON
+# state push + transport commands, hello-gated firmware auto-flash (a silent
+# device is never touched: virgin units take one manual first flash)
+teleco2 = hplayer.addInterface('teleco2')
+
 # persist dmx tunables edited from http2 (interface reads them live)
 for _k in ('dmx-protocol', 'dmx-fps', 'dmx-filter'):
 	hplayer.on('http2.' + _k)(lambda ev, *a, k=_k: hplayer.settings.set(k, a[0]))
