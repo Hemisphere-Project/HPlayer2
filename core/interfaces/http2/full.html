@@ -147,6 +147,87 @@
                 </div>
             </div>
 
+            <!-- Radar (biennale-2026-module-radar) -->
+            <div class="row mt-2" id="radar-panel">
+                <div class="col-12">
+                    <div class="card-header text-white bg-dark d-flex align-items-center">
+                        <span class="mr-auto">Radar</span>
+                        <span id="radar_state" class="badge badge-secondary">no adapter</span>
+                    </div>
+                    <div class="card-body row pt-3">
+                        <div class="col-lg-6 col-12">
+                            <div class="mb-2"><span class="badge badge-secondary mr-2">range (mm)</span><span id="radar_range_val"></span>
+                                <input type="range" id="radar_range" min="200" max="6000" step="100"></div>
+                            <div class="mb-2"><span class="badge badge-secondary mr-2">width &plusmn;x (mm)</span><span id="radar_width_val"></span>
+                                <input type="range" id="radar_width" min="100" max="3000" step="50"></div>
+                            <div class="mb-2"><span class="badge badge-secondary mr-2">enter (ms)</span><span id="radar_enter_val"></span>
+                                <input type="range" id="radar_enter" min="0" max="3000" step="50"></div>
+                            <div class="mb-2"><span class="badge badge-secondary mr-2">leave (ms)</span><span id="radar_leave_val"></span>
+                                <input type="range" id="radar_leave" min="0" max="10000" step="100"></div>
+                        </div>
+                        <div class="col-lg-6 col-12">
+                            <div class="mb-2 text-muted" style="font-size:.85em;">live</div>
+                            <div id="radar_live" class="p-3 text-center" style="border-radius:.3rem;background:#eee;">
+                                <div id="radar_presence" style="font-size:1.3em;font-weight:bold;">&mdash;</div>
+                                <div id="radar_detail" class="text-muted" style="font-size:.85em;">waiting for radar&hellip;</div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Schedule (biennale-2026-module-radar #t-005) -->
+            <div class="row mt-2" id="schedule-panel">
+                <div class="col-12">
+                    <div class="card-header text-white bg-dark d-flex align-items-center">
+                        <span class="mr-auto">Schedule</span>
+                        <span id="schedule_rtc" class="badge badge-secondary">RTC &mdash;</span>
+                    </div>
+                    <div class="card-body pt-3">
+                        <div class="mb-2">
+                            <label><input type="checkbox" id="schedule_enable"> restrict playback to a daily window</label>
+                        </div>
+                        <div id="schedule_ctrls" class="mb-2"><span class="badge badge-secondary mr-2">open</span>
+                            <input type="time" id="schedule_open">
+                            <span class="badge badge-secondary mr-2 ml-3">close</span>
+                            <input type="time" id="schedule_close"></div>
+                        <div id="schedule_status" class="mt-2">RTC: &mdash;</div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- DMX conduite (biennale-2026-module-dmx) -->
+            <div class="row mt-2" id="dmx-panel">
+                <div class="col-12">
+                    <div class="card-header text-white bg-dark d-flex align-items-center">
+                        <span class="mr-auto">DMX</span>
+                        <select id="dmx_protocol" class="custom-select custom-select-sm mr-2" style="width:auto;">
+                            <option value="open">Open DMX (FTDI)</option>
+                            <option value="pro">DMX USB Pro</option>
+                        </select>
+                        <span id="dmx_conn" class="badge badge-secondary">no adapter</span>
+                    </div>
+                    <div class="card-body row pt-3">
+                        <div class="col-lg-5 col-12">
+                            <div class="mb-2 text-muted" style="font-size:.85em;">live output</div>
+                            <div id="dmx_meter" class="d-flex align-items-end" style="height:80px;gap:2px;"></div>
+                        </div>
+                        <div class="col-lg-7 col-12">
+                            <div class="mb-1">
+                                <span class="badge badge-secondary mr-2">conduite</span>
+                                <span id="dmx_media" class="text-muted">—</span>
+                                <button type="button" class="btn btn-sm btn-outline-success float-right ml-1" id="dmx_save">save</button>
+                                <button type="button" class="btn btn-sm btn-outline-secondary float-right" id="dmx_reload">reload</button>
+                            </div>
+                            <textarea id="dmx_text" class="form-control" spellcheck="false" wrap="off"
+                                      style="height:150px;font-family:monospace;font-size:.85em;white-space:pre;"
+                                      placeholder="# 0:03  1@255  fade 3&#10;# def wash 1-4&#10;# 0:00 wash@0"></textarea>
+                            <div id="dmx_errors" class="mt-1 text-danger" style="font-size:.8em;white-space:pre;"></div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
             <hr />
 
 

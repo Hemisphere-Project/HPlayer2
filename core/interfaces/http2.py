@@ -364,9 +364,25 @@ class ThreadedHTTPServer(object):
 
         @socketio.on('fileslist')
         def fileslist_message():
+            def has_conduite(mediapath):
+                # a real conduite = the .dmx sidecar exists with at least one
+                # cue/def line (blank + # comment lines don't count)
+                side = os.path.splitext(mediapath)[0] + '.dmx'
+                try:
+                    with open(side) as fd:
+                        for line in fd:
+                            s = line.strip()
+                            if s and not s.startswith('#'):
+                                return True
+                except OSError:
+                    pass
+                return False
+
             def path_to_dict(path):
                 if os.path.basename(path).startswith('.'):
                     return None
+                if path.lower().endswith('.dmx'):
+                    return None                     # sidecar: reached via the media's DMX chip, not listed
                 d = {'text': os.path.basename(path),
                      'path': path}
                 if os.path.isdir(path):
@@ -377,6 +393,9 @@ class ThreadedHTTPServer(object):
                 else:
                     d['selectable'] = True
                     d['text'] += ' <div class="media-edit float-right">'
+                    # blue chip when a conduite exists, light chip when none yet (click to create)
+                    _dmxcls = 'badge-info' if has_conduite(path) else 'badge-light'
+                    d['text'] += '  <span class="badge '+_dmxcls+' ml-2"  onClick="dmxEdit(\''+path+'\'); event.stopPropagation();" title="edit DMX conduite">DMX</span>';
                     d['text'] += '  <span class="badge badge-success ml-2"  onClick="mediaDownload(\''+path+'\'); event.stopPropagation();"> <i class="fas fa-download"></i> </span>';
                     d['text'] += '  <span class="badge badge-warning ml-2"  onClick="mediaEdit(\''+path+'\'); event.stopPropagation();" ><i class="far fa-edit"></i> </span>'
                     d['text'] += '  <span class="badge badge-danger ml-2"  onClick="mediaRemove(\''+path+'\'); event.stopPropagation();" ><i class="far fa-trash-alt"></i> </span>';
