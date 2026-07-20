@@ -23,7 +23,7 @@ def test_get_ethmac_prefers_mac(monkeypatch):
 
 def test_get_rssi_without_iw(monkeypatch):
     monkeypatch.setattr(network.shutil, "which", lambda _: None)
-    assert network.get_rssi("wlan0") is None
+    assert network.get_rssi("wlan0") == 0
 
 
 def test_get_essid_without_iw(monkeypatch):

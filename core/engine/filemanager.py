@@ -19,6 +19,7 @@ class FileManager(Module):
         self.refreshTimer = None
         self.pathObservers = []
 
+
         # Defered update (file change might trigger multiple events)
         @self.on('file-changed')                # file changed on disk -> trigger full refresh
         def deferredUpdate(ev, *args):

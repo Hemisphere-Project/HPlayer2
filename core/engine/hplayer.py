@@ -589,6 +589,7 @@ class HPlayer2(Module):
         @module.on('playpausetext')
         def playtext(ev, *args):
             file = self.imgen.txt2img(*args)
+            if not file: return
             self.playlist.play(file, pause=pause)
             self.settings.set('loop', 1)
             

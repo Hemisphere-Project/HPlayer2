@@ -28,6 +28,7 @@ env/
 build/
 develop-eggs/
 dist/
+!extra/arduino/teleco2_cores3/dist/
 downloads/
 eggs/
 .eggs/

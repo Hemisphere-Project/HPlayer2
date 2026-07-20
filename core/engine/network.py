@@ -121,8 +121,10 @@ def get_essid(iface):
     return ""
 
 def get_rssi(iface):
+    # always returns an int percentage (0 = no signal / no wifi):
+    # display consumers (teleco2, profile status lines) do math on it
     if shutil.which("iw") is None:
-        return None
+        return 0
     try:
         command = [
             "iw",
@@ -131,21 +133,17 @@ def get_rssi(iface):
         ]
         output = subprocess.check_output(command, stderr=subprocess.DEVNULL)
     except (subprocess.CalledProcessError, FileNotFoundError):
-        return None
+        return 0
 
-    rssi = None
     for line in output.decode('ascii', errors='ignore').splitlines():
         if "signal:" in line:
             try:
                 rssi = int(line.split("signal:", 1)[-1].split()[0])
             except (ValueError, IndexError):
-                return None
+                return 0
             break
     else:
-        return None
-
-    if rssi is None:
-        return None
+        return 0
 
     minVal = -85
     maxVal = -40

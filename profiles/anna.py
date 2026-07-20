@@ -6,7 +6,7 @@ from threading import Timer
 
 # DIRECTORY / FILE
 profilename = os.path.basename(__file__).split('.')[0]
-base_path = ['/data/media']
+base_path = ['/data/media', '/data/usb']
 
 # INIT HPLAYER
 hplayer = HPlayer2(base_path, "/data/hplayer2-"+profilename+".cfg")
@@ -19,18 +19,22 @@ zyre		= hplayer.addInterface('zyre', 'wlan0')
 keypad 		= hplayer.addInterface('keypad')
 http		= hplayer.addInterface('http', 8037)
 keyboard 	= hplayer.addInterface('keyboard')
+teleco2		= hplayer.addInterface('teleco2')				# USB remote (M5Stack CoreS3)
 # http2		= hplayer.addInterface('http2', 8080)
 # osc		= hplayer.addInterface('osc', 4000).hostOut = '10.0.0.255'
 
-keypad.lcd.set_color( 100, 0, 100)
+if keypad.lcd: keypad.lcd.set_color( 100, 0, 100)
 keypad.draw( [".:: HPlayer2 ::.", "   Starting "+keypad.CHAR_LOVE+"   "] )
 time.sleep(2.0)  	# wait for USB to get ready
 
 # RSync USB (on start)
 #
-usbCount = len([name for name in os.listdir('/data/usb') if os.path.isfile( os.path.join('/data/usb', name) )])
-if usbCount > 0:
-    
+# usbCount = len([name for name in os.listdir('/data/usb') if os.path.isfile( os.path.join('/data/usb', name) )])
+# if usbCount > 0:
+
+usbSync = os.path.exists('/data/usb/sync') and os.path.isdir('/data/usb/sync')
+
+if usbSync:    
 	keypad.draw( [".:: HPlayer2 ::.", "    USB sync    "] )
     
 	class RepeatTimer(Timer):
@@ -42,6 +46,7 @@ if usbCount > 0:
 	def ledBLink():
 		global blink
 		blink = not blink
+		if not keypad.lcd: return
 		if blink: keypad.lcd.set_color( 100, 100, 0)
 		else: keypad.lcd.set_color( 100, 0, 0)
     
@@ -50,8 +55,8 @@ if usbCount > 0:
     
 	ellapsed = time.time()
  
-	hplayer.log("USB detected: syncing !")
-	cmd = "rsync -rtv --exclude=\".*\" --delete /data/usb/ "+base_path[0]
+	hplayer.log("USB sync folder detected: syncing !")
+	cmd = "rsync -tdv --delete --exclude='.*' --exclude='*/' --exclude='Thumbs.db' /data/usb/sync/ "+base_path[0]
 	hplayer.log(cmd)
 	os.system(cmd)
 
@@ -60,6 +65,8 @@ if usbCount > 0:
 		print("WAIT", 2-ellapsed)
 		time.sleep(2-ellapsed)
 	timer.cancel()
+else:
+	hplayer.log("No USB sync folder detected, skipping sync !")
 
 
 # No Loop, neither playlist
@@ -74,12 +81,19 @@ def masterLoop(ev, *args):
 	if masterLoopIndex > -1:
 		# broadcast('stop')
 		broadcast('playindex', masterLoopIndex)
+	elif hplayer.playlist.index() < hplayer.playlist.size() - 1:
+		track = hplayer.playlist.trackAtIndex(hplayer.playlist.index())
+		if not track or track.lower().find('_stop') < 0:
+			broadcast('playindex', hplayer.playlist.nextIndex())
 
 # Build playlist
 #
 @hplayer.files.on('file-changed')
+@hplayer.files.on('filelist-updated')
 def bulid_list(ev=None, *args):
-    hplayer.playlist.load(base_path[0])
+    # hplayer.playlist.load(base_path[0])
+    # LOAD ROOT FOLDER AS PLAYLIST
+	hplayer.playlist.load( hplayer.files.currentList() )
 bulid_list()
 
 
@@ -94,15 +108,7 @@ def play_indexed(ev, *args):
 def play_indexed(ev, *args):
 	print("HTTPD", ev, args)
 	if len(args) > 0:
-		index = int(args[0])
-		# Store master loop index
-		global masterLoopIndex
-		masterLoopIndex = -1
-		if hplayer.playlist.trackAtIndex(index).lower().find('_loop') > 0: 
-			masterLoopIndex = index
-		print(masterLoopIndex)
-		# Brodcast next track
-		broadcast('playindex', index)
+		go_playindex(int(args[0]))
 
 
 # Broadcast Order on OSC/Zyre to other Pi's
@@ -118,6 +124,46 @@ def broadcast(path, *args):
 @hplayer.on('zyre.unbuf_playindex')
 def unprep_play(ev, *args):
 	hplayer.playlist.emit('playindex', args[0] )
+
+
+# Transport actions, parc-wide (shared by keypad / http / teleco2 remote)
+#
+def go_prev():
+	global masterLoopIndex
+	masterLoopIndex = -1
+	if player.isPlaying() and player.position() > introDuration:
+		# Brodcast rewind current track
+		broadcast('playindex', hplayer.playlist.index())
+	else:
+		# Store master loop index
+		if hplayer.playlist.prevTrack().lower().find('_loop') > 0:
+			masterLoopIndex = hplayer.playlist.prevIndex()
+		# Brodcast prev track
+		broadcast('playindex', hplayer.playlist.prevIndex())
+
+def go_next():
+	global masterLoopIndex
+	masterLoopIndex = -1
+	# Store master loop index
+	if hplayer.playlist.nextTrack().lower().find('_loop') > 0:
+		masterLoopIndex = hplayer.playlist.nextIndex()
+	# Brodcast next track
+	broadcast('playindex', hplayer.playlist.nextIndex())
+
+def go_stop():
+	global masterLoopIndex
+	masterLoopIndex = -1
+	broadcast('stop')
+
+def go_playindex(index):
+	global masterLoopIndex
+	masterLoopIndex = -1
+	# Store master loop index
+	track = hplayer.playlist.trackAtIndex(index)
+	if track and track.lower().find('_loop') > 0:
+		masterLoopIndex = index
+	# Brodcast track
+	broadcast('playindex', index)
 
 
 # Keyboard
@@ -169,34 +215,16 @@ downHold = False
 @hplayer.on('keypad.left')
 @hplayer.on('keypad.left-hold')
 def prev(ev, *args):
-	if keylock: 
+	if keylock:
 		return lockAlert()
-	
-	global masterLoopIndex
-	masterLoopIndex = -1
+	go_prev()
 
-	if player.isPlaying() and player.position() > introDuration:
-			# Brodcast rewind current track
-			broadcast('playindex', hplayer.playlist.index())
-	else:	
-			# Store master loop index
-			if hplayer.playlist.prevTrack().lower().find('_loop') > 0: 
-				masterLoopIndex = hplayer.playlist.prevIndex()
-			# Brodcast prev track
-			broadcast('playindex', hplayer.playlist.prevIndex())
-        
 @hplayer.on('keypad.right')
 @hplayer.on('keypad.right-hold')
 def next(ev, *args):
-	if keylock: 
+	if keylock:
 		return lockAlert()
-	# Store master loop index
-	global masterLoopIndex
-	masterLoopIndex = -1
-	if hplayer.playlist.nextTrack().lower().find('_loop') > 0: 
-		masterLoopIndex = hplayer.playlist.nextIndex()
-	# Brodcast next track
-	broadcast('playindex', hplayer.playlist.nextIndex())
+	go_next()
 
 @hplayer.on('keypad.up')
 @hplayer.on('keypad.up-hold')
@@ -236,11 +264,9 @@ def releasedown(ev, *args):
     
 @hplayer.on('keypad.select')
 def down(ev, *args):
-	if keylock: 
+	if keylock:
 		return lockAlert()
-	global masterLoopIndex
-	masterLoopIndex = -1
-	broadcast('stop')
+	go_stop()
     
 @hplayer.on('keypad.select-hold')
 def select(ev, *args):
@@ -255,6 +281,40 @@ scrollSpeed = 3.08
 introDuration = 1.5
 blinkCounter = 0
 blinkSpeed = 10
+
+
+# USB remote (teleco2 / M5Stack CoreS3) — has its own screen lock, not gated by keylock
+#
+@hplayer.on('teleco2.remote-prev')
+def t2_prev(ev, *args):
+	go_prev()
+
+@hplayer.on('teleco2.remote-next')
+def t2_next(ev, *args):
+	go_next()
+
+@hplayer.on('teleco2.remote-stop')
+def t2_stop(ev, *args):
+	go_stop()
+
+@hplayer.on('teleco2.remote-playindex')
+def t2_playindex(ev, *args):
+	go_playindex(int(args[0]))
+
+@hplayer.on('teleco2.remote-playpause')
+def t2_playpause(ev, *args):
+	if player.isPlaying():
+		broadcast('resume' if player.isPaused() else 'pause')
+	else:
+		go_playindex(max(0, hplayer.playlist.index()))
+
+@hplayer.on('teleco2.remote-volup')
+def t2_volup(ev, *args):
+	broadcast('volume', hplayer.settings.get('volume')+1)
+
+@hplayer.on('teleco2.remote-voldown')
+def t2_voldown(ev, *args):
+	broadcast('volume', hplayer.settings.get('volume')-1)
 
 
 

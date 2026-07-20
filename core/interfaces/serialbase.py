@@ -1,9 +1,18 @@
 from .base import BaseInterface
 
 import time
-import serial
-from serial.tools import list_ports
 from queue import Queue, Empty, Full
+
+# pyserial is optional at import time so the module tree stays importable
+# on partial installs; instantiating any SerialBase interface requires it
+try:
+    import serial
+    from serial.tools import list_ports
+    _SERIAL_IMPORT_ERROR = None
+except ImportError as err:
+    serial = None
+    list_ports = None
+    _SERIAL_IMPORT_ERROR = err
 
 
 class SerialBase(BaseInterface):
@@ -18,6 +27,8 @@ class SerialBase(BaseInterface):
     """
 
     def  __init__(self, hplayer, name, filter="", baud=115200, dtrReset=False, maxRetry=0, scanInterval=3.0):
+        if _SERIAL_IMPORT_ERROR:
+            raise RuntimeError("pyserial is required for " + name) from _SERIAL_IMPORT_ERROR
         super().__init__(hplayer, name)
         self.filter = filter
         self.baud = baud
