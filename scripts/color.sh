@@ -15,6 +15,14 @@ set -eu
 COLOR="${1:-000000}"
 FBDEV="${2:-/dev/fb0}"
 
+# No framebuffer node on this platform (e.g. x86 DRM-only, like the N100
+# minis): nothing to black out. Exit 0 — the hplayer2 launcher calls this
+# under `set -e` and must not die on fbdev-less hardware.
+if [ ! -e "$FBDEV" ]; then
+	echo "Blackout: no framebuffer device $FBDEV — skipping" >&2
+	exit 0
+fi
+
 # Strip leading # from color if present
 COLOR="${COLOR#\#}"
 

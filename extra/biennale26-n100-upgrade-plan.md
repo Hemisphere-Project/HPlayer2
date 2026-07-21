@@ -179,6 +179,17 @@ Rollback if ever needed: `git checkout master` (268818c).
   (color.sh patched), journal clean after apt upgrade (kernel/mesa).
 - http2 :80 → 303 `/full`, UI loads, upload lands in `/data/var/tmp`.
 - Media plays from `/data/media`; **gapless loop across EOF**; images 15s.
+- **Play/loop matrix (Thomas, 2026-07-21)** — all four cells must
+  auto-play on boot and auto-loop indefinitely:
+  | | single media | multi-media playlist |
+  |---|---|---|
+  | **SOLO** | auto-play + loop | auto-play + sequential loop |
+  | **SYNC/WALL** | master-driven synced play + loop | master-driven synced playlist + loop |
+- **audiohub contract (Thomas, 2026-07-21)**: on the RPi side of the
+  mixed test, confirm the new audiohub is detected (`/etc/audiohub.conf`
+  + `/data` override) and the **latency compensation is calculated as
+  designed**; on the N100 (no audiohub.conf) confirm HPlayer2 stays on
+  generic ALSA with no hub logic engaged.
 - `uv run python -c "import czmq, zyre"` ✓; zeroconf announce visible.
 - webconf (Node) reachable; **SYNC page flips markers correctly** (toggle
   slave → verify `/boot/wifi/eth0-sync-STA.nmconnection` + setnet loads
