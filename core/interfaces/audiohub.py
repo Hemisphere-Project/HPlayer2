@@ -91,6 +91,9 @@ class AudiohubInterface(BaseInterface):
 
     # -- probes (overridable in tests) ---------------------------------------
 
+    def _readConf(self):
+        return read_audio_conf()
+
     def _read(self, path):
         try:
             with open(path) as fd:
@@ -134,6 +137,13 @@ class AudiohubInterface(BaseInterface):
             self.stopped.wait(self.SCAN_PERIOD)
 
     def _tick(self):
+        # live config: `audiohub set` (or any app writing /data/audiohub.conf)
+        # must not need an HPlayer2 restart — latency re-compensates below
+        conf = self._readConf()
+        if conf != self.conf and conf is not None:
+            self.log('platform audio config changed:', conf)
+            self.conf = conf
+
         # USB card presence (plug/unplug edges)
         card = self._scanUsb()
         if self._card and (not card or card['id'] != self._card['id']):

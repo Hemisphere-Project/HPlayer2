@@ -172,6 +172,9 @@ class FixturedHub(AudiohubInterface):
     def _read(self, path):
         return self.files.get(path, '')
 
+    def _readConf(self):
+        return self.conf
+
     def _unitStates(self):
         return dict(self.units)
 
@@ -251,6 +254,15 @@ def test_status_resent_for_late_clients():
     for _ in range(hub.RESEND_EVERY + 1):
         hub._pushStatus()
     assert len(hub.hplayer.http2.sent) >= 2   # unchanged status still re-pushed
+
+
+def test_live_config_change_recompensates():
+    hub = FixturedHub()
+    hub._tick()
+    assert hub.hplayer.player.delays == [-0.03]
+    hub.conf = {'graph': 'v2', 'latency_us': 25000}   # as if `audiohub set` ran
+    hub._tick()
+    assert hub.hplayer.player.delays[-1] == -0.025
 
 
 # ---------------------------------------------------------------------------
