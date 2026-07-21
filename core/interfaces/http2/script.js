@@ -322,28 +322,36 @@ $(document).ready(function() {
         else trigger('audiomode', 'mono');
     });
 
-    // AUDIO OUTPUT STATUS (always-on graph: every present output plays;
-    // chips reflect pipeline health pushed by the audiohub interface)
+    // AUDIO OUTPUT STATUS — pushed by the audiohub monitor.
+    // 'hub' mode (dedicated platform, Pi-tools plumbing): every present
+    // output plays, chips reflect per-forwarder health, red = mpv plays but
+    // that output is silent. 'default' mode (generic ALSA): neutral chips.
     function audioChip(sel, state, html) {
         var cls = { 'on': 'badge-success', 'active': 'badge-success',
                     'absent': 'badge-light', 'off': 'badge-light',
-                    'error': 'badge-danger', 'legacy': 'badge-secondary'
+                    'error': 'badge-danger', 'default': 'badge-secondary',
+                    'legacy': 'badge-secondary'
                   }[state] || 'badge-secondary';
         $(sel).removeClass('badge-success badge-light badge-danger badge-secondary')
               .addClass(cls);
         if (html) $(sel).html(html);
     }
     socket.on('audio-status', function(msg) {
+        var hub = (msg['mode'] == 'hub');
+        var pipe = hub ? 'audio hub ' + (msg['graph'] || '?')
+                         + ' · ' + (msg['latency-ms'] || '?') + 'ms'
+                       : 'default ALSA (no hub)';
         audioChip('#jack_status', msg['jack']);
         audioChip('#hdmi_status', msg['hdmi']);
         var usb = '<i class="fab fa-usb"></i> USB';
-        if (msg['usb'] == 'active' && msg['usb-channels'])
+        if (hub && msg['usb'] == 'active' && msg['usb-channels'])
             usb += ' ' + msg['usb-channels'] + 'ch';
         if (msg['usb'] == 'error') usb += ' &#9888;';
         audioChip('#usb_status', msg['usb'], usb);
-        $('#usb_status').attr('title', 'USB audio mirror'
-            + (msg['usb-card'] ? ' — ' + msg['usb-card'] : '')
-            + (msg['usb-xruns'] ? ' — ' + msg['usb-xruns'] + ' xruns' : ''));
+        $('#jack_status').attr('title', 'internal jack — ' + pipe);
+        $('#hdmi_status').attr('title', 'HDMI audio — ' + pipe);
+        $('#usb_status').attr('title', 'USB audio — ' + pipe
+            + (hub && msg['usb-card'] ? ' — ' + msg['usb-card'] : ''));
     });
 
     // REBOOT

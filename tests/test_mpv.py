@@ -101,3 +101,18 @@ def test_pan_filter_multichannel_unity_passthrough():
 
 def test_pan_filter_multichannel_balance_refused():
     assert mpv_module.build_pan_filter([50, 100], 6) is None
+
+
+def test_hub_platform_selects_hplayer_device(monkeypatch):
+    monkeypatch.setattr(mpv_module, 'read_audio_conf',
+                        lambda path=None: {'graph': 'v2', 'latency_us': 30000})
+    player = MpvPlayer(DummyHPlayer(), "test")
+    assert '--audio-device=alsa/hplayer' in player._mpv_command
+    assert '--audio-channels=auto' in player._mpv_command
+
+
+def test_generic_platform_keeps_default_alsa(monkeypatch):
+    monkeypatch.setattr(mpv_module, 'read_audio_conf', lambda path=None: None)
+    player = MpvPlayer(DummyHPlayer(), "test")
+    assert '--audio-device=alsa/hplayer' not in player._mpv_command
+    assert '--ao=alsa' in player._mpv_command

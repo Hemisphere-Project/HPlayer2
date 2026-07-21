@@ -46,6 +46,13 @@ class Drifter():
         self.doLog = True
         self.onStalled = None   # optional hook: player not playing after grace (nowde plugs pattern-replay here)
 
+        # Chase lead (s): the player timeline runs this far AHEAD of the shared
+        # clock. Used with the audio hub: timeline leads by the pipeline
+        # latency while mpv delays video by the same amount, so both the
+        # frames on screen and the audio at the speakers land exactly on the
+        # wallclock — mixed fleets (hub and non-hub players) stay aligned.
+        self.offset = 0.0
+
     # Reset servo state + grace period: call on every new play
     def arm(self):
         self.kickStart = self.kickStartGrace
@@ -69,6 +76,8 @@ class Drifter():
     # duration (s): enables wrap arithmetic on looping media (0 = unknown).
     # Returns telemetry dict, or None if the tick was dropped.
     def tick(self, clock, duration=0):
+
+        clock = clock + self.offset
 
         pos = self.player.position()
 

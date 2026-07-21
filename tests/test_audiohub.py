@@ -1,22 +1,19 @@
-"""Audiohub: /proc/asound parsing, egress choice, and forwarder supervision.
+"""Audiohub monitor: platform contract parsing, /proc/asound parsing, and the
+read-only supervision of the Pi-tools forwarder units.
 
-The supervision tests drive _tick() directly (the loop body is sleep-free) with
-dict-backed /proc fixtures and stub forwarder processes, so the whole
-jack/hdmi/USB supervision state machine runs in milliseconds with zero audio
-hardware.
+The monitor tests drive _tick() directly (the loop body is sleep-free) on
+dict-backed /proc fixtures and stubbed systemd states — zero audio hardware,
+zero processes.
 """
 
-import subprocess
-import sys
 import time
 
-import core.interfaces.audiohub as audiohub_module
+from core.engine.audiohw import read_audio_conf
+from core.engine.drifter import Drifter
 from core.interfaces.audiohub import (
     AudiohubInterface,
-    build_alsaloop_cmd,
     parse_cards,
     parse_stream_playback_channels,
-    pick_usb_egress,
 )
 
 
@@ -31,11 +28,11 @@ CARDS_NO_USB = """\
 
 CARDS_USB = CARDS_NO_USB + """\
  3 [Device         ]: USB-Audio - USB Audio Device
-                      C-Media Electronics Inc. USB Audio Device at usb-3f980000.usb-1.2
+                      C-Media Electronics Inc. USB Audio Device at usb-3f980000.usb-1.1.3
 """
 
 STREAM0_STEREO = """\
-C-Media Electronics Inc. USB Audio Device at usb-3f980000.usb-1.2, full speed : USB Audio
+C-Media Electronics Inc. USB Audio Device, full speed : USB Audio
 
 Playback:
   Status: Stop
@@ -43,7 +40,6 @@ Playback:
     Altset 1
     Format: S16_LE
     Channels: 2
-    Endpoint: 0x01 (1 OUT) (ADAPTIVE)
     Rates: 44100, 48000
 
 Capture:
@@ -58,7 +54,6 @@ STREAM0_MULTI = """\
 8ch USB interface : USB Audio
 
 Playback:
-  Status: Stop
   Interface 1
     Altset 1
     Format: S16_LE
@@ -73,14 +68,34 @@ Playback:
 Capture:
   Interface 2
     Altset 1
-    Format: S16_LE
     Channels: 2
-    Rates: 48000
 """
 
 
 # ---------------------------------------------------------------------------
-# pure helpers
+# platform contract (core/engine/audiohw.py)
+# ---------------------------------------------------------------------------
+
+def test_read_audio_conf_missing(tmp_path):
+    assert read_audio_conf(str(tmp_path / 'nope.conf')) is None
+
+
+def test_read_audio_conf(tmp_path):
+    p = tmp_path / 'hplayer-audio.conf'
+    p.write_text("# comment\ngraph=v2\nlatency_us=30000\n\njunk line\n")
+    assert read_audio_conf(str(p)) == {'graph': 'v2', 'latency_us': 30000}
+
+
+def test_read_audio_conf_defaults(tmp_path):
+    p = tmp_path / 'hplayer-audio.conf'
+    p.write_text("graph=v3\nlatency_us=notanumber\n")
+    conf = read_audio_conf(str(p))
+    assert conf['graph'] == 'v3'
+    assert conf['latency_us'] == 30000      # unparsable value -> default
+
+
+# ---------------------------------------------------------------------------
+# /proc/asound parsing
 # ---------------------------------------------------------------------------
 
 def test_parse_cards():
@@ -95,43 +110,17 @@ def test_parse_cards_empty():
     assert parse_cards('--- no soundcards ---') == []
 
 
-def test_parse_stream_channels_stereo():
-    # the Capture 1ch line must not leak into the playback count
+def test_parse_stream_channels():
     assert parse_stream_playback_channels(STREAM0_STEREO) == 2
-
-
-def test_parse_stream_channels_multi():
-    # highest playback altset wins
     assert parse_stream_playback_channels(STREAM0_MULTI) == 8
 
 
-def test_pick_usb_egress():
-    assert pick_usb_egress('Device', 2) == 'usbout2:CARD=Device'
-    assert pick_usb_egress('Device', 6) == 'usbout2:CARD=Device'   # static routes: 2 or 8 only
-    assert pick_usb_egress('UMC1820', 10) == 'usbout8:CARD=UMC1820'
-
-
-def test_build_alsaloop_cmd():
-    cmd = build_alsaloop_cmd('usbout2:CARD=Device', 8000,
-                             chrt='/usr/bin/chrt', alsaloop='/usr/bin/alsaloop')
-    assert cmd[:3] == ['/usr/bin/chrt', '-f', '10']
-    assert '/usr/bin/alsaloop' in cmd
-    assert cmd[cmd.index('-C') + 1] == 'aloopcap'
-    assert cmd[cmd.index('-P') + 1] == 'usbout2:CARD=Device'
-    assert cmd[cmd.index('-t') + 1] == '8000'
-    # no chrt available: plain spawn; capture side overridable (desk harness)
-    plain = build_alsaloop_cmd('null', 30000, capture='hw:Loopback,1,0')
-    assert plain[0] == 'alsaloop'
-    assert plain[plain.index('-C') + 1] == 'hw:Loopback,1,0'
-
-
 # ---------------------------------------------------------------------------
-# supervision state machine
+# monitor state machine
 # ---------------------------------------------------------------------------
 
 class StubSettings:
-    def __init__(self):
-        self._settings = {}
+    _settings = {}
 
     def get(self, key):
         return self._settings.get(key)
@@ -140,59 +129,54 @@ class StubSettings:
 class StubPlayer:
     def __init__(self):
         self.delays = []
-        self._ready = True
 
     def status(self, entry=None):
-        return self._ready if entry == 'isReady' else None
+        return True if entry == 'isReady' else None
 
     def _applyAudioDelay(self, seconds):
         self.delays.append(seconds)
+
+
+class StubHttp2:
+    def __init__(self):
+        self.sent = []
+
+    def send(self, event, message):
+        self.sent.append((event, message))
 
 
 class StubHPlayer:
     def __init__(self):
         self.settings = StubSettings()
         self.player = StubPlayer()
+        self.http2 = StubHttp2()
 
     def autoBind(self, module):
         return None
 
     def interface(self, name):
-        return None
+        return self.http2 if name == 'http2' else None
 
     def players(self):
         return [self.player]
 
 
 class FixturedHub(AudiohubInterface):
-    """Probe /proc through a dict, spawn long-sleep stub processes."""
-
-    def __init__(self):
+    def __init__(self, conf={'graph': 'v2', 'latency_us': 30000}):
         super().__init__(StubHPlayer())
-        self.files = {'/etc/asound.conf': 'pcm.hplayer {}',
-                      '/proc/asound/cards': CARDS_NO_USB}
+        self.conf = conf
+        self.files = {'/proc/asound/cards': CARDS_NO_USB}
+        self.units = {'jack': 'active', 'hdmi': 'active', 'usb': 'active'}
         self.events = []
 
     def _read(self, path):
         return self.files.get(path, '')
 
+    def _unitStates(self):
+        return dict(self.units)
+
     def emit(self, event, *args):
         self.events.append(event)
-
-    def _spawn(self, fwd):
-        fwd.proc = subprocess.Popen([sys.executable, '-c', 'import time; time.sleep(60)'])
-
-
-def make_hub():
-    hub = FixturedHub()
-    hub._graph = hub._checkGraph()
-    assert hub._graph
-    return hub
-
-
-def teardown(hub):
-    for fwd in hub._fwd.values():
-        hub._kill(fwd)
 
 
 def plug(hub, stream0=STREAM0_STEREO, index=3):
@@ -200,126 +184,112 @@ def plug(hub, stream0=STREAM0_STEREO, index=3):
     hub.files['/proc/asound/card%d/stream0' % index] = stream0
 
 
-def test_static_sinks_mirror_from_first_tick():
-    hub = make_hub()
-    hub._tick()
-    assert hub._fwd['jack'].state() == 'active'
-    assert hub._fwd['hdmi'].state() == 'active'
-    assert hub._usbState() == 'absent'
-    assert 'usb' not in hub._fwd
-    teardown(hub)
+def test_generic_platform_status():
+    hub = FixturedHub(conf=None)
+    assert hub.latency() == 0.0
+    hub._pushStatus()
+    ev, msg = hub.hplayer.http2.sent[-1]
+    assert ev == 'audio-status'
+    assert msg['mode'] == 'default'
+    assert msg['jack'] == 'default'
 
 
-def test_plug_spawns_and_unplug_kills():
-    hub = make_hub()
+def test_hub_platform_healthy():
+    hub = FixturedHub()
+    assert hub.latency() == 0.03
     hub._tick()
-    plug(hub)
-    hub._tick()
-    assert hub._usbState() == 'active'
-    assert hub.events == ['connected']
-    proc = hub._fwd['usb'].proc
-    hub.files['/proc/asound/cards'] = CARDS_NO_USB
-    hub._tick()
-    assert hub._usbState() == 'absent'
-    assert hub.events == ['connected', 'disconnected']
-    assert proc.poll() is not None
-    assert 'usb' not in hub._fwd
-    teardown(hub)
-
-
-def test_multichannel_card_picks_usbout8():
-    hub = make_hub()
-    plug(hub, stream0=STREAM0_MULTI)
-    hub._tick()
-    assert hub._fwd['usb'].device == 'usbout8:CARD=Device'
-    teardown(hub)
-
-
-def test_forwarder_death_backs_off_then_errors():
-    hub = make_hub()
-    plug(hub)
-    hub._tick()
-    fwd = hub._fwd['usb']
-    for _ in range(hub.ERROR_AFTER):
-        fwd.proc.kill()
-        fwd.proc.wait()
-        hub._tick()                      # reap + schedule respawn
-        fwd.nextSpawn = 0                # collapse the backoff for the test
-        hub._tick()                      # respawn
-    assert fwd.deaths == hub.ERROR_AFTER
-    assert 'error' in hub.events
-    # jack/hdmi are untouched by the usb crash-loop
-    assert hub._fwd['jack'].state() == 'active'
-    assert hub._fwd['hdmi'].state() == 'active'
-    # a replug resets the error history (fresh forwarder object)
-    hub.files['/proc/asound/cards'] = CARDS_NO_USB
-    hub._tick()
-    plug(hub)
-    hub._tick()
-    assert hub._usbState() == 'active'
-    assert hub._fwd['usb'].deaths == 0
-    teardown(hub)
-
-
-def test_static_sink_crash_is_independent():
-    hub = make_hub()
-    hub._tick()
-    jack = hub._fwd['jack']
-    for _ in range(hub.ERROR_AFTER):
-        jack.proc.kill()
-        jack.proc.wait()
-        hub._tick()
-        jack.nextSpawn = 0
-        hub._tick()
-    assert jack.deaths == hub.ERROR_AFTER
-    assert 'error' in hub.events
-    assert hub._fwd['hdmi'].state() == 'active'
-    teardown(hub)
-
-
-def test_stable_forwarder_heals_error_history():
-    hub = make_hub()
-    hub._tick()
-    jack = hub._fwd['jack']
-    jack.proc.kill()
-    jack.proc.wait()
-    hub._tick()
-    jack.nextSpawn = 0
-    hub._tick()
-    assert jack.deaths == 1
-    jack.spawnTime = time.monotonic() - hub.HEAL_AFTER - 1
-    hub._tick()
-    assert jack.deaths == 0
-    assert jack.state() == 'active'
-    teardown(hub)
-
-
-def test_uniform_latency_and_mpv_compensation():
-    hub = make_hub()
-    hub._tick()
-    # every forwarder shares the one configured target
-    assert hub._fwd['jack'].tlatency() == hub._fwd['hdmi'].tlatency() == 30000
-    plug(hub)
-    hub._tick()
-    assert hub._fwd['usb'].tlatency() == 30000
-    # mpv got the compensation once, as -tlatency in seconds
+    hub._pushStatus()
+    _, msg = hub.hplayer.http2.sent[-1]
+    assert msg['mode'] == 'hub'
+    assert msg['graph'] == 'v2'
+    assert msg['latency-ms'] == 30.0
+    assert msg['jack'] == 'active'
+    assert msg['usb'] == 'absent'       # unit waits, no card plugged
+    # compensation pushed to the player
     assert hub.hplayer.player.delays == [-0.03]
-    # a setting change re-applies; below the bcm floor it clamps
-    hub.hplayer.settings._settings['audiohub-tlatency'] = 8000
+
+
+def test_usb_plug_unplug_edges():
+    hub = FixturedHub()
     hub._tick()
-    assert hub._fwd['usb'].tlatency() == hub.TLATENCY_FLOOR
-    assert hub.hplayer.player.delays[-1] == -0.02
-    teardown(hub)
-
-
-def test_disable_setting_stops_usb_mirror_only():
-    hub = make_hub()
     plug(hub)
     hub._tick()
-    assert hub._usbState() == 'active'
-    hub.hplayer.settings._settings['audiohub-usb'] = False
+    assert hub.events == ['connected']
+    hub._pushStatus()
+    _, msg = hub.hplayer.http2.sent[-1]
+    assert msg['usb'] == 'active'
+    assert msg['usb-card'] == 'Device'
+    assert msg['usb-channels'] == 2
+    hub.files['/proc/asound/cards'] = CARDS_NO_USB
     hub._tick()
-    assert hub._usbState() == 'off'
-    assert 'usb' not in hub._fwd
-    assert hub._fwd['jack'].state() == 'active'
-    teardown(hub)
+    assert hub.events == ['connected', 'disconnected']
+
+
+def test_failed_unit_reports_error_once():
+    hub = FixturedHub()
+    hub._tick()
+    hub.units['hdmi'] = 'failed'
+    hub._tick()
+    hub._tick()                          # edge only: no repeat event
+    assert hub.events.count('error') == 1
+    hub._pushStatus()
+    _, msg = hub.hplayer.http2.sent[-1]
+    assert msg['hdmi'] == 'error'
+    assert msg['jack'] == 'active'
+
+
+def test_compensate_veto():
+    hub = FixturedHub()
+    hub.compensate = False               # profile: start-sync keeps visual priority
+    hub._tick()
+    assert hub.hplayer.player.delays == [0.0]
+
+
+def test_status_resent_for_late_clients():
+    hub = FixturedHub()
+    hub._tick()
+    for _ in range(hub.RESEND_EVERY + 1):
+        hub._pushStatus()
+    assert len(hub.hplayer.http2.sent) >= 2   # unchanged status still re-pushed
+
+
+# ---------------------------------------------------------------------------
+# drifter chase lead
+# ---------------------------------------------------------------------------
+
+class DrifterStubPlayer:
+    def __init__(self, pos):
+        self._pos = pos
+        self.speeds = []
+
+    def position(self):
+        self._pos += 0.001               # must move or the tick is dropped
+        return self._pos
+
+    def isPaused(self):
+        return False
+
+    def isPlaying(self):
+        return True
+
+    def resume(self):
+        pass
+
+    def speed(self, s):
+        self.speeds.append(s)
+
+    def seekTo(self, ms):
+        pass
+
+
+def test_drifter_offset_leads_the_clock():
+    d = Drifter(DrifterStubPlayer(10.0), log=lambda *a: None)
+    d.arm()
+    d.kickStart = 0
+    base = d.tick(10.0)['diff']
+    d2 = Drifter(DrifterStubPlayer(10.0), log=lambda *a: None)
+    d2.offset = 0.03
+    d2.arm()
+    d2.kickStart = 0
+    lead = d2.tick(10.0)['diff']
+    assert abs((lead - base) - 0.03) < 1e-9

@@ -1,11 +1,9 @@
 from .base import BaseInterface
+from ..engine.audiohw import read_audio_conf
 
-import os
 import re
 import shutil
 import subprocess
-import threading
-import time
 
 
 # ---------------------------------------------------------------------------
@@ -43,128 +41,52 @@ def parse_stream_playback_channels(text):
     return channels
 
 
-def pick_usb_egress(card_id, channels):
-    # usbout2/usbout8 are the @args PCMs of asound.conf-rpi3-hub; cards with
-    # 3..7 outs fall back to stereo for now (route tables are static per width)
-    if channels >= 8:
-        return 'usbout8:CARD=' + card_id
-    return 'usbout2:CARD=' + card_id
-
-
-def build_alsaloop_cmd(device, tlatency_us, chrt=None, alsaloop='alsaloop',
-                       capture='aloopcap'):
-    cmd = []
-    if chrt:
-        cmd += [chrt, '-f', '10']
-    cmd += [alsaloop,
-            '-C', capture,
-            '-P', device,
-            '-r', '48000',
-            '-f', 'S16_LE',
-            '-c', '8',
-            '-t', str(int(tlatency_us)),
-            '-S', 'auto']
-    return cmd
-
-
-class Forwarder(object):
-    """Supervision state of one alsaloop (aloopcap -> a sink PCM)."""
-
-    def __init__(self, name, device, tlatency):
-        self.name = name
-        self.device = device        # egress PCM, or a callable -> egress PCM
-        self.tlatency = tlatency    # µs, or a callable -> µs
-        self.proc = None
-        self.deaths = 0             # exits since this sink appeared
-        self.nextSpawn = 0          # monotonic gate for respawn backoff
-        self.spawnTime = 0          # monotonic time of the last spawn
-        self.xruns = 0
-
-    def alive(self):
-        return self.proc is not None and self.proc.poll() is None
-
-    def state(self):
-        if self.alive():
-            return 'active'
-        return 'error' if self.deaths else 'off'
-
-
 # ---------------------------------------------------------------------------
 # interface
 # ---------------------------------------------------------------------------
 
 class AudiohubInterface(BaseInterface):
     """
-    Watchdog of the always-on audio hub (scripts/asound/asound.conf-rpi3-hub).
+    Read-only monitor of the platform audio plumbing.
 
-    mpv only ever plays the snd-aloop loopback; every physical output is an
-    alsaloop forwarder reading the shared dsnoop capture: jack and HDMI always
-    (spawned here at start), a USB card when /proc/asound shows one. Each
-    forwarder is supervised independently — crash backoff, error state after
-    repeated deaths, self-healing once it holds — so one bad output never
-    touches the others, and playback itself never blocks on audio hardware.
+    The plumbing itself lives in Pi-tools (hplayer-audio module): the ALSA hub
+    graph, snd-aloop, and the hplayer-audio@{jack,hdmi,usb} forwarder units.
+    This interface only OBSERVES — /etc/hplayer-audio.conf for the contract,
+    systemd for forwarder health, /proc/asound for the USB card — and:
 
-    ONE latency for every output, compensated in mpv: all forwarders run the
-    same target ('audiohub-tlatency', default 30ms — the bcm2835 sinks underrun
-    below ~20ms, VCHIQ consumes in ~10ms quanta; the floor is clamped), so the
-    audio pipeline delay is a config constant independent of what is plugged,
-    and the hub pushes mpv's audio-delay to -tlatency so video waits for the
-    audio to reach the speakers. Outputs match within a few ms (device-internal
-    FIFOs differ), and A/V sync is restored fleet-wide with zero per-setup
-    tuning.
+      - pushes per-output status chips to http2 ('audio-status' event);
+      - applies the player compensation (mpv audio-delay = -latency) so video
+        waits for the audio pipeline. Profiles can veto it (start-sync fleets
+        keep visual priority) by setting `audiohub.compensate = False`; the
+        WALL-mode drifter lead is the profile's side of the deal.
+
+    Without the contract file the platform is generic: no compensation, no
+    monitoring, chips report 'default' — HPlayer2 never touches audio config.
 
     Emits (edges only): audiohub.connected <card> <ch>, audiohub.disconnected,
-    audiohub.error <sink> <detail>. Pushes an 'audio-status' dict to http2 on
-    every change — the UI shows indicators, not selectors, and 'error' means
-    exactly the silent-failure case: mpv plays, that output doesn't.
+    audiohub.error <sink>. 'error' on a chip means the silent-failure case:
+    mpv plays, that output doesn't.
     """
 
-    DEFAULTS = {
-        'audiohub-usb':      True,     # live kill-switch for the USB mirror
-        'audiohub-tlatency': 30000,    # alsaloop target for ALL outputs, µs
-    }
-
-    TLATENCY_FLOOR = 20000    # bcm2835 sinks underrun below this (bench-measured)
-
-    SCAN_PERIOD = 1.0      # s
-    ERROR_AFTER = 3        # forwarder deaths (same sink) before 'error' is emitted
-    RETRY_BACKOFF = [1, 2, 5, 10]   # s between respawns; last value repeats
-    HEAL_AFTER = 30        # s a respawned forwarder must hold to clear its history
+    SCAN_PERIOD = 2.0      # s
+    RESEND_EVERY = 5       # ticks: re-push unchanged status for late web clients
+    UNITS = {'jack': 'hplayer-audio@jack.service',
+             'hdmi': 'hplayer-audio@hdmi.service',
+             'usb':  'hplayer-audio@usb.service'}
 
     def __init__(self, hplayer):
         super().__init__(hplayer, "AudioHub", "cyan")
-        for k, v in self.DEFAULTS.items():
-            hplayer.settings._settings.setdefault(k, v)
+        self.compensate = True      # profile veto: start-sync keeps visual priority
+        self.conf = read_audio_conf()
+        self._card = None           # USB card currently seen
+        self._states = {}           # sink -> unit state, for error edges
+        self._lastSent = None
+        self._resend = 0
+        self._appliedDelay = None
 
-        self._graph = None          # asound.conf carries the hub graph ?
-        self._card = None           # {'id', 'index', 'channels'} of the USB card
-        self._fwd = {
-            'jack': Forwarder('jack', 'jackout', self._tlat),
-            'hdmi': Forwarder('hdmi', 'hdmiout', self._tlat),
-        }
-        self._lastSent = None       # last status pushed to http2
-        self._appliedDelay = None   # audio-delay currently set on the players
-
-    # -- config -------------------------------------------------------------
-
-    def _enabled(self):
-        try:
-            return bool(self.hplayer.settings.get('audiohub-usb'))
-        except Exception:
-            return True
-
-    def _tlat(self):
-        try:
-            val = int(self.hplayer.settings.get('audiohub-tlatency'))
-        except (TypeError, ValueError):
-            val = self.DEFAULTS['audiohub-tlatency']
-        if val < self.TLATENCY_FLOOR:
-            if getattr(self, '_tlatWarned', None) != val:
-                self._tlatWarned = val
-                self.log('audiohub-tlatency', val, 'below the bcm2835 floor, clamping to',
-                         self.TLATENCY_FLOOR)
-            val = self.TLATENCY_FLOOR
-        return val
+    def latency(self):
+        """Pipeline latency in seconds (0.0 on a generic platform)."""
+        return self.conf['latency_us'] / 1e6 if self.conf else 0.0
 
     # -- probes (overridable in tests) ---------------------------------------
 
@@ -175,17 +97,16 @@ class AudiohubInterface(BaseInterface):
         except OSError:
             return ''
 
-    def _checkGraph(self):
-        return 'pcm.hplayer' in self._read('/etc/asound.conf')
-
-    def _ensureAloop(self):
-        if any(c['id'] == 'Loopback' for c in parse_cards(self._read('/proc/asound/cards'))):
-            return True
-        modprobe = shutil.which('modprobe')
-        if modprobe:
-            subprocess.run([modprobe, 'snd-aloop'], check=False)
-            return any(c['id'] == 'Loopback' for c in parse_cards(self._read('/proc/asound/cards')))
-        return False
+    def _unitStates(self):
+        """sink -> systemd ActiveState ('active', 'failed', 'inactive', ...)."""
+        systemctl = shutil.which('systemctl')
+        if not systemctl:
+            return {s: 'unknown' for s in self.UNITS}
+        out = subprocess.run([systemctl, 'is-active'] + list(self.UNITS.values()),
+                             capture_output=True, universal_newlines=True).stdout
+        lines = out.split()
+        return {sink: (lines[i] if i < len(lines) else 'unknown')
+                for i, sink in enumerate(self.UNITS)}
 
     def _scanUsb(self):
         for c in parse_cards(self._read('/proc/asound/cards')):
@@ -195,141 +116,45 @@ class AudiohubInterface(BaseInterface):
                 return c
         return None
 
-    # -- forwarder lifecycle -------------------------------------------------
-
-    def _spawn(self, fwd):
-        alsaloop = shutil.which('alsaloop')
-        if not alsaloop:
-            self.log('alsaloop not found: audio outputs unavailable')
-            fwd.deaths = self.ERROR_AFTER      # report 'error', don't retry-spam
-            return
-        device = fwd.device() if callable(fwd.device) else fwd.device
-        tlat = fwd.tlatency() if callable(fwd.tlatency) else fwd.tlatency
-        cmd = build_alsaloop_cmd(device, tlat, chrt=shutil.which('chrt'), alsaloop=alsaloop)
-        self.log(fwd.name, '->', device, '(%dms)' % (tlat / 1000), ':', ' '.join(cmd))
-        fwd.proc = subprocess.Popen(cmd, stdout=subprocess.DEVNULL,
-                                    stderr=subprocess.PIPE, universal_newlines=True)
-        threading.Thread(target=self._watchStderr, args=(fwd, fwd.proc), daemon=True).start()
-
-    def _watchStderr(self, fwd, proc):
-        for line in proc.stderr:
-            line = line.strip()
-            if not line:
-                continue
-            if 'xrun' in line.lower() or 'underrun' in line.lower():
-                fwd.xruns += 1
-            else:
-                self.log('alsaloop[%s]:' % fwd.name, line)
-
-    def _kill(self, fwd):
-        if fwd.proc:
-            fwd.proc.terminate()
-            try:
-                fwd.proc.wait(timeout=2)
-            except subprocess.TimeoutExpired:
-                fwd.proc.kill()
-            fwd.proc = None
-
-    def _tickForwarder(self, fwd):
-        # a forwarder that holds redeems its crash history,
-        # a dead one is reaped and respawned with backoff
-        if fwd.alive():
-            if fwd.deaths and time.monotonic() - fwd.spawnTime > self.HEAL_AFTER:
-                self.log(fwd.name, 'forwarder stable again')
-                fwd.deaths = 0
-            return
-
-        if fwd.proc is not None:            # reap
-            code = fwd.proc.poll()
-            fwd.proc = None
-            fwd.deaths += 1
-            backoff = self.RETRY_BACKOFF[min(fwd.deaths, len(self.RETRY_BACKOFF)) - 1]
-            fwd.nextSpawn = time.monotonic() + backoff
-            self.log(fwd.name, 'forwarder died (exit %s), retry in %ds' % (code, backoff))
-            if fwd.deaths == self.ERROR_AFTER:
-                self.emit('error', fwd.name, 'forwarder crash-looping (exit %s)' % code)
-
-        if time.monotonic() >= fwd.nextSpawn:
-            self._spawn(fwd)
-            fwd.spawnTime = time.monotonic()
-
-    # -- status --------------------------------------------------------------
-
-    def _usbState(self):
-        if not self._enabled():
-            return 'off'
-        if not self._card:
-            return 'absent'
-        fwd = self._fwd.get('usb')
-        return fwd.state() if fwd else 'absent'
-
-    def _pushStatus(self):
-        status = {
-            'graph':        bool(self._graph),
-            'jack':         self._fwd['jack'].state() if self._graph else 'legacy',
-            'hdmi':         self._fwd['hdmi'].state() if self._graph else 'legacy',
-            'usb':          self._usbState() if self._graph else 'off',
-            'usb-card':     self._card['id'] if self._card else None,
-            'usb-channels': self._card['channels'] if self._card else 0,
-            'usb-xruns':    self._fwd['usb'].xruns if 'usb' in self._fwd else 0,
-        }
-        if status == self._lastSent:
-            return
-        self._lastSent = status
-        h = self.hplayer.interface('http2')
-        if h:
-            h.send('audio-status', status)
-
     # -- main loop -----------------------------------------------------------
 
     def listen(self):
-        self._graph = self._checkGraph()
-        if self._graph:
-            if not self._ensureAloop():
-                self.log('snd-aloop unavailable: hub graph is dead, audio degraded')
-                self._graph = False
+        if not self.conf:
+            self.log('no /etc/hplayer-audio.conf: generic ALSA platform, monitoring off')
         else:
-            self.log('no pcm.hplayer graph in asound.conf: status-only (legacy audio)')
+            self.log('platform audio hub:', self.conf['graph'],
+                     '(%dms)' % (self.conf['latency_us'] / 1000),
+                     '- compensation', 'on' if self.compensate else 'off (profile)')
 
         while self.isRunning():
-            if self._graph:
+            if self.conf:
                 self._tick()
             self._pushStatus()
             self.stopped.wait(self.SCAN_PERIOD)
 
-        for fwd in self._fwd.values():
-            self._kill(fwd)
-
     def _tick(self):
-        # static sinks: always mirrored
-        self._tickForwarder(self._fwd['jack'])
-        self._tickForwarder(self._fwd['hdmi'])
-
-        # USB sink: hotplug
-        card = self._scanUsb() if self._enabled() else None
-
+        # USB card presence (plug/unplug edges)
+        card = self._scanUsb()
         if self._card and (not card or card['id'] != self._card['id']):
             self.log('USB card gone:', self._card['id'])
-            if 'usb' in self._fwd:
-                self._kill(self._fwd.pop('usb'))
             self._card = None
             self.emit('disconnected')
-
         if card and not self._card:
             self.log('USB card found:', card['id'], '(%dch)' % card['channels'])
             self._card = card
-            self._fwd['usb'] = Forwarder('usb',
-                                         pick_usb_egress(card['id'], card['channels']),
-                                         self._tlat)
             self.emit('connected', card['id'], card['channels'])
 
-        if 'usb' in self._fwd:
-            self._tickForwarder(self._fwd['usb'])
+        # forwarder unit health (error edges)
+        states = self._unitStates()
+        for sink, state in states.items():
+            if state == 'failed' and self._states.get(sink) != 'failed':
+                self.log(sink, 'forwarder unit FAILED')
+                self.emit('error', sink)
+        self._states = states
 
-        # mpv compensation: the forwarder latency is a config constant, so
-        # video simply waits for the audio to reach the speakers. Re-applied
-        # whenever the setting changes; skipped until a player backend is up.
-        delay = -self._tlat() / 1e6
+        # player compensation: constant by config, so video simply waits for
+        # the audio to reach the speakers (profiles veto via .compensate)
+        delay = -self.latency() if self.compensate else 0.0
         if delay != self._appliedDelay:
             applied = False
             for p in self.hplayer.players():
@@ -338,3 +163,38 @@ class AudiohubInterface(BaseInterface):
                     applied = True
             if applied:
                 self._appliedDelay = delay
+
+    # -- status --------------------------------------------------------------
+
+    def _sinkState(self, sink):
+        unit = self._states.get(sink, 'unknown')
+        if sink == 'usb':
+            if not self._card:
+                return 'absent'
+            return 'active' if unit == 'active' else 'error'
+        return 'active' if unit == 'active' else 'error'
+
+    def _pushStatus(self):
+        if self.conf:
+            status = {
+                'mode':         'hub',
+                'graph':        self.conf['graph'],
+                'latency-ms':   self.conf['latency_us'] / 1000.0,
+                'jack':         self._sinkState('jack'),
+                'hdmi':         self._sinkState('hdmi'),
+                'usb':          self._sinkState('usb'),
+                'usb-card':     self._card['id'] if self._card else None,
+                'usb-channels': self._card['channels'] if self._card else 0,
+            }
+        else:
+            status = {'mode': 'default',
+                      'jack': 'default', 'hdmi': 'default', 'usb': 'default'}
+
+        self._resend -= 1
+        if status == self._lastSent and self._resend > 0:
+            return
+        self._lastSent = status
+        self._resend = self.RESEND_EVERY
+        h = self.hplayer.interface('http2')
+        if h:
+            h.send('audio-status', status)

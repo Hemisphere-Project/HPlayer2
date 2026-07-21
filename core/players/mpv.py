@@ -5,6 +5,7 @@ import time
 from pathlib import Path
 from shutil import which
 from .base import BasePlayer
+from ..engine.audiohw import read_audio_conf
 
 
 def build_pan_filter(pan, channels):
@@ -60,11 +61,13 @@ class MpvPlayer(BasePlayer):
         self._mpv_command = self._BASE_ARGS.copy()
         if sys.platform.startswith('linux'):
             self._mpv_command.append('--ao=alsa')
-            # always-on multi-output graph (asound.conf-rpi3-multi): play the
-            # fan-out PCM explicitly, and let multichannel media keep its
-            # layout so all channels reach the loopback/USB (stereo media
-            # still negotiates stereo; the graph's plug pads the rest)
-            if self._alsa_has_hplayer_graph():
+            # dedicated player platform (Pi-tools hplayer-audio contract):
+            # play the hub PCM explicitly, and let multichannel media keep
+            # its layout so all channels reach the loopback/USB (stereo
+            # media still negotiates stereo; the graph's plug pads the
+            # rest). No contract file = generic ALSA defaults, untouched.
+            audiohw = read_audio_conf()
+            if audiohw and audiohw['graph'] == 'v2':
                 self._mpv_command += [
                     '--audio-device=alsa/hplayer',
                     '--audio-channels=auto',
@@ -124,14 +127,6 @@ class MpvPlayer(BasePlayer):
     ############
     ## private METHODS
     ############
-
-    # Always-on multi-output graph deployed on this machine ?
-    def _alsa_has_hplayer_graph(self):
-        try:
-            with open('/etc/asound.conf') as fd:
-                return 'pcm.hplayer' in fd.read()
-        except OSError:
-            return False
 
     # SHADER list
     def _shaders_prepare(self):

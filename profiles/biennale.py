@@ -31,15 +31,10 @@ tempfile.tempdir = '/data/var/tmp'
 # MEDIA PATH
 mediaPath = ['/data/media', '/data/usb']
 
-# ALWAYS-ON AUDIO HUB: mpv plays the snd-aloop loopback; jack/HDMI/USB are
-# alsaloop forwarders supervised by the audiohub interface. Deploy the static
-# asound.conf when its version marker is absent or stale; never rewritten at
-# runtime.
-if not os.path.isfile('/etc/asound.conf') or not 'hplayer-graph-v2' in open('/etc/asound.conf').read():
-	os.system('rw && cp /opt/HPlayer2/scripts/asound/asound.conf-rpi3-hub /etc/asound.conf && sync && ro')
-# the graph's loopback slave must exist BEFORE mpv's first open (autoplay can
-# hit within a second of boot): load it here, not just in the audiohub thread
-os.system('modprobe snd-aloop 2>/dev/null')
+# AUDIO: the plumbing (ALSA hub graph, snd-aloop, forwarder units) belongs to
+# the PLATFORM — Pi-tools hplayer-audio module. HPlayer2 only detects the
+# /etc/hplayer-audio.conf contract: present = play the hub + compensate its
+# latency; absent = generic ALSA, audio config untouched (laptop/dev).
 
 # INIT HPLAYER
 hplayer = HPlayer2(mediaPath, '/data/hplayer2-biennale.cfg')
@@ -254,11 +249,20 @@ dmx = hplayer.addInterface('dmx')
 # device is never touched: virgin units take one manual first flash)
 teleco2 = hplayer.addInterface('teleco2')
 
-# Audio hub: supervises the always-on output forwarders (jack + HDMI always,
-# USB when plugged — alsaloop from the shared loopback, adaptive resample) and
-# pushes per-output health to the http2 chips. A dead forwarder silences one
-# output only; playback itself never blocks on audio hardware.
+# Audio hub monitor: watches the platform forwarder units + USB card, pushes
+# per-output health to the http2 chips, and applies the latency compensation.
+# Mode policy: WALL leads the drifter chase by the pipeline latency while mpv
+# delays video by the same amount -> frames AND speakers land on the wallclock
+# (mixed hub/non-hub fleets stay aligned). Start-sync (2024 mode) has no
+# drifter to lead, so it keeps VISUAL priority: no compensation, audio runs
+# the pipeline latency late (under the perception edge). Solo compensates.
 audiohub = hplayer.addInterface('audiohub')
+
+if audiohub:
+	if SYNC and not WALL:
+		audiohub.compensate = False
+	if WALL and hplayer.interface('wallclock'):
+		hplayer.interface('wallclock').drifter.offset = audiohub.latency()
 
 # persist dmx tunables edited from http2 (interface reads them live)
 for _k in ('dmx-protocol', 'dmx-fps', 'dmx-filter'):
