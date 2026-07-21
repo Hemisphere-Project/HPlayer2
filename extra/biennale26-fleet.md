@@ -24,17 +24,19 @@ Separate x86-64 track — no golden dd possible, convergence is in-place
 `system-serial-number` (`dmidecode`). All 8 surveyed 2026-07-21 on the bench
 LAN: Ubuntu 24.04.1 (kernel 6.8), `/opt/HPlayer2` + pipenv + python 3.12.3,
 mpv 0.37 distro, Pi-tools `main@6586796` in `/opt/Pi-tools`, ro rootfs,
-453G `/data`, profile via `/boot/starter.txt`. mini-02/07 carry the 2025
-eof/looping fix (`biennale24@b617c8a`); the other 6 sit 2 commits behind on
-`master@268818c`.
+453G `/data`, profile via `/boot/starter.txt`. As found: mini-02/07 carried
+the 2025 eof/looping fix (`biennale24@b617c8a`), the other 6 sat 2 commits
+behind on `master@268818c` — phase 0 of the convergence plan aligned all 8
+on `b617c8a` the same day (reboot-verified: ro rootfs, service active,
+http2 answering).
 
 | # | hostname | serial | was | now | instance | RTC | notes | date |
 |---|----------|--------|-----|-----|----------|-----|-------|------|
-| m1 | mini-01 | BN1004JG00421 | 268818c | 268818c | hplayer2@biennale24 | x86 ✓ | surveyed, pre-fix | 2026-07-21 |
+| m1 | mini-01 | BN1004JG00421 | 268818c | b617c8a | hplayer2@biennale24 | x86 ✓ | phase-0 align to 2025 eof fix, reboot-verified ro+active+http2 | 2026-07-21 |
 | m2 | mini-02 | BN1004JG00401 | b617c8a | b617c8a | hplayer2@biennale24 | x86 ✓ | 2025 eof-fix reference | 2026-07-21 |
-| m3 | mini-03 | BN1004JG00427 | 268818c | 268818c | hplayer2@biennale24 | x86 ✓ | surveyed, pre-fix | 2026-07-21 |
-| m4 | mini-04 | BN1004JG00254 | 268818c | 268818c | hplayer2@biennale24 | x86 ✓ | surveyed, pre-fix | 2026-07-21 |
-| m5 | mini-05 | BN1004HE10613 | 268818c | 268818c | hplayer2@biennale24 | x86 ✓ | surveyed, pre-fix | 2026-07-21 |
-| m6 | mini-06 | BN1004JG00399 | 268818c | 268818c | hplayer2@biennale24 | x86 ✓ | surveyed, pre-fix | 2026-07-21 |
+| m3 | mini-03 | BN1004JG00427 | 268818c | b617c8a | hplayer2@biennale24 | x86 ✓ | phase-0 align to 2025 eof fix, reboot-verified ro+active+http2 | 2026-07-21 |
+| m4 | mini-04 | BN1004JG00254 | 268818c | b617c8a | hplayer2@biennale24 | x86 ✓ | phase-0 align to 2025 eof fix, reboot-verified ro+active+http2 | 2026-07-21 |
+| m5 | mini-05 | BN1004HE10613 | 268818c | b617c8a | hplayer2@biennale24 | x86 ✓ | phase-0 align to 2025 eof fix, reboot-verified ro+active+http2 | 2026-07-21 |
+| m6 | mini-06 | BN1004JG00399 | 268818c | b617c8a | hplayer2@biennale24 | x86 ✓ | phase-0 align to 2025 eof fix, reboot-verified ro+active+http2 | 2026-07-21 |
 | m7 | mini-07 | BN1004HE10742 | b617c8a | b617c8a | hplayer2@biennale24 | x86 ✓ | 2025 eof-fix reference | 2026-07-21 |
-| m8 | mini-08 | BN1004JG00428 | 268818c | 268818c | hplayer2@biennale24 | x86 ✓ | surveyed, pre-fix | 2026-07-21 |
+| m8 | mini-08 | BN1004JG00428 | 268818c | b617c8a | hplayer2@biennale24 | x86 ✓ | phase-0 align to 2025 eof fix, reboot-verified ro+active+http2 | 2026-07-21 |
