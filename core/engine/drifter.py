@@ -20,7 +20,8 @@ class Drifter():
     def __init__(self, player, log=None,
                     deadZoneEnter=0.025,    # s - enter dead zone (+-0.75 frame @30fps)
                     deadZoneExit=0.08,      # s - exit dead zone (hysteresis)
-                    seekThreshold=2.0,      # s - |diff| beyond this -> hard seek
+                    seekThreshold=2.0,      # s - hard seek when this far AHEAD (and, by default, behind)
+                    seekLateThreshold=None, # s - hard seek when this far LATE; None = symmetric (= seekThreshold)
                     jumpFix=500,            # ms - added to seek target (seek latency compensation)
                     smoothingWindow=3,      # speed weighted-moving-average window
                     kickStartGrace=20):     # ticks of grace after (re)play
@@ -31,6 +32,10 @@ class Drifter():
         self.deadZoneEnter = deadZoneEnter
         self.deadZoneExit = deadZoneExit
         self.seekThreshold = seekThreshold
+        # Late tolerance may exceed the ahead tolerance: a late player ramps
+        # speed to catch up until seekLateThreshold, then hard-seeks. Default
+        # (None) is symmetric, so the wallclock servo stays unchanged.
+        self.seekLateThreshold = seekLateThreshold if seekLateThreshold is not None else seekThreshold
         self.jumpFix = jumpFix
         self.smoothingWindow = smoothingWindow
         self.kickStartGrace = kickStartGrace
@@ -120,8 +125,9 @@ class Drifter():
         fix = 0     # latency corrector (clock source to tracker), kept from nowde
         jumped = False
 
-        # Hard seek: desync beyond servo reach
-        if abs(diff) > self.seekThreshold:
+        # Hard seek: desync beyond servo reach. Asymmetric: a late player
+        # (diff > 0) is tolerated up to seekLateThreshold; ahead uses seekThreshold.
+        if diff > self.seekLateThreshold or diff < -self.seekThreshold:
             target = clock + self.jumpFix / 1000.0
             if duration and duration > 3:
                 target = target % duration

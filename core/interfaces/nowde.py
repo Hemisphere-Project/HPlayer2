@@ -1,8 +1,8 @@
 from .base import BaseInterface
+from ..engine.drifter import Drifter
 import importlib
 import re
 import time
-import math
 from typing import Optional, Sequence
 from termcolor import colored
 
@@ -55,20 +55,19 @@ class NowdeInterface(BaseInterface):
         if self.player is None and len(hplayer.players) > 0:
             self.player = list(hplayer.players.values())[0]
 
-        # Sync state
-        self.lastSpeed = 1.0
-        self.lastPos = -1
-        self.didJump = False
-        self.jumpFix = 500       # compensate the latency of jump (300ms for RockPro64 on timecode jump I.E. looping, 1000ms on laptop)
-        self.kickStart = 0
+        # Sync state (the chase-lock servo now lives in the shared Drifter)
+        self.jumpFix = 500       # seek-latency compensation (300ms RockPro64 on loop, 1000ms laptop)
         self.isStopped = False   # Flag to ignore MTC when stopped
         self.lastCC = None       # Track last CC#100 value to avoid redundant commands
         self.lastPattern = None  # Remember last pattern for auto-restart on loop
-        
-        # Speed smoothing for less oscillation
-        self.speedHistory = []   # Track recent speed values
-        self.speedSmoothingWindow = 3  # Number of frames to average (lower = more responsive, higher = smoother)
-        self.inDeadZone = False  # Track if we're currently in dead zone for hysteresis
+
+        # Chase-lock servo: the shared Drifter (ported from this very tracker).
+        # nowde keeps the legacy asymmetric seek tolerance — ramp speed to catch
+        # up when behind (up to 10s), hard-seek only when >2s ahead.
+        self.drifter = Drifter(self.player, log=self.log, jumpFix=self.jumpFix,
+                               seekLateThreshold=10) if self.player else None
+        if self.drifter:
+            self.drifter.onStalled = self._restart_on_loop
 
         # Bind to our own events
         self.hplayer.on('nowde.qf')(self.handle_timecode)
@@ -248,7 +247,8 @@ class NowdeInterface(BaseInterface):
             self.hplayer.playlist.play(pattern)
             if self.hplayer.playlist.size() > 0:
                 self.isStopped = False
-                self.kickStart = 20  # Reset kickStart for new media
+                if self.drifter:
+                    self.drifter.arm()  # reset the servo grace for the new media
                 self.lastPattern = pattern  # Remember this pattern
             else:
                 self.log(colored(f"WARNING: No media found for CC#100={cc_value} (pattern: {pattern})", 'yellow'))
@@ -258,214 +258,30 @@ class NowdeInterface(BaseInterface):
                 self.lastPattern = None
 
     def handle_timecode(self, ev, *args):
-        """Handle timecode events and sync player"""
-        if self.player is None:
+        """Feed the external MTC/OSC clock to the shared chase-lock servo."""
+        if self.player is None or self.drifter is None:
             return
 
         # Ignore MTC when explicitly stopped via CC#100=0
         if self.isStopped:
             return
 
-        doLog = True
-
-        pos = self.player.position()
-
-        # Resume if paused
-        if self.player.isPaused():
-            self.player.resume()
-
-        # Player has been launched, wait for it to start
-        if self.kickStart > 0:
-            self.kickStart -= 1
-
-        # Play if stopped
-        elif not self.player.isPlaying():
-            if self.kickStart < 0:
-                self.kickStart += 1
-            else:
-                # Video ended locally - restart on timecode loop if we have a pattern
-                if self.lastPattern is not None and not self.isStopped:
-                    self.log(f"Video ended, restarting with pattern: {self.lastPattern}")
-                    self.hplayer.playlist.play(self.lastPattern)
-                    if self.hplayer.playlist.size() > 0:
-                        self.kickStart = 20
-                    else:
-                        # Pattern no longer matches, stop
-                        self.log(colored(f"WARNING: Pattern {self.lastPattern} no longer matches any files", 'yellow'))
-                        return
-                else:
-                    # No pattern to restart, just wait
-                    return
-        else:
-            self.kickStart = -3
-
-        # Check if player time is actually ellapsing
-        if pos == self.lastPos or not self.player.isPlaying():
-            if doLog and self.kickStart == 0:
-                print(str(args[0]), end="\t")
-                print("no news from player.. dropping timecode tracking on this frame")
-            return
-        self.lastPos = pos
-
         if ev == 'nowde.qf':
-            clock = round(args[0].float, 2)
+            clock = round(args[0].float, 2)   # Timecode -> seconds
         else:
-            clock = round(float(args[0]), 2)
-        diff = clock - pos
+            clock = round(float(args[0]), 2)  # osc.time -> seconds
 
-        speed = 1.0
+        self.drifter.tick(clock)
 
-        # framebuffer corrector
-        fix = 0
-
-        # jump
-        if diff > 10 or diff < -2:
-            self.player.seekTo(clock * 1000 + self.jumpFix)
-            self.didJump = True
-            print(str(args[0]), end="\t")
-            print("timedelay=" + colored(round(diff, 2), "red"), end="\t")
-            print("JumpFix", self.jumpFix)
-
-        else:
-            # Jump correction
-            if self.didJump:
-                self.didJump = False
-                # Clear speed history after jump
-                self.speedHistory = []
-                self.inDeadZone = False
-
-            # Dead zone with hysteresis to prevent oscillation
-            # Use wider zone when already in sync, narrower when out of sync
-            dead_zone_enter = 0.025  # Need to be within 25ms to enter dead zone (±0.75 frames @ 30fps)
-            dead_zone_exit = 0.08    # Must drift beyond 80ms to exit dead zone (±2.4 frames @ 30fps)
-            
-            current_offset = abs(diff + fix)
-            
-            # Determine if we should apply corrections or stay at 1.0
-            apply_correction = True
-            
-            # Hysteresis logic
-            if self.inDeadZone:
-                # Already in dead zone - check if we should stay
-                if current_offset > dead_zone_exit:
-                    # Drifted too far, exit dead zone and apply corrections
-                    self.inDeadZone = False
-                    apply_correction = True
-                else:
-                    # Still within acceptable range, stay at 1.0
-                    speed = 1.0
-                    apply_correction = False
-            else:
-                # Not in dead zone - check if we should enter
-                if current_offset <= dead_zone_enter:
-                    # Close enough to enter dead zone
-                    speed = 1.0
-                    self.inDeadZone = True
-                    apply_correction = False
-                else:
-                    # Still outside dead zone, apply corrections
-                    apply_correction = True
-            
-            # Apply corrections only if outside dead zone
-            if apply_correction:
-                # More gradual speed adjustments with reduced gains
-                if (diff + fix) > 0:
-                    # When late: progressive acceleration
-                    if diff > 3.0:
-                        # Very late: maximum speed for fast catchup
-                        speed = 8.0
-                    elif diff > 1.5:
-                        # Late: strong acceleration with gentler curve
-                        speed = round(1 + (diff + fix) * 2.0, 2)
-                        speed = min(speed, 6.0)
-                    elif diff > 0.8:
-                        # Moderately late: moderate acceleration
-                        speed = round(1 + (diff + fix) * 1.5, 2)
-                        speed = min(speed, 3.0)
-                    elif diff > 0.4:
-                        # Getting closer: gentle acceleration
-                        speed = round(1 + (diff + fix) * 1.2, 2)
-                        speed = min(speed, 2.0)
-                    elif diff > 0.2:
-                        # Close: minimal acceleration
-                        speed = round(1 + (diff + fix) * 0.5, 2)
-                        speed = min(speed, 1.15)
-                    else:
-                        # Very close: tiny acceleration to prevent overshoot
-                        speed = round(1 + (diff + fix) * 0.25, 2)
-                        speed = min(speed, 1.05)
-
-                # decel
-                elif (diff + fix) < 0:
-                    # When ahead: progressive deceleration with VERY gentle corrections to prevent oscillation
-                    if diff < -1.5:
-                        # Very ahead: strong slowdown
-                        speed = 0.2
-                    elif diff < -0.8:
-                        # Ahead: strong deceleration with gentler curve
-                        speed = round(1 + (diff + fix) * 2.0, 2)
-                        speed = max(speed, 0.3)
-                    elif diff < -0.4:
-                        # Moderately ahead: moderate deceleration
-                        speed = round(1 + (diff + fix) * 1.5, 2)
-                        speed = max(speed, 0.5)
-                    elif diff < -0.2:
-                        # Getting closer: gentle deceleration
-                        speed = round(1 + (diff + fix) * 1.0, 2)
-                        speed = max(speed, 0.8)
-                    elif diff < -0.08:
-                        # Very close to boundary: ultra-gentle deceleration
-                        speed = round(1 + (diff + fix) * 0.3, 2)
-                        speed = max(speed, 0.975)
-                    else:
-                        # Inside near-dead-zone: minimal deceleration to coast to zero
-                        speed = round(1 + (diff + fix) * 0.15, 2)
-                        speed = max(speed, 0.99)
-                
-                # Apply speed smoothing to reduce oscillation
-                self.speedHistory.append(speed)
-                if len(self.speedHistory) > self.speedSmoothingWindow:
-                    self.speedHistory.pop(0)
-                
-                # Only apply smoothing when we have enough history and not in extreme situations
-                if len(self.speedHistory) >= 2 and abs(diff) < 1.0:
-                    # Weighted average favoring recent values
-                    weights = [i + 1 for i in range(len(self.speedHistory))]
-                    smoothed_speed = sum(s * w for s, w in zip(self.speedHistory, weights)) / sum(weights)
-                    speed = round(smoothed_speed, 2)
-            else:
-                # In dead zone - clear history to allow fresh start when exiting
-                if len(self.speedHistory) > 0:
-                    self.speedHistory = []
-
-        self.player.speed(speed)
-
-        # LOG
-        if doLog:
-            if speed != 1.0 or self.lastSpeed != 1.0:
-                # Add timestamp for performance analysis
-                import datetime
-                timestamp = datetime.datetime.now().strftime("%H:%M:%S.%f")[:-3]
-                
-                color1 = 'green'
-                if abs(diff + fix) > 0.08: color1 = 'red'
-                elif abs(diff + fix) > 0.04: color1 = 'yellow'
-
-                color2 = 'white'
-                if speed > 1: color2 = 'magenta'
-                elif speed < 1: color2 = 'cyan'
-
-                framedelta = math.trunc(diff * 1000 / 30)
-                color3 = 'green'
-                if abs(framedelta) > 1: color3 = 'red'
-                elif abs(framedelta) > 0: color3 = 'yellow'
-
-                print(f"[{timestamp}]", end="\t")
-                print("timedelay=" + colored(round(diff, 2), color1), end="\t")
-                print("framedelta=" + colored(framedelta, color3), end="\t")
-                print("speed=" + colored(speed, color2))
-
-        self.lastSpeed = speed
+    def _restart_on_loop(self):
+        """Drifter stall hook: the local video ended while the master clock
+        keeps running -> restart the remembered pattern (timecode-loop restart)."""
+        if self.lastPattern is None or self.isStopped:
+            return
+        self.log(f"Video ended, restarting with pattern: {self.lastPattern}")
+        self.hplayer.playlist.play(self.lastPattern)
+        if self.hplayer.playlist.size() == 0:
+            self.log(colored(f"WARNING: Pattern {self.lastPattern} no longer matches any files", 'yellow'))
 
 
 ##### MTC TOOLS imported from 
