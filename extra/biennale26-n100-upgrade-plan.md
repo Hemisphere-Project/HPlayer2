@@ -46,6 +46,24 @@ at execution time; the deployed SHAs get recorded in the ledger.
    **`wint-hotspot` + `eth0-dhcp` only**; all sync/hotspot variants stay
    in `_disabled/` for webconf to activate per install case.
 10. **Hostnames stay `mini-01`…`mini-08`** (no rename to `player-NN`).
+11. **webconf runs at boot on BOTH platforms** (2026-07-21, later session):
+    http2 embeds it in an iframe to toggle sync mode, so it must be up.
+    N100s already start it (starter entry active); the RPi golden must
+    uncomment its starter line (and drop the stale
+    `## Not working properly` remark — fixed by the npm install) before
+    the 23/07 capture.
+12. **audiohub on N100: attempt the port** (2026-07-21): enable if
+    possible/suitable on x86 — needs a platform `/etc/audiohub.conf`
+    different from the RPi one (HDA Intel = ONE card, multiple PCM
+    devices: hw:0,0 analog ALC897 + hw:0,3/7/8/9 HDMI, vs the Pi's
+    separate cards) and `module.ini` platforms extended to x86.
+    snd-aloop + alsaloop exist on Ubuntu. Attempt on the pilot AFTER the
+    core migration validates; fallback = generic ALSA (contract absent →
+    HPlayer2 untouched). The Pi-specific vchiq sequential-stop hazard
+    doesn't apply to HDA, but keep the hardened sequential apply anyway.
+13. **mosquitto disabled on both** (2026-07-21): the 2026 bootstrap
+    already installs it disabled; the 2024 N100 images run it — disable
+    in phase 2.7; check the golden during the clean-env sweep.
 
 ## Current state (survey #t-019 + phase 0, 2026-07-21)
 
