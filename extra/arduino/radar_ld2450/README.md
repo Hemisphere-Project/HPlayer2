@@ -27,8 +27,8 @@ ignores any line it doesn't recognise.
 
 | LD2450 | ESP32-C3 (`env:c3`) | Atom Matrix (`env:atom`, Grove) |
 |--------|---------------------|--------------------------------|
-| TX     | GPIO20 (`RADAR_RX`) — the only data wire needed | G32 |
-| RX     | GPIO21 (`RADAR_TX`) — unused unless you configure the sensor | G26 |
+| TX     | GPIO3 (`RADAR_RX`) — the only data wire needed | G32 |
+| RX     | GPIO4 (`RADAR_TX`) — unused unless you configure the sensor | G26 |
 | 5V / GND | 5V / GND | 5V / GND |
 
 USB from the ESP32 to the host RPi. On the C3, the onboard LED (GPIO8, active-low)

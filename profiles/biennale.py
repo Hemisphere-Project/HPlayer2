@@ -244,10 +244,11 @@ def radar_schedule_logs(ev, *args):
 # evaluated against the player's wall-synced clock, so DMX follows loops/seeks/sync.
 dmx = hplayer.addInterface('dmx')
 
-# CoreS3 USB remote: same self-activating pattern — hotplug 303a:1001, NDJSON
-# state push + transport commands, hello-gated firmware auto-flash (a silent
-# device is never touched: virgin units take one manual first flash)
-teleco2 = hplayer.addInterface('teleco2')
+# CoreS3 USB remote (teleco2): intentionally NOT loaded on biennale players
+# (Thomas 2026-07-21). The radar box (extra/arduino/radar_ld2450) shares the
+# generic Espressif 303a:1001 ROM-CDC id with the CoreS3 remote, and teleco2's
+# hardcoded "HPlayer2|303a:1001" filter would grab the radar box and starve the
+# radar interface. Biennale uses no remote; teleco2 still lives in profiles/anna.py.
 
 # Audio hub monitor: watches the platform forwarder units + USB card, pushes
 # per-output health to the http2 chips, and applies the latency compensation.
