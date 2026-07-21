@@ -205,6 +205,33 @@ Rollback if ever needed: `git checkout master` (268818c).
 - Reboot ×2: clock sane, service returns, rootfs ro.
 - Optional 24h soak: journal free of mpv/watchdog storms.
 
+### Dual-platform clean-environment sweep (Thomas, 2026-07-21)
+
+Once migrated, run the SAME audit on **both** the RPi-7.1 golden and the
+pilot N100 — the target is a **perfectly clean environment** on each:
+
+- `systemctl --failed` empty; full unit inventory reviewed (every expected
+  service active/enabled, nothing unexpected or leftover).
+- `journalctl -p err -b` clean; `dmesg` reviewed for errors/warnings
+  (oops, OOM, fs errors, firmware complaints).
+- hplayer2: journal free of tracebacks/restart loops across a full boot.
+- Pi-tools: no dangling `/usr/local/bin` symlinks, installed modules
+  consistent with the `2026` tip, helpers all functional (`rw`, starter,
+  setnet, hostrename, fake-clock, webconf).
+- Repos on-device: `git status` clean, HEAD == pushed origin tip (no
+  local-only commits, no stray diffs) — both `/opt/HPlayer2` and
+  `/opt/Pi-tools`, both platforms.
+- Disk/tmpfs headroom, clock sanity, `/boot/wifi` set matches the repo
+  convention.
+
+### Propagation discipline (Thomas, 2026-07-21)
+
+Any update made on either side — either machine, either repo — is
+**committed, pushed, and pulled/propagated to the other**: a fix found on
+the N100 lands in the repo and reaches the RPi golden (and vice versa),
+never as device-local drift. Phase-1/2 examples already applied: color.sh
+guard, rorw x86 remount fix, webconf npm install, harvested wifi profiles.
+
 ## Phase 4 — fleet rollout
 
 Same steps on the remaining 7, **mini-07 last** (living 2024 reference
