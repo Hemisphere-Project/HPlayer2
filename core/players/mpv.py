@@ -18,6 +18,15 @@ def build_pan_filter(pan, channels):
     caller can warn and clear the filter instead of collapsing the layout.
     """
     if not channels or channels <= 2:
+        if channels == 1:
+            # a 1ch source has no c1: both sides must draw from c0 — a c1
+            # term leaves the right side silent, and the stereo mono-mix
+            # would halve the level (bench 2026-07-21)
+            if pan == 'mono':
+                return "lavfi=[pan=stereo|c0=1*c0|c1=1*c0]"
+            left = pan[0]/100.0
+            right = pan[1]/100.0
+            return "lavfi=[pan=stereo|c0="+str(left)+"*c0|c1="+str(right)+"*c0]"
         if pan == 'mono':
             return "lavfi=[pan=stereo|c0=.5*c0+.5*c1|c1=.5*c0+.5*c1]"
         left = pan[0]/100.0

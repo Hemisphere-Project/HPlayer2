@@ -85,6 +85,17 @@ def test_pan_filter_unknown_channels_assume_stereo():
             == mpv_module.build_pan_filter('mono', 2))
 
 
+def test_pan_filter_mono_source_reaches_both_sides():
+    # a 1ch source has no c1: both outputs must draw from c0
+    # (bench 2026-07-21: mono MIRE.mp4 played left-only on every output)
+    assert (mpv_module.build_pan_filter([100, 100], 1)
+            == "lavfi=[pan=stereo|c0=1.0*c0|c1=1.0*c0]")
+    assert (mpv_module.build_pan_filter([50, 100], 1)
+            == "lavfi=[pan=stereo|c0=0.5*c0|c1=1.0*c0]")
+    assert (mpv_module.build_pan_filter('mono', 1)
+            == "lavfi=[pan=stereo|c0=1*c0|c1=1*c0]")
+
+
 def test_pan_filter_multichannel_mono():
     af = mpv_module.build_pan_filter('mono', 8)
     assert af.startswith("lavfi=[pan=8c|")
