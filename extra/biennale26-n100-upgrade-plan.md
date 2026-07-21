@@ -317,5 +317,64 @@ KMS-era Pi parks). Worth stating in the Pi-tools README.
 
 ---
 
+## Pilot log — mini-06 (2026-07-21)
+
+Migrated end-to-end to `master` + `biennale` + Pi-tools `2026`. Everything
+found on the way is either fixed in a repo (propagation discipline) or
+scripted below for the fleet:
+
+1. **`/tmp` at 775 root:syslog** (rsyslog chown through the `/var/log`
+   bind) broke apt's GPG sandbox → `chmod 1777 /tmp` to unblock; durable
+   fix = the regenerated rorw fstab (`mode=1777`).
+2. **grub-efi debconf landmine (fleet-wide)**: `grub-efi/install_devices`
+   still names the 2024 mastering machine's SSD (`FORESEE_512GB…`); on any
+   grub upgrade, `grub-multi-install` prompts for the ESP with no tty and
+   wedges dpkg forever. Fix per machine BEFORE apt upgrade:
+   `echo "grub-efi-amd64 grub-efi/install_devices multiselect $(find
+   /dev/disk/by-id -lname "*sda1" ! -name "wwn-*" | head -1)" |
+   debconf-set-selections`, and always `DEBIAN_FRONTEND=noninteractive`.
+3. **`rw`/`ro` helpers didn't cover `/boot/efi` on x86** → grub postinst
+   wrote to a ro ESP. Fixed in Pi-tools (`2026@bdb2bf8`, mountpoint-driven)
+   → on the fleet, checkout Pi-tools 2026 FIRST, then apt.
+4. **Stale 2024 czmq/zyre libs in `/usr/local/lib`** shadowed the fresh
+   builds (`undefined symbol: zdir_list_paths`) → run
+   `bootstrap_native_deps.py --prefix /usr/local && ldconfig` (replaces
+   them in place); `uv run python -c "import czmq, zyre"` proves it.
+5. **apparmor unable to start on ro rootfs** (classifier keeps it
+   installed): `write-cache` + `cache-loc /tmp/apparmor` in
+   `/etc/apparmor/parser.conf` + a tmpfiles.d entry, and **purge snapd**
+   (rc-state left a broken snap-confine profile). apparmor then runs
+   green.
+6. **Failed-unit cleanup** (ro-rootfs casualties): disable `getty@tty1`,
+   `grub-common`, `grub-initrd-fallback`, `NetworkManager-wait-online`;
+   mask `dpkg-db-backup` + `logrotate` (service + timer). → 0 failed.
+7. **Settings carry-over**: `cp -n /data/hplayer2-biennale24.cfg
+   /data/hplayer2-biennale.cfg` (volume/pan/playlist preserved; old file
+   kept for rollback).
+8. **wint hotspot on x86 = 2.4GHz**: the 5GHz pin (Pi tuning) makes
+   iwlwifi fail AP mode (`supplicant-timeout`) — installer now unpins on
+   x86 (`2026@c534eb2`); the fleet psk is restored device-locally from
+   the pre-upgrade backup (never in the repo).
+9. **Audio hub v2 works on x86**: `[AudioHub] platform audio hub: v2
+   (30ms) — compensation on`, mpv targets `alsa/hplayer`, forwarders
+   active (decision 12 ✔ at the app layer; by-ear check pending).
+10. **Video is the one open item**: the pilot is HEADLESS — both HDMI
+    connectors disconnected, so mpv's `--vo=gpu-next` cannot init any GPU
+    context and playback aborts to idle (the 2024 stack behaves the same
+    headless). Needs a screen plugged to finish the play/loop matrix; if
+    gpu-next still refuses on the console with a display, test
+    `--gpu-context=drm` and patch `mpv.py` for the no-display-server
+    case. **N100 players do not play (even audio) without a display.**
+11. eof fix verified present in master (`closeToTheEnd` + `nearendEmitted`
+    in `core/players/mpv.py`); profile-merge audit green (media naming
+    `0_*` doesn't collide with `RADAR_PATTERN`, radar/schedule inert,
+    2024 asound self-heal superseded by the audiohub graph).
+
+Also done on the golden (decision 11): webconf npm-fixed + starter
+uncommented + service started (HTTP 200 on :4038).
+
+---
+
 *v3 (2026-07-21): all open points settled by Thomas (decisions 6–10) —
-plan confirmed, execution green-lit.*
+plan confirmed, execution green-lit. Pilot executed same day (log above);
+fleet rollout next, pending the screen-attached video validation.*
