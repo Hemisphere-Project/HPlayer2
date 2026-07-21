@@ -31,11 +31,12 @@ tempfile.tempdir = '/data/var/tmp'
 # MEDIA PATH
 mediaPath = ['/data/media', '/data/usb']
 
-# ALWAYS-ON AUDIO GRAPH: jack + HDMI + loopback fan-out, USB mirrored by the
-# audiohub interface. Deploy the static asound.conf once (marker: pcm.hplayer);
-# it is never rewritten afterwards.
-if not os.path.isfile('/etc/asound.conf') or not 'pcm.hplayer' in open('/etc/asound.conf').read():
-	os.system('rw && cp /opt/HPlayer2/scripts/asound/asound.conf-rpi3-multi /etc/asound.conf && sync && ro')
+# ALWAYS-ON AUDIO HUB: mpv plays the snd-aloop loopback; jack/HDMI/USB are
+# alsaloop forwarders supervised by the audiohub interface. Deploy the static
+# asound.conf when its version marker is absent or stale; never rewritten at
+# runtime.
+if not os.path.isfile('/etc/asound.conf') or not 'hplayer-graph-v2' in open('/etc/asound.conf').read():
+	os.system('rw && cp /opt/HPlayer2/scripts/asound/asound.conf-rpi3-hub /etc/asound.conf && sync && ro')
 # the graph's loopback slave must exist BEFORE mpv's first open (autoplay can
 # hit within a second of boot): load it here, not just in the audiohub thread
 os.system('modprobe snd-aloop 2>/dev/null')
@@ -253,10 +254,10 @@ dmx = hplayer.addInterface('dmx')
 # device is never touched: virgin units take one manual first flash)
 teleco2 = hplayer.addInterface('teleco2')
 
-# Audio hub: supervises the always-on graph — mirrors the loopback to a USB
-# audio card when one is plugged (alsaloop side-car, adaptive resample) and
-# pushes output health to the http2 chips. No card, no forwarder: playback
-# never blocks on audio hardware.
+# Audio hub: supervises the always-on output forwarders (jack + HDMI always,
+# USB when plugged — alsaloop from the shared loopback, adaptive resample) and
+# pushes per-output health to the http2 chips. A dead forwarder silences one
+# output only; playback itself never blocks on audio hardware.
 audiohub = hplayer.addInterface('audiohub')
 
 # persist dmx tunables edited from http2 (interface reads them live)
