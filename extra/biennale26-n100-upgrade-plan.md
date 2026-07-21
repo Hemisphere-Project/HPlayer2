@@ -222,5 +222,55 @@ x86-convergence knowledge, revisit the Clonezilla capture question
 
 ---
 
+## Phase 1 outcomes (2026-07-21)
+
+- 1.1 ✅ `color.sh` fbdev-absent guard — HPlayer2 `master@17cdb84`.
+- 1.2 ✅ bench profiles harvested — Pi-tools `2026@d555b0b` (layout per
+  decision 9, psk sanitized).
+- 1.3 ✅ **webconf verified on RPi-7.1** (decision 8) — found
+  **crash-looping** (`Cannot find module 'bonjour-service'`: the golden
+  card was hand-provisioned without the module's `npm install`); fixed by
+  running `npm install` in `/opt/Pi-tools/webconf` → HTTP 200 on :4038,
+  node 18.20.8 armv7. Card restored (service stopped as found, ro). ⚠ its
+  starter.txt still reads `# webconf ## Not working properly` — stale,
+  refresh before the golden capture.
+- 1.4 ✅ rtpmidi on the RPi golden: **already absent** — decision 6 is a
+  no-op there; only the N100s run `rtpmidid` (cleanup in phase 2.7).
+
+## Installer review (Thomas's ask, 2026-07-21)
+
+**x86/Ubuntu Server fresh image → this golden state: YES, near-complete.**
+`setup/bootstrap.py` consolidates the old per-platform bootstrap scripts
+(ssh root login, NM+dnsmasq with netplan handover, ipv6 off, `net.ifnames=0`
+grub, `iwlwifi→wint` udev rename — matches the Beelink chip, node via
+`n lts`, uv, mosquitto/avahi/haveged) and `rorw/install.sh` regenerates the
+exact ro-fstab scheme, x86-aware (sda3/nvme detection — matches the Beelink
+sda1/2/3 layout) **including two fixes the 2024 N100 images lack**: the
+`/root/.cache → /data/var/cache` bind (uv cache would otherwise sit on the
+ro root) and swap removal. → **Re-run `rorw/install.sh` on the N100s in
+phase 2.5 to normalize fstab.** Gaps to document, not blockers:
+1. The installer does NOT partition — the root+`/data` split must pre-exist
+   (fresh install: Ubuntu autoinstall layout; recommend committing an
+   autoinstall/cloud-init reference to Pi-tools).
+2. HPlayer2 is out of installer scope — provisioning is two-step
+   (Pi-tools `setup.sh`, then HPlayer2 `install.sh` + bootstrap_native_deps
+   + `uv sync`).
+3. `--yes` treats `ask`-modules as *no* → golden builds need a
+   `pitools.txt`; recommend committing canonical fleet configs (e.g.
+   `pitools-biennale-n100.txt`).
+4. `pitools.example.txt` drift: still says `audioselect` where the module
+   is now `audiohub`.
+
+**RPi OS fresh image → RPi-7.1 golden: NOT equivalent (by design).** The
+installer codifies the **KMS/new-stack** flavor (config.txt `vc4-kms-v3d`,
+distro node ceiling 18 on armv7, no custom mpv); the 7.1 golden is the
+AnnaTV **legacy-stack** capture (mpv 0.33 + ffmpeg 4.4 mmal/omx in
+/usr/local, kernel 6.18 rpi-update pin). On a 3B+ mmal is the only
+accelerated path → **the golden image remains the sole reflash source for
+the RPi fleet**; the installer is the source of truth for x86 (and future
+KMS-era Pi parks). Worth stating in the Pi-tools README.
+
+---
+
 *v3 (2026-07-21): all open points settled by Thomas (decisions 6–10) —
 plan confirmed, execution green-lit.*
