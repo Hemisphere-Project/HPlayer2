@@ -104,9 +104,14 @@ class AudiohubInterface(BaseInterface):
     repeated deaths, self-healing once it holds — so one bad output never
     touches the others, and playback itself never blocks on audio hardware.
 
-    Per-sink latency targets (bench player-000, 2026-07-21): the bcm2835
-    firmware sinks underrun below ~20ms (VCHIQ consumes in ~10ms quanta) so
-    jack/hdmi default to 30ms; USB DACs run ~8ms. Both are live settings.
+    ONE latency for every output, compensated in mpv: all forwarders run the
+    same target ('audiohub-tlatency', default 30ms — the bcm2835 sinks underrun
+    below ~20ms, VCHIQ consumes in ~10ms quanta; the floor is clamped), so the
+    audio pipeline delay is a config constant independent of what is plugged,
+    and the hub pushes mpv's audio-delay to -tlatency so video waits for the
+    audio to reach the speakers. Outputs match within a few ms (device-internal
+    FIFOs differ), and A/V sync is restored fleet-wide with zero per-setup
+    tuning.
 
     Emits (edges only): audiohub.connected <card> <ch>, audiohub.disconnected,
     audiohub.error <sink> <detail>. Pushes an 'audio-status' dict to http2 on
@@ -115,10 +120,11 @@ class AudiohubInterface(BaseInterface):
     """
 
     DEFAULTS = {
-        'audiohub-usb':          True,    # live kill-switch for the USB mirror
-        'audiohub-tlatency-usb':  8000,   # alsaloop target latency, µs
-        'audiohub-tlatency-bcm': 30000,   # jack/hdmi: bcm2835 floor is ~20ms
+        'audiohub-usb':      True,     # live kill-switch for the USB mirror
+        'audiohub-tlatency': 30000,    # alsaloop target for ALL outputs, µs
     }
+
+    TLATENCY_FLOOR = 20000    # bcm2835 sinks underrun below this (bench-measured)
 
     SCAN_PERIOD = 1.0      # s
     ERROR_AFTER = 3        # forwarder deaths (same sink) before 'error' is emitted
@@ -133,10 +139,11 @@ class AudiohubInterface(BaseInterface):
         self._graph = None          # asound.conf carries the hub graph ?
         self._card = None           # {'id', 'index', 'channels'} of the USB card
         self._fwd = {
-            'jack': Forwarder('jack', 'jackout', lambda: self._tlat('bcm')),
-            'hdmi': Forwarder('hdmi', 'hdmiout', lambda: self._tlat('bcm')),
+            'jack': Forwarder('jack', 'jackout', self._tlat),
+            'hdmi': Forwarder('hdmi', 'hdmiout', self._tlat),
         }
         self._lastSent = None       # last status pushed to http2
+        self._appliedDelay = None   # audio-delay currently set on the players
 
     # -- config -------------------------------------------------------------
 
@@ -146,11 +153,18 @@ class AudiohubInterface(BaseInterface):
         except Exception:
             return True
 
-    def _tlat(self, kind):
+    def _tlat(self):
         try:
-            return int(self.hplayer.settings.get('audiohub-tlatency-' + kind))
+            val = int(self.hplayer.settings.get('audiohub-tlatency'))
         except (TypeError, ValueError):
-            return self.DEFAULTS['audiohub-tlatency-' + kind]
+            val = self.DEFAULTS['audiohub-tlatency']
+        if val < self.TLATENCY_FLOOR:
+            if getattr(self, '_tlatWarned', None) != val:
+                self._tlatWarned = val
+                self.log('audiohub-tlatency', val, 'below the bcm2835 floor, clamping to',
+                         self.TLATENCY_FLOOR)
+            val = self.TLATENCY_FLOOR
+        return val
 
     # -- probes (overridable in tests) ---------------------------------------
 
@@ -306,8 +320,21 @@ class AudiohubInterface(BaseInterface):
             self._card = card
             self._fwd['usb'] = Forwarder('usb',
                                          pick_usb_egress(card['id'], card['channels']),
-                                         lambda: self._tlat('usb'))
+                                         self._tlat)
             self.emit('connected', card['id'], card['channels'])
 
         if 'usb' in self._fwd:
             self._tickForwarder(self._fwd['usb'])
+
+        # mpv compensation: the forwarder latency is a config constant, so
+        # video simply waits for the audio to reach the speakers. Re-applied
+        # whenever the setting changes; skipped until a player backend is up.
+        delay = -self._tlat() / 1e6
+        if delay != self._appliedDelay:
+            applied = False
+            for p in self.hplayer.players():
+                if p.status('isReady'):
+                    p._applyAudioDelay(delay)
+                    applied = True
+            if applied:
+                self._appliedDelay = delay

@@ -547,6 +547,13 @@ class MpvPlayer(BasePlayer):
         else:
             self.log("PAN to", pan, af)
     
+    def _applyAudioDelay(self, seconds):
+        # negative = video waits for the audio pipeline (the audiohub's
+        # forwarder latency below the loopback, invisible to mpv's own AO
+        # delay accounting)
+        self._mpv_send(json.dumps({"command": ["set_property", "audio-delay", round(seconds, 4)]}))
+        self.log("AUDIO-DELAY to", seconds)
+
     def _applyFlip(self, flip):
         if flip:
             self._mpv_send('{ "command": ["vf", "del", "mirror"] }')

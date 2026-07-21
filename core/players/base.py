@@ -203,6 +203,9 @@ class BasePlayer(Module):
     def _applyPan(self, pan):
         self.log("pan set to", pan)
 
+    def _applyAudioDelay(self, seconds):
+        self.log("audio delay set to", seconds)
+
     def _applyFlip(self, flip):
         self.log("screen flip", flip)
 

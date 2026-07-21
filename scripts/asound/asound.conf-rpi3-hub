@@ -19,9 +19,11 @@
 # never block on hardware, and mpv's audio clock rides the system timer —
 # the same clock domain the wallclock sync already lives in.
 #
-# Latency: bcm2835 sinks need a ~30ms alsaloop target (the VCHIQ firmware
-# consumes in ~10ms quanta; 8ms round-trip underruns forever, 20ms is the
-# measured floor). USB DACs run ~8ms. Both are audiohub settings.
+# Latency: ONE deterministic alsaloop target for every output (audiohub
+# setting, default 30ms — the bcm2835 VCHIQ path consumes in ~10ms quanta
+# and underruns below the measured 20ms floor). The audiohub compensates in
+# mpv (audio-delay = -target), so A/V sync is exact fleet-wide whatever is
+# plugged, and outputs match each other within device-FIFO millimeters.
 #
 # Static by design — nothing here is ever rewritten at runtime. The
 # "hplayer-graph-v2" marker on line 1 is the deploy check: bump it when the

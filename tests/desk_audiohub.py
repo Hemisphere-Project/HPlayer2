@@ -98,6 +98,9 @@ class StubHPlayer:
     def interface(self, name):
         return None
 
+    def players(self):
+        return []
+
 
 class DeskHub(AudiohubInterface):
     def __init__(self, hplayer):

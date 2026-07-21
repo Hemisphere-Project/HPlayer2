@@ -137,15 +137,31 @@ class StubSettings:
         return self._settings.get(key)
 
 
+class StubPlayer:
+    def __init__(self):
+        self.delays = []
+        self._ready = True
+
+    def status(self, entry=None):
+        return self._ready if entry == 'isReady' else None
+
+    def _applyAudioDelay(self, seconds):
+        self.delays.append(seconds)
+
+
 class StubHPlayer:
     def __init__(self):
         self.settings = StubSettings()
+        self.player = StubPlayer()
 
     def autoBind(self, module):
         return None
 
     def interface(self, name):
         return None
+
+    def players(self):
+        return [self.player]
 
 
 class FixturedHub(AudiohubInterface):
@@ -275,6 +291,24 @@ def test_stable_forwarder_heals_error_history():
     hub._tick()
     assert jack.deaths == 0
     assert jack.state() == 'active'
+    teardown(hub)
+
+
+def test_uniform_latency_and_mpv_compensation():
+    hub = make_hub()
+    hub._tick()
+    # every forwarder shares the one configured target
+    assert hub._fwd['jack'].tlatency() == hub._fwd['hdmi'].tlatency() == 30000
+    plug(hub)
+    hub._tick()
+    assert hub._fwd['usb'].tlatency() == 30000
+    # mpv got the compensation once, as -tlatency in seconds
+    assert hub.hplayer.player.delays == [-0.03]
+    # a setting change re-applies; below the bcm floor it clamps
+    hub.hplayer.settings._settings['audiohub-tlatency'] = 8000
+    hub._tick()
+    assert hub._fwd['usb'].tlatency() == hub.TLATENCY_FLOOR
+    assert hub.hplayer.player.delays[-1] == -0.02
     teardown(hub)
 
 
