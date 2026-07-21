@@ -32,8 +32,8 @@ tempfile.tempdir = '/data/var/tmp'
 mediaPath = ['/data/media', '/data/usb']
 
 # AUDIO: the plumbing (ALSA hub graph, snd-aloop, forwarder units) belongs to
-# the PLATFORM — Pi-tools hplayer-audio module. HPlayer2 only detects the
-# /etc/hplayer-audio.conf contract: present = play the hub + compensate its
+# the PLATFORM — Pi-tools audiohub module. HPlayer2 only detects the
+# /etc/audiohub.conf contract (+/data override): present = play the hub + compensate its
 # latency; absent = generic ALSA, audio config untouched (laptop/dev).
 
 # INIT HPLAYER

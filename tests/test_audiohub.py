@@ -81,13 +81,13 @@ def test_read_audio_conf_missing(tmp_path):
 
 
 def test_read_audio_conf(tmp_path):
-    p = tmp_path / 'hplayer-audio.conf'
+    p = tmp_path / 'audiohub.conf'
     p.write_text("# comment\ngraph=v2\nlatency_us=30000\n\njunk line\n")
     assert read_audio_conf(str(p)) == {'graph': 'v2', 'latency_us': 30000}
 
 
 def test_read_audio_conf_defaults(tmp_path):
-    p = tmp_path / 'hplayer-audio.conf'
+    p = tmp_path / 'audiohub.conf'
     p.write_text("graph=v3\nlatency_us=notanumber\n")
     conf = read_audio_conf(str(p))
     assert conf['graph'] == 'v3'

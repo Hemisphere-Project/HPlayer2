@@ -61,7 +61,7 @@ class MpvPlayer(BasePlayer):
         self._mpv_command = self._BASE_ARGS.copy()
         if sys.platform.startswith('linux'):
             self._mpv_command.append('--ao=alsa')
-            # dedicated player platform (Pi-tools hplayer-audio contract):
+            # dedicated player platform (Pi-tools audiohub contract):
             # play the hub PCM explicitly, and let multichannel media keep
             # its layout so all channels reach the loopback/USB (stereo
             # media still negotiates stereo; the graph's plug pads the

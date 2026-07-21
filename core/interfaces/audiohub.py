@@ -49,10 +49,11 @@ class AudiohubInterface(BaseInterface):
     """
     Read-only monitor of the platform audio plumbing.
 
-    The plumbing itself lives in Pi-tools (hplayer-audio module): the ALSA hub
-    graph, snd-aloop, and the hplayer-audio@{jack,hdmi,usb} forwarder units.
-    This interface only OBSERVES — /etc/hplayer-audio.conf for the contract,
-    systemd for forwarder health, /proc/asound for the USB card — and:
+    The plumbing itself lives in Pi-tools (audiohub module): the ALSA hub
+    graph, snd-aloop, and the audiohub@{jack,hdmi,usb} forwarder units.
+    This interface only OBSERVES — /etc/audiohub.conf (+ /data override) for
+    the contract, systemd for forwarder health, /proc/asound for the USB
+    card — and:
 
       - pushes per-output status chips to http2 ('audio-status' event);
       - applies the player compensation (mpv audio-delay = -latency) so video
@@ -70,9 +71,9 @@ class AudiohubInterface(BaseInterface):
 
     SCAN_PERIOD = 2.0      # s
     RESEND_EVERY = 5       # ticks: re-push unchanged status for late web clients
-    UNITS = {'jack': 'hplayer-audio@jack.service',
-             'hdmi': 'hplayer-audio@hdmi.service',
-             'usb':  'hplayer-audio@usb.service'}
+    UNITS = {'jack': 'audiohub@jack.service',
+             'hdmi': 'audiohub@hdmi.service',
+             'usb':  'audiohub@usb.service'}
 
     def __init__(self, hplayer):
         super().__init__(hplayer, "AudioHub", "cyan")
@@ -120,7 +121,7 @@ class AudiohubInterface(BaseInterface):
 
     def listen(self):
         if not self.conf:
-            self.log('no /etc/hplayer-audio.conf: generic ALSA platform, monitoring off')
+            self.log('no audiohub.conf contract: generic ALSA platform, monitoring off')
         else:
             self.log('platform audio hub:', self.conf['graph'],
                      '(%dms)' % (self.conf['latency_us'] / 1000),
