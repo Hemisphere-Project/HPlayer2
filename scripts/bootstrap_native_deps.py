@@ -117,8 +117,40 @@ def main(argv: list[str]) -> int:
         )
         print(f"  export PKG_CONFIG_PATH={pkg_config_hint}:${{PKG_CONFIG_PATH:-}}", flush=True)
 
+    if not args.skip_build:
+        ensure_ldconfig(prefix)
+
     print("Native dependency bootstrap complete.", flush=True)
     return 0
+
+
+def ensure_ldconfig(prefix: Path) -> None:
+    """Make <prefix>/lib visible to the dynamic linker.
+
+    The python bindings load libczmq/libzyre through ctypes at runtime; a
+    build into the default ``~/.local`` prefix is invisible to dlopen until
+    the directory is registered (first hit: the RastaOS-7.1 golden card,
+    whose first SYNC-mode boot crashed importing zyre, 2026-07-22). Root
+    only — a user build keeps relying on LD_LIBRARY_PATH.
+    """
+    libdir = prefix / "lib"
+    if os.geteuid() != 0 or not libdir.is_dir():
+        return
+    conf = Path("/etc/ld.so.conf.d/hplayer2-native-deps.conf")
+    line = str(libdir)
+    # /usr/local/lib and friends are already covered by the distro conf —
+    # only non-standard prefixes need the drop-in, everyone needs the
+    # cache refresh after installing new libraries.
+    standard = {"/lib", "/usr/lib", "/usr/local/lib"}
+    try:
+        if line not in standard:
+            existing = conf.read_text().splitlines() if conf.exists() else []
+            if line not in existing:
+                conf.write_text("\n".join([*existing, line]) + "\n")
+                print(f"Registered {libdir} in {conf}", flush=True)
+        subprocess.run(["ldconfig"], check=False)
+    except OSError as exc:  # pragma: no cover - environment-dependent
+        print(f"WARNING: could not register {libdir} with ldconfig: {exc}", flush=True)
 
 
 if __name__ == "__main__":
