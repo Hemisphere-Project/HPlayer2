@@ -37,6 +37,6 @@ http2 answering).
 | m3 | mini-03 | BN1004JG00427 | 268818c | b617c8a | hplayer2@biennale24 | x86 ✓ | phase-0 align to 2025 eof fix, reboot-verified ro+active+http2 | 2026-07-21 |
 | m4 | mini-04 | BN1004JG00254 | 268818c | b617c8a | hplayer2@biennale24 | x86 ✓ | phase-0 align to 2025 eof fix, reboot-verified ro+active+http2 | 2026-07-21 |
 | m5 | mini-05 | BN1004HE10613 | 268818c | b617c8a | hplayer2@biennale24 | x86 ✓ | phase-0 align to 2025 eof fix, reboot-verified ro+active+http2 | 2026-07-21 |
-| m6 | mini-06 | BN1004JG00399 | 268818c | b617c8a | hplayer2@biennale24 | x86 ✓ | phase-0 align to 2025 eof fix, reboot-verified ro+active+http2 | 2026-07-21 |
+| m6 | mini-06 | BN1004JG00399 | 268818c | 1bf8130 | hplayer2@biennale | x86 ✓ | PILOT converged: master+uv, Pi-tools 2026 (audiohub x86, Node webconf), apt-upgraded, 0 failed units, play/loop matrix SOLO ✓, vaapi ✓; snapd-bind boot wedge fixed (console intervention); WALL test + by-ear audio pending | 2026-07-22 |
 | m7 | mini-07 | BN1004HE10742 | b617c8a | b617c8a | hplayer2@biennale24 | x86 ✓ | 2025 eof-fix reference | 2026-07-21 |
 | m8 | mini-08 | BN1004JG00428 | 268818c | b617c8a | hplayer2@biennale24 | x86 ✓ | phase-0 align to 2025 eof fix, reboot-verified ro+active+http2 | 2026-07-21 |

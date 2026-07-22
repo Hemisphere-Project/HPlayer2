@@ -358,13 +358,15 @@ scripted below for the fleet:
 9. **Audio hub v2 works on x86**: `[AudioHub] platform audio hub: v2
    (30ms) — compensation on`, mpv targets `alsa/hplayer`, forwarders
    active (decision 12 ✔ at the app layer; by-ear check pending).
-10. **Video is the one open item**: the pilot is HEADLESS — both HDMI
-    connectors disconnected, so mpv's `--vo=gpu-next` cannot init any GPU
-    context and playback aborts to idle (the 2024 stack behaves the same
-    headless). Needs a screen plugged to finish the play/loop matrix; if
-    gpu-next still refuses on the console with a display, test
-    `--gpu-context=drm` and patch `mpv.py` for the no-display-server
-    case. **N100 players do not play (even audio) without a display.**
+10. **Video: resolved with a display attached** (2026-07-22): gpu-next
+    initializes fine on the console once an HDMI connector is live —
+    `vo-configured: True, hwdec: vaapi`, video visibly looping. The
+    headless failure stands as a caveat: **N100 players do not play
+    (even audio) without a display connected** — same as 2024.
+    Play/loop matrix, SOLO column verified: single media = blackless
+    `loop-file=inf` wrap ✓; multi-media = sequential advance at EOF +
+    wrap from last back to first ✓ (loop-file auto-drops to False with
+    a playlist, returns to inf when a single file remains).
 11. eof fix verified present in master (`closeToTheEnd` + `nearendEmitted`
     in `core/players/mpv.py`); profile-merge audit green (media naming
     `0_*` doesn't collide with `RADAR_PATTERN`, radar/schedule inert,
@@ -372,6 +374,26 @@ scripted below for the fleet:
 
 Also done on the golden (decision 11): webconf npm-fixed + starter
 uncommented + service started (HTTP 200 on :4038).
+
+Post-pilot additions (2026-07-22, after the snapd-bind emergency-mode
+episode — fixed at the console, class fixed in rorw `2026@3d11ea4`):
+
+12. **grub must be rescue-friendly** — the 2024 defaults
+    (`GRUB_TIMEOUT=0`, style hidden, `RECORDFAIL_TIMEOUT=0`,
+    `console=ttyS0`) make a broken boot look like a dead black screen
+    (emergency prompt lands on a phantom serial port, no grub window to
+    edit). Fleet recipe: `GRUB_TIMEOUT=2`, `GRUB_TIMEOUT_STYLE=menu`,
+    `GRUB_RECORDFAIL_TIMEOUT=5`, `console=tty1`, `update-grub`.
+13. **DHCP identity churn**: replacing the NM eth0 profile changes the
+    client-id → new lease (mini-06 moved .103→.104). Address the fleet
+    by `mini-0N.local` (avahi), never by remembered IP.
+14. **Order matters for the fleet**: purge snapd BEFORE rorw regenerates
+    fstab; checkout Pi-tools 2026 (fixed rw/ro + installers) before the
+    apt upgrade; set the grub-efi debconf ESP before any grub upgrade.
+
+Remaining pilot items: mixed RPi↔N100 WALL test (needs eyes on both
+screens + flips the golden's eth0 to the sync net — coordinate with
+Thomas), audio by ear (jack + HDMI), 24h soak.
 
 ---
 
