@@ -30,9 +30,13 @@ behind on `master@268818c` — phase 0 of the convergence plan aligned all 8
 on `b617c8a` the same day (reboot-verified: ro rootfs, service active,
 http2 answering). **2026-07-22: all 8 converged** to master + `biennale` +
 Pi-tools `2026` (pilot mini-06, batch the rest via
-`extra/utils/biennale26-n100-upgrade.sh`). The `now` SHAs differ only by
-doc/tooling commits (4e340f5 / 5e6ad0e / 6fd91a0 are runtime-identical);
-they'll level at the next fleet touch.
+`extra/utils/biennale26-n100-upgrade.sh`). **Fleet snapshot (2026-07-22
+evening): the `biennale` BRANCH is fast-forwarded to `a8b3792` and all 9
+bench machines (golden + 8 minis) sit ON it** — the branch is the frozen
+fleet state while `master` keeps moving; BIOS baseline ADLNV105 uniform
+on the 8 minis (no newer ADLNV firmware exists — do not cross-flash the
+S12-named MINISF/MS2V updates). Pending: Pi-tools `2026-2` (Thomas's
+cooking branch) merges into `2026` when ready, then fleet-applies.
 
 | # | hostname | serial | was | now | instance | RTC | notes | date |
 |---|----------|--------|-----|-----|----------|-----|-------|------|
