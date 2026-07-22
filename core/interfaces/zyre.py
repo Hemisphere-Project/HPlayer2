@@ -239,20 +239,31 @@ class Subscriber():
         poller = Zpoller(internal_pipe, self.sub, None)
         internal_pipe.signal(0)
 
+        fastfail = 0
         while True:
             # STOP program
             if self.interface.stopped.is_set():
                 break
-            
+
             # POLL
             now = time.time()
             sock = poller.wait(500)
-            
+
             if not sock:
                 if time.time() - now < 0.1:
-                    self.interface.log('subscriber broken.. get away !')
-                    self.interface.quit()
+                    # Same EINTR-vs-broken ambiguity as the node poller —
+                    # and killing the whole app for one peer's subscriber is
+                    # scorched earth. Debounce, then let THIS subscriber die;
+                    # transport commands ride zyre proper and the wallclock
+                    # rides its own multicast, so the wall keeps beating.
+                    fastfail += 1
+                    if fastfail >= 5:
+                        self.interface.log('subscriber broken (5x fast-empty).. dropping this subscriber')
+                        break
+                else:
+                    fastfail = 0
                 continue
+            fastfail = 0
 
             # NOBODY responded ...
             if not sock:
@@ -433,6 +444,7 @@ class ZyreNode ():
             netiface = create_string_buffer(str.encode(netiface))
         self.actor = Zactor(self._actor_fn, netiface)
         self.done = False
+        self.broken = False    # set by actor_fn on confirmed poller failure
 
 
     # ZYRE Zactor
@@ -449,22 +461,35 @@ class ZyreNode ():
         self.interface.log('Node started')
         internal_pipe.signal(0)
 
+        fastfail = 0
         while True:
-            
+
             # STOP program
             if self.interface.stopped.is_set():
                 self.interface.log('stopping node')
                 break
-            
+
             # POLL
             now = time.time()
             sock = poller.wait(500)
-            
+
             if not sock:
                 if time.time() - now < 0.1:
-                    self.interface.log('poller broken.. get away !')
-                    self.interface.quit()
+                    # Instant-empty return: an interrupted wait (EINTR-class)
+                    # or a genuinely broken poller. One-shot detection used to
+                    # kill the WHOLE APP on RF churn (wifi wall bench,
+                    # 2026-07-22, twice): debounce, then flag the node for an
+                    # in-place rebuild by the interface supervisor — never
+                    # interface.quit() from here.
+                    fastfail += 1
+                    if fastfail >= 5:
+                        self.interface.log('poller broken (5x fast-empty).. flagging node for rebuild')
+                        self.broken = True
+                        break
+                else:
+                    fastfail = 0
                 continue
+            fastfail = 0
             
             
             
@@ -818,9 +843,48 @@ class ZyreInterface (BaseInterface):
         
         
         self.log( "interface ready")
-        self.stopped.wait()
+
+        # Supervise the node: on a confirmed poller failure (RF churn /
+        # EINTR storms — wifi wall bench, 2026-07-22) rebuild the zyre node
+        # IN PLACE: peers rediscover in seconds and the wall keeps beating.
+        # The handlers above resolve self.node at call time, so reassigning
+        # it is enough. If it keeps breaking, exit honestly with the
+        # engine's force-exit failsafe — systemd (Restart=always) then
+        # resurrects a clean app instead of tonight's half-dead unsynced
+        # zombie.
+        recoveries = []
+        while True:
+            self.stopped.wait(2)
+            if not self.isRunning():
+                break
+            if not getattr(self.node, 'broken', False):
+                continue
+            now = time.time()
+            recoveries = [t for t in recoveries if now - t < 600]
+            recoveries.append(now)
+            if len(recoveries) > 3:
+                self.log('zyre broke', len(recoveries), 'times in 10min: exiting for a clean app restart')
+                self.hplayer.request_shutdown(exit_code=1, force_delay=10.0)
+                break
+            self.log('rebuilding zyre node in place (recovery', len(recoveries), 'of 3)')
+            try:
+                self.node.stop()
+            except Exception as e:
+                self.log('old node teardown error (continuing):', e)
+            try:
+                self.node = ZyreNode(self, self.iface)
+            except Exception as e:
+                # a node we cannot rebuild is a player we cannot sync:
+                # exit honestly, systemd brings back a clean app
+                self.log('zyre node rebuild FAILED:', e, '— exiting for a clean app restart')
+                self.hplayer.request_shutdown(exit_code=1, force_delay=10.0)
+                break
+
         self.log( "closing sockets...") # CLOSING is messy !
-        self.node.stop()
+        try:
+            self.node.stop()
+        except Exception as e:
+            self.log('node stop error:', e)
         self.log( "done.")
 
     def activeCount(self):
