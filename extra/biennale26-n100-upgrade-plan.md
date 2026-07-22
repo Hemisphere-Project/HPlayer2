@@ -391,9 +391,48 @@ episode — fixed at the console, class fixed in rorw `2026@3d11ea4`):
     fstab; checkout Pi-tools 2026 (fixed rw/ro + installers) before the
     apt upgrade; set the grub-efi debconf ESP before any grub upgrade.
 
-Remaining pilot items: mixed RPi↔N100 WALL test (needs eyes on both
-screens + flips the golden's eth0 to the sync net — coordinate with
-Thomas), audio by ear (jack + HDMI), 24h soak.
+15. **Audio by ear — PASS** (Thomas, 2026-07-22): internal jack ✓, USB
+    audio after hotplug ✓, HDMI ✓. Hotspot behavior confirmed too.
+16. **Clean production boot** (Thomas's ask, 2026-07-22): silent boot,
+    plymouth bare spinner (no BGRT/vendor logo, no distro watermark, no
+    text), debug reachable (Esc in grub's hidden 2s window, recordfail
+    menu 5s, console=tty1, Ctrl+Alt+F2 getty in normal boot). Applied on
+    mini-06 and encoded as the x86 flavor of the Pi-tools `splash`
+    module (`2026@a702462`).
+
+## Mixed RPi↔N100 WALL test — PASS (2026-07-22)
+
+Protocol: marker files only (no NM/IP changes — zyre+wallclock bind eth0
+on the bench LAN as-is), golden=master, mini-06=slave, same MIRE.mp4.
+Result: **~1 frame offset, camera-verified** — inside the drifter dead
+zone (25 ms) + display-chain tolerance. Servo telemetry: timedelay
+−0.02…−0.07 s, speed trim 0.99–1.0. Both units reverted to SOLO after.
+
+The test caught two real bugs before the golden capture — both fixed
+and propagated same-day:
+- **Golden couldn't Zyre at all**: libczmq/libzyre live in
+  `/root/.local/lib`, invisible to dlopen — the card's FIRST-ever
+  SYNC-mode boot crash-looped on the zyre import. Card: ldconfig
+  drop-in; repo: `bootstrap_native_deps.py` now registers non-standard
+  prefixes with the linker (`master@29331ed`).
+- **WALL master + audiohub crash** (`biennale.py:266`): the wallclock
+  MASTER has no drifter by design (slaves chase); the latency-offset
+  line dereferenced it unconditionally, and that combination had never
+  run on hardware before. Guarded (`master@4e340f5`).
+
+Note for the soak: the golden's mpv (0.33 mmal) reports integer-quantized
+`time-pos` over IPC; the drifter uses its own latched samples so the
+servo is unaffected.
+
+## Batch rollout
+
+The whole recipe is `extra/utils/biennale26-n100-upgrade.sh` (run on the
+mini as root; idempotent; ends in a reboot). Order: mini-01, 03, 04, 05,
+08, then mini-02, **mini-07 last**. Per unit after reboot: driver-seat
+verification (ro, 0 failed, playing, hotspot, webconf) + ledger row +
+brief screen visit for the video check.
+
+Remaining: 24h soak on mini-06 + golden.
 
 ---
 
