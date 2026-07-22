@@ -53,6 +53,14 @@ ESP=$(find /dev/disk/by-id -lname "*sda1" ! -name "wwn-*" | head -1)
 [ -n "$ESP" ] && echo "grub-efi-amd64 grub-efi/install_devices multiselect $ESP" | debconf-set-selections
 
 step "4. apt upgrade + deps"
+# the 2024 images still run unattended-upgrades: with 2 years of backlog
+# it can hold the dpkg lock for a long time (hit on mini-07, 2026-07-22)
+# — the 2026 bootstrap disables it on fresh installs, we do it here.
+systemctl stop unattended-upgrades 2>/dev/null || true
+systemctl disable --now unattended-upgrades.service apt-daily.timer apt-daily-upgrade.timer 2>/dev/null || true
+while fuser /var/lib/dpkg/lock-frontend >/dev/null 2>&1; do
+    echo "waiting for dpkg lock…"; sleep 5
+done
 apt-get update
 apt-get upgrade -y -o Dpkg::Options::=--force-confold
 apt-get install -y libtool libtool-bin libzmq3-dev nodejs npm
