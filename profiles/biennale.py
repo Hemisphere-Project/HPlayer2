@@ -263,7 +263,12 @@ if audiohub:
 	if SYNC and not WALL:
 		audiohub.compensate = False
 	if WALL and hplayer.interface('wallclock'):
-		hplayer.interface('wallclock').drifter.offset = audiohub.latency()
+		# Only slaves carry a drifter (the master emits the clock and has
+		# none by design) — first WALL-master + audiohub boot crashed here
+		# (mixed bench test, 2026-07-22).
+		_drifter = hplayer.interface('wallclock').drifter
+		if _drifter:
+			_drifter.offset = audiohub.latency()
 
 # persist dmx tunables edited from http2 (interface reads them live)
 for _k in ('dmx-protocol', 'dmx-fps', 'dmx-filter'):
