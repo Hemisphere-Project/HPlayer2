@@ -28,7 +28,11 @@ mpv 0.37 distro, Pi-tools `main@6586796` in `/opt/Pi-tools`, ro rootfs,
 the 2025 eof/looping fix (`biennale24@b617c8a`), the other 6 sat 2 commits
 behind on `master@268818c` — phase 0 of the convergence plan aligned all 8
 on `b617c8a` the same day (reboot-verified: ro rootfs, service active,
-http2 answering).
+http2 answering). **2026-07-22: all 8 converged** to master + `biennale` +
+Pi-tools `2026` (pilot mini-06, batch the rest via
+`extra/utils/biennale26-n100-upgrade.sh`). The `now` SHAs differ only by
+doc/tooling commits (4e340f5 / 5e6ad0e / 6fd91a0 are runtime-identical);
+they'll level at the next fleet touch.
 
 | # | hostname | serial | was | now | instance | RTC | notes | date |
 |---|----------|--------|-----|-----|----------|-----|-------|------|
@@ -38,5 +42,5 @@ http2 answering).
 | m4 | mini-04 | BN1004JG00254 | 268818c | 5e6ad0e | hplayer2@biennale | x86 ✓ | batch-converged (biennale26-n100-upgrade.sh): master+uv+Pi-tools 2026, silent boot, driver-seat verified ro+0failed+player+webconf+hub+hotspot | 2026-07-22 |
 | m5 | mini-05 | BN1004HE10613 | 268818c | 5e6ad0e | hplayer2@biennale | x86 ✓ | batch-converged (biennale26-n100-upgrade.sh): master+uv+Pi-tools 2026, silent boot, driver-seat verified ro+0failed+player+webconf+hub+hotspot | 2026-07-22 |
 | m6 | mini-06 | BN1004JG00399 | 268818c | 4e340f5 | hplayer2@biennale | x86 ✓ | PILOT fully validated: master+uv, Pi-tools 2026 (audiohub x86 ✓ 3 outs by ear, Node webconf, silent plymouth boot), play/loop matrix SOLO ✓, WALL slave lock ✓ ~1 frame vs golden, vaapi ✓, 0 failed units; snapd-bind wedge fixed | 2026-07-22 |
-| m7 | mini-07 | BN1004HE10742 | b617c8a | b617c8a | hplayer2@biennale24 | x86 ✓ | 2025 eof-fix reference | 2026-07-21 |
+| m7 | mini-07 | BN1004HE10742 | b617c8a | 6fd91a0 | hplayer2@biennale | x86 ✓ | batch-converged last (2024 reference until the end); 1st run killed by unattended-upgrades dpkg lock (script now tames it), rerun clean; driver-seat verified ro+0failed+player+webconf+hub+hotspot | 2026-07-22 |
 | m8 | mini-08 | BN1004JG00428 | 268818c | 5e6ad0e | hplayer2@biennale | x86 ✓ | batch-converged (biennale26-n100-upgrade.sh): master+uv+Pi-tools 2026, silent boot, driver-seat verified ro+0failed+player+webconf+hub+hotspot | 2026-07-22 |
