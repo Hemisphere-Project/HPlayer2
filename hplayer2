@@ -16,6 +16,10 @@ profile="${1:-default}"
 
 cd "$DIR"
 
+# wait (bounded) for the display link before mpv's one-shot vo init —
+# a fast boot that beats the screen's link training idles black forever
+./scripts/wait-display.sh || true
+
 # push black image to framebuffer
 ./scripts/color.sh 000000
 
