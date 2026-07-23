@@ -1,0 +1,127 @@
+BENCH:{"host": "mini-01", "media": "0_mire.mp4", "test": "seek", "mode": "keyframes", "delta": 2, "from": 3.27, "target": 5.27, "latency_s": 0.032, "landing_err_s": -5.485, "hang": false}
+BENCH:{"host": "mini-01", "media": "0_mire.mp4", "test": "seek", "mode": "keyframes", "delta": 10, "from": 1.93, "target": 11.93, "latency_s": 0.015, "landing_err_s": -3.818, "hang": false}
+BENCH:{"host": "mini-01", "media": "0_mire.mp4", "test": "seek", "mode": "keyframes", "delta": 40, "from": 10.27, "target": 50.27, "latency_s": 0.016, "landing_err_s": -0.485, "hang": false}
+BENCH:{"host": "mini-01", "media": "0_mire.mp4", "test": "seek", "mode": "keyframes", "delta": -10, "from": 51.93, "target": 41.93, "latency_s": 0.016, "landing_err_s": -0.485, "hang": false}
+BENCH:{"host": "mini-01", "media": "0_mire.mp4", "test": "seek", "mode": "keyframes", "delta": -40, "from": 43.6, "target": 3.6, "latency_s": 0.016, "landing_err_s": -3.818, "hang": false}
+BENCH:{"host": "mini-01", "media": "0_mire.mp4", "test": "seek", "mode": "exact", "delta": 2, "from": 1.93, "target": 3.93, "latency_s": 0.094, "landing_err_s": -0.218, "hang": false}
+BENCH:{"host": "mini-01", "media": "0_mire.mp4", "test": "seek", "mode": "exact", "delta": 10, "from": 5.87, "target": 15.87, "latency_s": 0.198, "landing_err_s": -0.234, "hang": false}
+BENCH:{"host": "mini-01", "media": "0_mire.mp4", "test": "seek", "mode": "exact", "delta": 40, "from": 17.53, "target": 57.53, "latency_s": 0.205, "landing_err_s": -0.234, "hang": false}
+BENCH:{"host": "mini-01", "media": "0_mire.mp4", "test": "seek", "mode": "exact", "delta": -10, "from": 59.2, "target": 49.2, "latency_s": 0.205, "landing_err_s": -0.234, "hang": false}
+BENCH:{"host": "mini-01", "media": "0_mire.mp4", "test": "seek", "mode": "exact", "delta": -40, "from": 50.87, "target": 10.87, "latency_s": 0.067, "landing_err_s": -0.218, "hang": false}
+BENCH:{"host": "mini-01", "media": "0_mire.mp4", "test": "speed", "speed": 0.5, "achieved": 0.564, "ratio": 1.128, "dropped": 2}
+BENCH:{"host": "mini-01", "media": "0_mire.mp4", "test": "speed", "speed": 0.8, "achieved": 0.82, "ratio": 1.025, "dropped": 0}
+BENCH:{"host": "mini-01", "media": "0_mire.mp4", "test": "speed", "speed": 0.95, "achieved": 0.963, "ratio": 1.014, "dropped": 0}
+BENCH:{"host": "mini-01", "media": "0_mire.mp4", "test": "speed", "speed": 0.99, "achieved": 0.994, "ratio": 1.005, "dropped": 0}
+BENCH:{"host": "mini-01", "media": "0_mire.mp4", "test": "speed", "speed": 1.01, "achieved": 1.015, "ratio": 1.005, "dropped": 0}
+BENCH:{"host": "mini-01", "media": "0_mire.mp4", "test": "speed", "speed": 1.05, "achieved": 1.046, "ratio": 0.996, "dropped": 0}
+BENCH:{"host": "mini-01", "media": "0_mire.mp4", "test": "speed", "speed": 1.2, "achieved": 1.179, "ratio": 0.983, "dropped": 0}
+BENCH:{"host": "mini-01", "media": "0_mire.mp4", "test": "speed", "speed": 1.5, "achieved": 1.435, "ratio": 0.957, "dropped": 0}
+BENCH:{"host": "mini-01", "media": "0_mire.mp4", "test": "speed", "speed": 2.0, "achieved": 1.856, "ratio": 0.928, "dropped": 0}
+BENCH:{"host": "mini-01", "media": "0_mire.mp4", "test": "speed", "speed": 4.0, "achieved": 3.578, "ratio": 0.895, "dropped": 184}
+BENCH:{"host": "mini-01", "media": "0_mire.mp4", "test": "speed", "speed": 8.0, "achieved": 7.031, "ratio": 0.879, "dropped": 554}
+BENCH:{"host": "mini-01", "media": "tc_g240.mp4", "test": "seek", "mode": "keyframes", "delta": 2, "from": 3.53, "target": 5.53, "latency_s": 0.008, "landing_err_s": -5.751, "hang": false}
+BENCH:{"host": "mini-01", "media": "tc_g240.mp4", "test": "seek", "mode": "keyframes", "delta": 10, "from": 1.93, "target": 11.93, "latency_s": 0.007, "landing_err_s": -4.153, "hang": false}
+BENCH:{"host": "mini-01", "media": "tc_g240.mp4", "test": "seek", "mode": "keyframes", "delta": 40, "from": 9.93, "target": 49.93, "latency_s": 0.008, "landing_err_s": -2.152, "hang": false}
+BENCH:{"host": "mini-01", "media": "tc_g240.mp4", "test": "seek", "mode": "keyframes", "delta": -10, "from": 49.93, "target": 39.93, "latency_s": 0.008, "landing_err_s": -8.152, "hang": false}
+BENCH:{"host": "mini-01", "media": "tc_g240.mp4", "test": "seek", "mode": "keyframes", "delta": -40, "from": 33.93, "target": 113.93, "latency_s": 0.008, "landing_err_s": -2.152, "hang": false}
+BENCH:{"host": "mini-01", "media": "tc_g240.mp4", "test": "seek", "mode": "exact", "delta": 2, "from": 113.93, "target": 115.93, "latency_s": 0.118, "landing_err_s": -0.234, "hang": false}
+BENCH:{"host": "mini-01", "media": "tc_g240.mp4", "test": "seek", "mode": "exact", "delta": 10, "from": 117.6, "target": 7.6, "latency_s": 0.22, "landing_err_s": -0.234, "hang": false}
+BENCH:{"host": "mini-01", "media": "tc_g240.mp4", "test": "seek", "mode": "exact", "delta": 40, "from": 9.27, "target": 49.27, "latency_s": 0.035, "landing_err_s": -0.219, "hang": false}
+BENCH:{"host": "mini-01", "media": "tc_g240.mp4", "test": "seek", "mode": "exact", "delta": -10, "from": 51.2, "target": 41.2, "latency_s": 0.034, "landing_err_s": -0.219, "hang": false}
+BENCH:{"host": "mini-01", "media": "tc_g240.mp4", "test": "seek", "mode": "exact", "delta": -40, "from": 43.13, "target": 3.13, "latency_s": 0.087, "landing_err_s": -0.219, "hang": false}
+BENCH:{"host": "mini-01", "media": "tc_g240.mp4", "test": "speed", "speed": 0.5, "achieved": 0.543, "ratio": 1.087, "dropped": 0}
+BENCH:{"host": "mini-01", "media": "tc_g240.mp4", "test": "speed", "speed": 0.8, "achieved": 0.82, "ratio": 1.025, "dropped": 0}
+BENCH:{"host": "mini-01", "media": "tc_g240.mp4", "test": "speed", "speed": 0.95, "achieved": 0.953, "ratio": 1.004, "dropped": 0}
+BENCH:{"host": "mini-01", "media": "tc_g240.mp4", "test": "speed", "speed": 0.99, "achieved": 0.984, "ratio": 0.994, "dropped": 0}
+BENCH:{"host": "mini-01", "media": "tc_g240.mp4", "test": "speed", "speed": 1.01, "achieved": 1.005, "ratio": 0.995, "dropped": 0}
+BENCH:{"host": "mini-01", "media": "tc_g240.mp4", "test": "speed", "speed": 1.05, "achieved": 1.046, "ratio": 0.996, "dropped": 0}
+BENCH:{"host": "mini-01", "media": "tc_g240.mp4", "test": "speed", "speed": 1.2, "achieved": 1.179, "ratio": 0.983, "dropped": 0}
+BENCH:{"host": "mini-01", "media": "tc_g240.mp4", "test": "speed", "speed": 1.5, "achieved": 1.466, "ratio": 0.977, "dropped": 0}
+BENCH:{"host": "mini-01", "media": "tc_g240.mp4", "test": "speed", "speed": 2.0, "achieved": 1.917, "ratio": 0.958, "dropped": 0}
+BENCH:{"host": "mini-01", "media": "tc_g240.mp4", "test": "speed", "speed": 4.0, "achieved": 3.722, "ratio": 0.93, "dropped": 190}
+BENCH:{"host": "mini-01", "media": "tc_g240.mp4", "test": "speed", "speed": 8.0, "achieved": 7.298, "ratio": 0.912, "dropped": 570}
+BENCH:{"host": "mini-01", "media": "tc_g30.mp4", "test": "seek", "mode": "keyframes", "delta": 2, "from": 3.53, "target": 5.53, "latency_s": 0.007, "landing_err_s": -0.753, "hang": false}
+BENCH:{"host": "mini-01", "media": "tc_g30.mp4", "test": "seek", "mode": "keyframes", "delta": 10, "from": 6.93, "target": 16.93, "latency_s": 0.007, "landing_err_s": -1.152, "hang": false}
+BENCH:{"host": "mini-01", "media": "tc_g30.mp4", "test": "seek", "mode": "keyframes", "delta": 40, "from": 17.93, "target": 57.93, "latency_s": 0.009, "landing_err_s": -1.153, "hang": false}
+BENCH:{"host": "mini-01", "media": "tc_g30.mp4", "test": "seek", "mode": "keyframes", "delta": -10, "from": 58.93, "target": 48.93, "latency_s": 0.008, "landing_err_s": -1.152, "hang": false}
+BENCH:{"host": "mini-01", "media": "tc_g30.mp4", "test": "seek", "mode": "keyframes", "delta": -40, "from": 49.93, "target": 9.93, "latency_s": 0.007, "landing_err_s": -1.153, "hang": false}
+BENCH:{"host": "mini-01", "media": "tc_g30.mp4", "test": "seek", "mode": "exact", "delta": 2, "from": 10.93, "target": 12.93, "latency_s": 0.019, "landing_err_s": -0.219, "hang": false}
+BENCH:{"host": "mini-01", "media": "tc_g30.mp4", "test": "seek", "mode": "exact", "delta": 10, "from": 14.87, "target": 24.87, "latency_s": 0.016, "landing_err_s": -0.219, "hang": false}
+BENCH:{"host": "mini-01", "media": "tc_g30.mp4", "test": "seek", "mode": "exact", "delta": 40, "from": 26.8, "target": 66.8, "latency_s": 0.011, "landing_err_s": -0.218, "hang": false}
+BENCH:{"host": "mini-01", "media": "tc_g30.mp4", "test": "seek", "mode": "exact", "delta": -10, "from": 68.73, "target": 58.73, "latency_s": 0.009, "landing_err_s": -0.219, "hang": false}
+BENCH:{"host": "mini-01", "media": "tc_g30.mp4", "test": "seek", "mode": "exact", "delta": -40, "from": 60.67, "target": 20.67, "latency_s": 0.015, "landing_err_s": -0.219, "hang": false}
+BENCH:{"host": "mini-01", "media": "tc_g30.mp4", "test": "speed", "speed": 0.5, "achieved": 0.543, "ratio": 1.087, "dropped": 0}
+BENCH:{"host": "mini-01", "media": "tc_g30.mp4", "test": "speed", "speed": 0.8, "achieved": 0.82, "ratio": 1.025, "dropped": 0}
+BENCH:{"host": "mini-01", "media": "tc_g30.mp4", "test": "speed", "speed": 0.95, "achieved": 0.953, "ratio": 1.003, "dropped": 0}
+BENCH:{"host": "mini-01", "media": "tc_g30.mp4", "test": "speed", "speed": 0.99, "achieved": 0.984, "ratio": 0.994, "dropped": 0}
+BENCH:{"host": "mini-01", "media": "tc_g30.mp4", "test": "speed", "speed": 1.01, "achieved": 1.005, "ratio": 0.995, "dropped": 0}
+BENCH:{"host": "mini-01", "media": "tc_g30.mp4", "test": "speed", "speed": 1.05, "achieved": 1.046, "ratio": 0.996, "dropped": 0}
+BENCH:{"host": "mini-01", "media": "tc_g30.mp4", "test": "speed", "speed": 1.2, "achieved": 1.179, "ratio": 0.982, "dropped": 0}
+BENCH:{"host": "mini-01", "media": "tc_g30.mp4", "test": "speed", "speed": 1.5, "achieved": 1.466, "ratio": 0.977, "dropped": 0}
+BENCH:{"host": "mini-01", "media": "tc_g30.mp4", "test": "speed", "speed": 2.0, "achieved": 1.917, "ratio": 0.958, "dropped": 0}
+BENCH:{"host": "mini-01", "media": "tc_g30.mp4", "test": "speed", "speed": 4.0, "achieved": 3.711, "ratio": 0.928, "dropped": 191}
+BENCH:{"host": "mini-01", "media": "tc_g30.mp4", "test": "speed", "speed": 8.0, "achieved": 7.319, "ratio": 0.915, "dropped": 572}
+BENCH:{"host": "mini-01", "media": "tc_g60.mp4", "test": "seek", "mode": "keyframes", "delta": 2, "from": 3.53, "target": 5.53, "latency_s": 0.009, "landing_err_s": -1.752, "hang": false}
+BENCH:{"host": "mini-01", "media": "tc_g60.mp4", "test": "seek", "mode": "keyframes", "delta": 10, "from": 5.93, "target": 15.93, "latency_s": 0.008, "landing_err_s": -2.152, "hang": false}
+BENCH:{"host": "mini-01", "media": "tc_g60.mp4", "test": "seek", "mode": "keyframes", "delta": 40, "from": 15.93, "target": 55.93, "latency_s": 0.008, "landing_err_s": -2.152, "hang": false}
+BENCH:{"host": "mini-01", "media": "tc_g60.mp4", "test": "seek", "mode": "keyframes", "delta": -10, "from": 55.93, "target": 45.93, "latency_s": 0.008, "landing_err_s": -2.152, "hang": false}
+BENCH:{"host": "mini-01", "media": "tc_g60.mp4", "test": "seek", "mode": "keyframes", "delta": -40, "from": 45.93, "target": 5.93, "latency_s": 0.007, "landing_err_s": -2.153, "hang": false}
+BENCH:{"host": "mini-01", "media": "tc_g60.mp4", "test": "seek", "mode": "exact", "delta": 2, "from": 5.93, "target": 7.93, "latency_s": 0.045, "landing_err_s": -0.219, "hang": false}
+BENCH:{"host": "mini-01", "media": "tc_g60.mp4", "test": "seek", "mode": "exact", "delta": 10, "from": 9.87, "target": 19.87, "latency_s": 0.042, "landing_err_s": -0.219, "hang": false}
+BENCH:{"host": "mini-01", "media": "tc_g60.mp4", "test": "seek", "mode": "exact", "delta": 40, "from": 21.8, "target": 61.8, "latency_s": 0.048, "landing_err_s": -0.219, "hang": false}
+BENCH:{"host": "mini-01", "media": "tc_g60.mp4", "test": "seek", "mode": "exact", "delta": -10, "from": 63.73, "target": 53.73, "latency_s": 0.052, "landing_err_s": -0.219, "hang": false}
+BENCH:{"host": "mini-01", "media": "tc_g60.mp4", "test": "seek", "mode": "exact", "delta": -40, "from": 55.67, "target": 15.67, "latency_s": 0.033, "landing_err_s": -0.219, "hang": false}
+BENCH:{"host": "mini-01", "media": "tc_g60.mp4", "test": "speed", "speed": 0.5, "achieved": 0.543, "ratio": 1.087, "dropped": 0}
+BENCH:{"host": "mini-01", "media": "tc_g60.mp4", "test": "speed", "speed": 0.8, "achieved": 0.82, "ratio": 1.025, "dropped": 0}
+BENCH:{"host": "mini-01", "media": "tc_g60.mp4", "test": "speed", "speed": 0.95, "achieved": 0.953, "ratio": 1.003, "dropped": 0}
+BENCH:{"host": "mini-01", "media": "tc_g60.mp4", "test": "speed", "speed": 0.99, "achieved": 0.984, "ratio": 0.994, "dropped": 0}
+BENCH:{"host": "mini-01", "media": "tc_g60.mp4", "test": "speed", "speed": 1.01, "achieved": 1.005, "ratio": 0.995, "dropped": 0}
+BENCH:{"host": "mini-01", "media": "tc_g60.mp4", "test": "speed", "speed": 1.05, "achieved": 1.046, "ratio": 0.996, "dropped": 0}
+BENCH:{"host": "mini-01", "media": "tc_g60.mp4", "test": "speed", "speed": 1.2, "achieved": 1.179, "ratio": 0.982, "dropped": 0}
+BENCH:{"host": "mini-01", "media": "tc_g60.mp4", "test": "speed", "speed": 1.5, "achieved": 1.466, "ratio": 0.977, "dropped": 0}
+BENCH:{"host": "mini-01", "media": "tc_g60.mp4", "test": "speed", "speed": 2.0, "achieved": 1.916, "ratio": 0.958, "dropped": 0}
+BENCH:{"host": "mini-01", "media": "tc_g60.mp4", "test": "speed", "speed": 4.0, "achieved": 3.7, "ratio": 0.925, "dropped": 189}
+BENCH:{"host": "mini-01", "media": "tc_g60.mp4", "test": "speed", "speed": 8.0, "achieved": 7.317, "ratio": 0.915, "dropped": 573}
+BENCH:{"host": "mini-01", "media": "tc_g60_noise.mp4", "test": "seek", "mode": "keyframes", "delta": 2, "from": 3.53, "target": 5.53, "latency_s": 0.007, "landing_err_s": -1.752, "hang": false}
+BENCH:{"host": "mini-01", "media": "tc_g60_noise.mp4", "test": "seek", "mode": "keyframes", "delta": 10, "from": 5.93, "target": 15.93, "latency_s": 0.008, "landing_err_s": -2.152, "hang": false}
+BENCH:{"host": "mini-01", "media": "tc_g60_noise.mp4", "test": "seek", "mode": "keyframes", "delta": 40, "from": 15.93, "target": 55.93, "latency_s": 0.006, "landing_err_s": -2.152, "hang": false}
+BENCH:{"host": "mini-01", "media": "tc_g60_noise.mp4", "test": "seek", "mode": "keyframes", "delta": -10, "from": 55.93, "target": 45.93, "latency_s": 0.007, "landing_err_s": -2.153, "hang": false}
+BENCH:{"host": "mini-01", "media": "tc_g60_noise.mp4", "test": "seek", "mode": "keyframes", "delta": -40, "from": 45.93, "target": 5.93, "latency_s": 0.007, "landing_err_s": -2.152, "hang": false}
+BENCH:{"host": "mini-01", "media": "tc_g60_noise.mp4", "test": "seek", "mode": "exact", "delta": 2, "from": 5.93, "target": 7.93, "latency_s": 0.04, "landing_err_s": -0.219, "hang": false}
+BENCH:{"host": "mini-01", "media": "tc_g60_noise.mp4", "test": "seek", "mode": "exact", "delta": 10, "from": 9.87, "target": 19.87, "latency_s": 0.04, "landing_err_s": -0.219, "hang": false}
+BENCH:{"host": "mini-01", "media": "tc_g60_noise.mp4", "test": "seek", "mode": "exact", "delta": 40, "from": 21.8, "target": 61.8, "latency_s": 0.039, "landing_err_s": -0.219, "hang": false}
+BENCH:{"host": "mini-01", "media": "tc_g60_noise.mp4", "test": "seek", "mode": "exact", "delta": -10, "from": 63.73, "target": 53.73, "latency_s": 0.04, "landing_err_s": -0.219, "hang": false}
+BENCH:{"host": "mini-01", "media": "tc_g60_noise.mp4", "test": "seek", "mode": "exact", "delta": -40, "from": 55.67, "target": 15.67, "latency_s": 0.034, "landing_err_s": -0.219, "hang": false}
+BENCH:{"host": "mini-01", "media": "tc_g60_noise.mp4", "test": "speed", "speed": 0.5, "achieved": 0.543, "ratio": 1.087, "dropped": 0}
+BENCH:{"host": "mini-01", "media": "tc_g60_noise.mp4", "test": "speed", "speed": 0.8, "achieved": 0.82, "ratio": 1.025, "dropped": 0}
+BENCH:{"host": "mini-01", "media": "tc_g60_noise.mp4", "test": "speed", "speed": 0.95, "achieved": 0.953, "ratio": 1.003, "dropped": 0}
+BENCH:{"host": "mini-01", "media": "tc_g60_noise.mp4", "test": "speed", "speed": 0.99, "achieved": 0.984, "ratio": 0.994, "dropped": 0}
+BENCH:{"host": "mini-01", "media": "tc_g60_noise.mp4", "test": "speed", "speed": 1.01, "achieved": 1.005, "ratio": 0.995, "dropped": 0}
+BENCH:{"host": "mini-01", "media": "tc_g60_noise.mp4", "test": "speed", "speed": 1.05, "achieved": 1.035, "ratio": 0.986, "dropped": 0}
+BENCH:{"host": "mini-01", "media": "tc_g60_noise.mp4", "test": "speed", "speed": 1.2, "achieved": 1.179, "ratio": 0.982, "dropped": 0}
+BENCH:{"host": "mini-01", "media": "tc_g60_noise.mp4", "test": "speed", "speed": 1.5, "achieved": 1.466, "ratio": 0.977, "dropped": 0}
+BENCH:{"host": "mini-01", "media": "tc_g60_noise.mp4", "test": "speed", "speed": 2.0, "achieved": 1.917, "ratio": 0.958, "dropped": 0}
+BENCH:{"host": "mini-01", "media": "tc_g60_noise.mp4", "test": "speed", "speed": 4.0, "achieved": 3.722, "ratio": 0.93, "dropped": 190}
+BENCH:{"host": "mini-01", "media": "tc_g60_noise.mp4", "test": "speed", "speed": 8.0, "achieved": 7.31, "ratio": 0.914, "dropped": 571}
+BENCH:{"host": "mini-01", "media": "tc_gone.mp4", "test": "seek", "mode": "keyframes", "delta": 2, "from": 3.53, "target": 5.53, "latency_s": 0.007, "landing_err_s": -5.753, "hang": false}
+BENCH:{"host": "mini-01", "media": "tc_gone.mp4", "test": "seek", "mode": "keyframes", "delta": 10, "from": 1.93, "target": 11.93, "latency_s": 0.006, "landing_err_s": -12.153, "hang": false}
+BENCH:{"host": "mini-01", "media": "tc_gone.mp4", "test": "seek", "mode": "keyframes", "delta": 40, "from": 1.93, "target": 41.93, "latency_s": 0.006, "landing_err_s": -42.153, "hang": false}
+BENCH:{"host": "mini-01", "media": "tc_gone.mp4", "test": "seek", "mode": "keyframes", "delta": -10, "from": 1.93, "target": 111.93, "latency_s": 0.007, "landing_err_s": 7.848, "hang": false}
+BENCH:{"host": "mini-01", "media": "tc_gone.mp4", "test": "seek", "mode": "keyframes", "delta": -40, "from": 1.93, "target": 81.93, "latency_s": 0.008, "landing_err_s": 37.848, "hang": false}
+BENCH:{"host": "mini-01", "media": "tc_gone.mp4", "test": "seek", "mode": "exact", "delta": 2, "from": 1.93, "target": 3.93, "latency_s": 0.108, "landing_err_s": -0.234, "hang": false}
+BENCH:{"host": "mini-01", "media": "tc_gone.mp4", "test": "seek", "mode": "exact", "delta": 10, "from": 5.6, "target": 15.6, "latency_s": 0.46, "landing_err_s": -0.234, "hang": false}
+BENCH:{"host": "mini-01", "media": "tc_gone.mp4", "test": "seek", "mode": "exact", "delta": 40, "from": 17.27, "target": 57.27, "latency_s": 1.719, "landing_err_s": -0.234, "hang": false}
+BENCH:{"host": "mini-01", "media": "tc_gone.mp4", "test": "seek", "mode": "exact", "delta": -10, "from": 58.93, "target": 48.93, "latency_s": 1.471, "landing_err_s": -0.234, "hang": false}
+BENCH:{"host": "mini-01", "media": "tc_gone.mp4", "test": "seek", "mode": "exact", "delta": -40, "from": 50.6, "target": 10.6, "latency_s": 0.311, "landing_err_s": -0.22, "hang": false}
+BENCH:{"host": "mini-01", "media": "tc_gone.mp4", "test": "speed", "speed": 0.5, "achieved": 0.543, "ratio": 1.086, "dropped": 0}
+BENCH:{"host": "mini-01", "media": "tc_gone.mp4", "test": "speed", "speed": 0.8, "achieved": 0.82, "ratio": 1.025, "dropped": 0}
+BENCH:{"host": "mini-01", "media": "tc_gone.mp4", "test": "speed", "speed": 0.95, "achieved": 0.953, "ratio": 1.004, "dropped": 0}
+BENCH:{"host": "mini-01", "media": "tc_gone.mp4", "test": "speed", "speed": 0.99, "achieved": 0.994, "ratio": 1.004, "dropped": 0}
+BENCH:{"host": "mini-01", "media": "tc_gone.mp4", "test": "speed", "speed": 1.01, "achieved": 1.015, "ratio": 1.005, "dropped": 0}
+BENCH:{"host": "mini-01", "media": "tc_gone.mp4", "test": "speed", "speed": 1.05, "achieved": 1.046, "ratio": 0.996, "dropped": 0}
+BENCH:{"host": "mini-01", "media": "tc_gone.mp4", "test": "speed", "speed": 1.2, "achieved": 1.179, "ratio": 0.983, "dropped": 0}
+BENCH:{"host": "mini-01", "media": "tc_gone.mp4", "test": "speed", "speed": 1.5, "achieved": 1.466, "ratio": 0.977, "dropped": 0}
+BENCH:{"host": "mini-01", "media": "tc_gone.mp4", "test": "speed", "speed": 2.0, "achieved": 1.917, "ratio": 0.959, "dropped": 0}
+BENCH:{"host": "mini-01", "media": "tc_gone.mp4", "test": "speed", "speed": 4.0, "achieved": 3.711, "ratio": 0.928, "dropped": 190}
+BENCH:{"host": "mini-01", "media": "tc_gone.mp4", "test": "speed", "speed": 8.0, "achieved": 7.329, "ratio": 0.916, "dropped": 573}
+BENCH:{"host": "mini-01", "done": true}
