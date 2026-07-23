@@ -521,9 +521,14 @@ class MpvPlayer(BasePlayer):
         self.log("resume")
         self._mpv_send('{ "command": ["set_property", "pause", false] }')
 
-    def _seekTo(self, milli):
-        self._mpv_send('{ "command": ["seek", "'+str(milli/1000)+'", "absolute", "keyframes"] }')
-        self.log("seek to", milli/1000, self._status['duration'])
+    def _seekTo(self, milli, exact=False):
+        # "keyframes" snaps to the GOP grid (fast, imprecise — on
+        # sparse-keyframe media it can land arbitrarily far, defeating any
+        # sync seek); "exact" decodes to the frame. The explicit flag
+        # overrides --hr-seek, so exactness must be chosen per call.
+        mode = "exact" if exact else "keyframes"
+        self._mpv_send('{ "command": ["seek", "'+str(milli/1000)+'", "absolute", "'+mode+'"] }')
+        self.log("seek to", milli/1000, self._status['duration'], "(" + mode + ")")
 
 
     def _skip(self, milli):

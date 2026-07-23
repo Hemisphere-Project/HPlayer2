@@ -36,7 +36,7 @@ class WallclockInterface (BaseInterface):
 
     def __init__(self, hplayer, netiface=None, master=False, player=None,
                     port=3737, group='239.192.0.37', rate=20, unicast=False,
-                    masterName=None, staleness=1.0,
+                    masterName=None, staleness=1.0, extrapolate=4.0,
                     driftLog='/data/var/wallclock-drift.csv'):
 
         super().__init__(hplayer, "WALLCLOCK")
@@ -50,6 +50,12 @@ class WallclockInterface (BaseInterface):
         self.unicast = unicast
         self.masterName = masterName        # accept only this master (None = lock on first heard)
         self.staleness = staleness
+        # RF gap bridging (s): packets carry (pos, at) so the clock estimate
+        # is pure extrapolation anyway — keep servoing from the last good
+        # packet through short delivery gaps (wifi bursts) instead of going
+        # blind; freewheel only when the gap outlives this budget. Master
+        # crystal drift over 4s is microseconds — the estimate stays exact.
+        self.extrapolate = max(extrapolate, staleness)
         self.driftLog = driftLog
 
         self._myName = network.get_hostname()
@@ -68,7 +74,9 @@ class WallclockInterface (BaseInterface):
             if self.player:
                 self.hplayer.on(self.player.name + '.status')(self._onPlayerStatus)
         else:
-            self.drifter = Drifter(self.player, log=self.log) if self.player else None
+            # danceMode: joining slaves seek-ahead + pause + timed-resume
+            # instead of chaining blind jumps (113s -> ~10s join, 2026-07-23)
+            self.drifter = Drifter(self.player, log=self.log, danceMode=True) if self.player else None
             self._lockedName = None
             self._lastSeq = None
             self._lastAccept = 0
@@ -241,13 +249,17 @@ class WallclockInterface (BaseInterface):
         self._openCsv()
         self.log('slave: chasing wall clock on port', self.port)
 
+        extraBase = None    # (pos, atLocal, dur, seq, cs) of the last chase-eligible packet
+
         while not self.stopped.is_set():
 
-            # Staleness: master silent -> freewheel at speed 1.0, keep listening
+            # Staleness: master silent beyond the extrapolation budget ->
+            # freewheel at speed 1.0, keep listening
             now = time.time()
-            if self._lockedName and now - self._lastAccept > self.staleness:
+            if self._lockedName and now - self._lastAccept > self.extrapolate:
                 if not self._freewheeling:
                     self._freewheeling = True
+                    extraBase = None
                     if self.drifter:
                         self.drifter.release()
                     self.log(colored('master clock silent (' + self._lockedName + ') : freewheeling', 'yellow'))
@@ -259,6 +271,20 @@ class WallclockInterface (BaseInterface):
             try:
                 data, addr = sock.recvfrom(1500)
             except socket.timeout:
+                # Delivery gap: keep servoing on the extrapolated clock
+                # until the freewheel budget runs out.
+                if extraBase and self.drifter and not self._freewheeling \
+                        and time.time() - self._lastAccept > 0.2:
+                    bpos, batLocal, bdur, bseq, bcs = extraBase
+                    clock = bpos + (time.time() * PRECISION - batLocal) / PRECISION
+                    if bdur > 3:
+                        clock = clock % bdur
+                    res = self.drifter.tick(clock, bdur)
+                    if res:
+                        res['seq'] = bseq
+                        res['cs'] = bcs
+                        self._telemetry(res)
+                        self.emit('drift', res)
                 continue
             except OSError:
                 continue
@@ -296,6 +322,7 @@ class WallclockInterface (BaseInterface):
             self._lastSeq = s
 
             self._lastAccept = time.time()
+            extraBase = None    # re-set below only if this packet is chase-eligible
             if self._freewheeling:
                 self._freewheeling = False
                 self.log('master clock is back:', name)
@@ -350,6 +377,8 @@ class WallclockInterface (BaseInterface):
             dur = pkt.get('dur', 0) or 0
             if dur > 3:
                 clock = clock % dur
+
+            extraBase = (pkt.get('pos', 0.0), atLocal, dur, s, cs)
 
             res = self.drifter.tick(clock, dur)
             if res:

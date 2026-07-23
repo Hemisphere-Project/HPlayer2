@@ -146,8 +146,14 @@ class BasePlayer(Module):
         self._resume()
 
      # SEEK to position
-    def seekTo(self, milli):
-        self._seekTo(milli)
+     # exact: frame-precise landing (decode cost on long-GOP media) —
+     # keyframe snapping is the default and lands wherever the GOP allows.
+    def seekTo(self, milli, exact=False):
+        try:
+            self._seekTo(milli, exact)
+        except TypeError:
+            # legacy backend without the exact parameter
+            self._seekTo(milli)
 
     # SKIP time
     def skip(self, milli):
