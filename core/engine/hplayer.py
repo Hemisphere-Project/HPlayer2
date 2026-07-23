@@ -481,6 +481,14 @@ class HPlayer2(Module):
             self.appRunning = False
             self.appReady = False
             self._stop_components()
+            # Graceful stop is done — don't let a straggler non-daemon
+            # thread (zeroconf teardown, a wedged socket) hold the process
+            # hostage until systemd's 90s SIGKILL: every stop/reboot would
+            # pay that delay. Normal exits win the race; hung ones get
+            # reaped in 5s with the honest exit code.
+            t = Timer(5.0, self._force_exit, args=(self._exit_code,))
+            t.daemon = True
+            t.start()
 
         return self._exit_code
 

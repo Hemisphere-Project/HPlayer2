@@ -117,10 +117,16 @@ class Http2Interface (BaseInterface):
         with ThreadedHTTPServer(self, self._port) as server:
             self.stopped.wait()
 
-        # Unregister ZeroConf
+        # Unregister ZeroConf — bounded: unregister/close can hang on a
+        # busy mdns stack, and this thread is non-daemon (a hang here
+        # held the whole process until systemd's 90s SIGKILL).
         if zero_enable:
-            zeroconf.unregister_service(info)
-            zeroconf.close()
+            def _bye():
+                zeroconf.unregister_service(info)
+                zeroconf.close()
+            t = threading.Thread(target=_bye, daemon=True)
+            t.start()
+            t.join(3.0)
 
 
     # SEND socketio message to clients
