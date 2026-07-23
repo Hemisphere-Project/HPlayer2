@@ -24,7 +24,14 @@ cd "$DIR"
 ./scripts/color.sh 000000
 
 if command -v uv >/dev/null 2>&1; then
-    CMD="uv run python $DIR/launcher.py $profile"
+    # A shipped .venv boots as-is: uv's implicit env sync revalidates the
+    # czmq/zyre path deps, which reaches for PyPI — fatal on a player with
+    # no internet (venue reality). Sync only when no venv exists yet.
+    if [ -d "$DIR/.venv" ]; then
+        CMD="uv run --no-sync python $DIR/launcher.py $profile"
+    else
+        CMD="uv run python $DIR/launcher.py $profile"
+    fi
     echo "Starting HPlayer2: $CMD"
     exec $CMD
 else
