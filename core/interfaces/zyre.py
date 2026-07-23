@@ -871,6 +871,10 @@ class ZyreInterface (BaseInterface):
                 self.node.stop()
             except Exception as e:
                 self.log('old node teardown error (continuing):', e)
+            # A SIGTERM breaks the poller too: if the app started stopping
+            # while we tore the old node down, don't rebuild into shutdown.
+            if self.stopped.is_set() or not self.isRunning():
+                break
             try:
                 self.node = ZyreNode(self, self.iface)
             except Exception as e:

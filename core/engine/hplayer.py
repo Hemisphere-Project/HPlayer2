@@ -480,15 +480,16 @@ class HPlayer2(Module):
         finally:
             self.appRunning = False
             self.appReady = False
-            self._stop_components()
-            # Graceful stop is done — don't let a straggler non-daemon
-            # thread (zeroconf teardown, a wedged socket) hold the process
-            # hostage until systemd's 90s SIGKILL: every stop/reboot would
-            # pay that delay. Normal exits win the race; hung ones get
-            # reaped in 5s with the honest exit code.
-            t = Timer(5.0, self._force_exit, args=(self._exit_code,))
+            # Arm the exit watchdog BEFORE the stop sequence: teardown
+            # itself can wedge (zyre rebuilding a node the SIGTERM just
+            # broke, zeroconf goodbye on a busy mdns stack) and would
+            # otherwise hold the process until systemd's 90s SIGKILL —
+            # every stop/reboot would pay that delay. Normal exits win
+            # the race; hung ones get reaped with the honest exit code.
+            t = Timer(10.0, self._force_exit, args=(self._exit_code,))
             t.daemon = True
             t.start()
+            self._stop_components()
 
         return self._exit_code
 
