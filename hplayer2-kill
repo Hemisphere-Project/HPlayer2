@@ -1,5 +1,14 @@
 #!/bin/bash
-/usr/bin/kill -9 $(ps -faux | grep hplayer2 | grep -v grep | awk  '{print $2}')
-/usr/bin/kill -9 $(ps -faux | grep HPlayer2 | grep -v grep | awk  '{print $2}')
-/usr/bin/kill -9 $(ps -faux | grep mpv | grep -v grep | awk  '{print $2}')
+# Kill leftover player processes. Never ourselves or our sh -c wrapper:
+# their cmdlines match 'hplayer2' too, and a kill -9 suicide here leaves
+# the unit 'failed (signal)' on every stop (ExecStopPost is the control
+# process).
+for pat in hplayer2 HPlayer2 mpv; do
+    for pid in $(pgrep -f "$pat"); do
+        [ "$pid" = "$$" ] && continue
+        [ "$pid" = "$PPID" ] && continue
+        kill -9 "$pid" 2>/dev/null
+    done
+done
 sleep 1
+exit 0
