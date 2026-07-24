@@ -14,8 +14,10 @@ AUDIO_CONF_PATHS = ('/etc/audiohub.conf', '/data/audiohub.conf')
 def read_audio_conf(paths=AUDIO_CONF_PATHS):
     """Parse the platform audio contract (merged, later file wins).
 
-    Returns {'graph': str|None, 'latency_us': int} when at least one file
-    exists, None when the platform is generic (no hub).
+    Returns {'graph': str|None, 'latency_us': int, 'mute': [sinks]} when at
+    least one file exists, None when the platform is generic (no hub).
+    'mute' lists softvol-muted outputs (written by `audiohub mute`, restored
+    platform-side at forwarder start — HPlayer2 only reflects it).
     """
     if isinstance(paths, str):
         paths = (paths,)
@@ -28,7 +30,7 @@ def read_audio_conf(paths=AUDIO_CONF_PATHS):
         except OSError:
             continue
         if conf is None:
-            conf = {'graph': None, 'latency_us': 30000}
+            conf = {'graph': None, 'latency_us': 30000, 'mute': []}
         for line in text.splitlines():
             line = line.strip()
             if not line or line.startswith('#') or '=' not in line:
@@ -41,4 +43,6 @@ def read_audio_conf(paths=AUDIO_CONF_PATHS):
                     conf['latency_us'] = int(val)
                 except ValueError:
                     pass
+            elif key == 'mute':
+                conf['mute'] = [s.strip() for s in val.split(',') if s.strip()]
     return conf

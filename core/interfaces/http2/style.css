@@ -130,3 +130,4 @@ input[type=range]::-webkit-slider-runnable-track {
 /* Always-on audio graph: output status chips (audiohub interface) */
 .audio-status { vertical-align: middle; margin-right: .3rem; padding: .5em .6em; }
 .audio-status.badge-light { opacity: .5; }
+.audio-status.clickable { cursor: pointer; }

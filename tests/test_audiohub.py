@@ -120,7 +120,8 @@ def test_read_audio_conf_missing(tmp_path):
 def test_read_audio_conf(tmp_path):
     p = tmp_path / 'audiohub.conf'
     p.write_text("# comment\ngraph=v2\nlatency_us=30000\n\njunk line\n")
-    assert read_audio_conf(str(p)) == {'graph': 'v2', 'latency_us': 30000}
+    assert read_audio_conf(str(p)) == {'graph': 'v2', 'latency_us': 30000,
+                                       'mute': []}
 
 
 def test_read_audio_conf_defaults(tmp_path):
@@ -129,6 +130,17 @@ def test_read_audio_conf_defaults(tmp_path):
     conf = read_audio_conf(str(p))
     assert conf['graph'] == 'v3'
     assert conf['latency_us'] == 30000      # unparsable value -> default
+
+
+def test_read_audio_conf_mute_key(tmp_path):
+    etc = tmp_path / 'etc.conf'
+    data = tmp_path / 'data.conf'
+    etc.write_text("graph=v2\nlatency_us=30000\n")
+    data.write_text("mute=hdmi\n")
+    conf = read_audio_conf((str(etc), str(data)))
+    assert conf['mute'] == ['hdmi']
+    data.write_text("mute=\n")              # `audiohub unmute` variant: empty
+    assert read_audio_conf((str(etc), str(data)))['mute'] == []
 
 
 # ---------------------------------------------------------------------------
@@ -394,6 +406,62 @@ def test_usb_sink_flow_watched_when_present():
         hub._tick()
     assert hub._sinkState('usb') == 'stalled'
     assert hub._sinkState('jack') == 'active'
+
+
+# ---------------------------------------------------------------------------
+# hdmi softvol mute (platform-side control, chips reflect the conf)
+# ---------------------------------------------------------------------------
+
+MUTED_CONF = {'graph': 'v2', 'latency_us': 30000, 'mute': ['hdmi']}
+
+
+def test_muted_state_from_conf():
+    hub = FixturedHub(conf=dict(MUTED_CONF))
+    hub._tick()
+    hub._pushStatus()
+    _, msg = hub.hplayer.http2.sent[-1]
+    assert msg['hdmi'] == 'muted'
+    assert msg['jack'] == 'active'
+
+
+def test_stall_and_error_outrank_muted():
+    # softvol mute keeps silence flowing, so health stays watchable while
+    # muted — the chip must tell the harder truth first
+    hub = FixturedHub(conf=dict(MUTED_CONF))
+    ptr = 0
+    for _ in range(AudiohubInterface.STALL_TICKS):
+        ptr += 960
+        hub.files[CABLE] = pcm_running(ptr)
+        hub.files[JACK_SINK] = pcm_running(ptr)
+        hub.files[HDMI_SINK] = pcm_prepared(4800)
+        hub._tick()
+    assert hub._sinkState('hdmi') == 'stalled'
+    hub.units['hdmi'] = 'failed'
+    hub._tick()
+    assert hub._sinkState('hdmi') == 'error'
+
+
+def test_setmute_shells_the_platform_cli(monkeypatch):
+    import core.interfaces.audiohub as mod
+    calls = []
+    monkeypatch.setattr(mod.shutil, 'which', lambda n: '/usr/local/bin/audiohub')
+    monkeypatch.setattr(mod.subprocess, 'run', lambda cmd, **kw: calls.append(cmd))
+    hub = FixturedHub()
+    hub.setMute('hdmi', True)
+    hub.setMute('hdmi', False)
+    assert calls == [['/usr/local/bin/audiohub', 'mute', 'hdmi'],
+                     ['/usr/local/bin/audiohub', 'unmute', 'hdmi']]
+
+
+def test_setmute_ignored_without_hub_or_cli(monkeypatch):
+    import core.interfaces.audiohub as mod
+    monkeypatch.setattr(mod.subprocess, 'run',
+                        lambda *a, **kw: (_ for _ in ()).throw(AssertionError('ran')))
+    hub = FixturedHub(conf=None)                      # generic platform
+    hub.setMute('hdmi', True)
+    hub2 = FixturedHub()                              # hub, but no CLI on PATH
+    monkeypatch.setattr(mod.shutil, 'which', lambda n: None)
+    hub2.setMute('hdmi', True)
 
 
 # ---------------------------------------------------------------------------

@@ -105,6 +105,13 @@ class AudiohubInterface(BaseInterface):
     (~10s) sits just past the forwarder's own ~9s flow-watchdog recycle, so
     a successful platform self-heal never blips the chip.
 
+    The hdmi chip doubles as a mute toggle: setMute() shells out to the
+    platform's `audiohub mute|unmute hdmi` CLI (the sanctioned third-party
+    control surface — HPlayer2 still never touches ALSA/units itself) and the
+    'muted' chip state is read back from the conf's `mute=` key on the next
+    re-read. Softvol mute keeps silence flowing, so the flow watch stays
+    valid while muted — a muted sink still reports stalled/error first.
+
     Without the contract file the platform is generic: no compensation, no
     monitoring, chips report 'default' — HPlayer2 never touches audio config.
 
@@ -267,7 +274,26 @@ class AudiohubInterface(BaseInterface):
             return 'error'
         if self._stalled(sink):
             return 'stalled'
+        if sink in self.conf.get('mute', ()):
+            return 'muted'
         return 'active'
+
+    def setMute(self, sink, mute):
+        """Toggle a platform softvol via the audiohub CLI (hdmi only today).
+
+        Fire-and-forget on purpose: the CLI flips the control and persists
+        mute=<sink> in /data/audiohub.conf; the chip turns 'muted' at the
+        next conf re-read (~2s), so the UI reflects the platform's truth,
+        never just the request.
+        """
+        if not self.conf:
+            return self.log('mute ignored: generic platform (no hub)')
+        cli = shutil.which('audiohub')
+        if not cli:
+            return self.log('mute ignored: audiohub CLI not found')
+        self.log('hub', 'mute' if mute else 'unmute', sink)
+        subprocess.run([cli, 'mute' if mute else 'unmute', sink],
+                       capture_output=True)
 
     def _pushStatus(self):
         if self.conf:

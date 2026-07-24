@@ -354,6 +354,13 @@ class ThreadedHTTPServer(object):
             self.http2interface.emit('hardreset')
 
 
+        @socketio.on('audiomute')
+        def audiomute_message(message=None):
+            hub = self.http2interface.hplayer.interface('audiohub')
+            if hub:
+                hub.setMute('hdmi', bool(message and message.get('mute')))
+
+
         @socketio.on('ping')
         def ping_message():
             socketio.send('pong')

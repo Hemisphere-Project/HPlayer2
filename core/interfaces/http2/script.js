@@ -326,34 +326,50 @@ $(document).ready(function() {
     // 'hub' mode (dedicated platform, Pi-tools plumbing): every present
     // output plays, chips reflect per-forwarder health on two axes:
     // red = forwarder unit down, orange = unit up but the sink hw_ptr
-    // stopped advancing while mpv plays (silent pipeline wedge). 'default'
-    // mode (generic ALSA): neutral chips.
+    // stopped advancing while mpv plays (silent pipeline wedge). The HDMI
+    // chip is also a toggle: platform softvol mute (dark = muted; error/
+    // stalled outrank it — silence keeps flowing, health stays watchable).
+    // 'default' mode (generic ALSA): neutral chips.
     function audioChip(sel, state, html) {
         var cls = { 'on': 'badge-success', 'active': 'badge-success',
                     'absent': 'badge-light', 'off': 'badge-light',
                     'error': 'badge-danger', 'stalled': 'badge-warning',
+                    'muted': 'badge-dark',
                     'default': 'badge-secondary', 'legacy': 'badge-secondary'
                   }[state] || 'badge-secondary';
-        $(sel).removeClass('badge-success badge-light badge-danger badge-warning badge-secondary')
+        $(sel).removeClass('badge-success badge-light badge-danger badge-warning badge-dark badge-secondary')
               .addClass(cls);
         if (html) $(sel).html(html);
     }
+    var hdmiAudioState = null;   // last hub-mode hdmi chip state, null = no hub
     socket.on('audio-status', function(msg) {
         var hub = (msg['mode'] == 'hub');
         var pipe = hub ? 'audio hub ' + (msg['graph'] || '?')
                          + ' · ' + (msg['latency-ms'] || '?') + 'ms'
                        : 'default ALSA (no hub)';
         audioChip('#jack_status', msg['jack']);
-        audioChip('#hdmi_status', msg['hdmi']);
+        var hdmi = '<i class="fas fa-desktop"></i> HDMI';
+        if (hub && msg['hdmi'] == 'muted') hdmi += ' <i class="fas fa-volume-mute"></i>';
+        audioChip('#hdmi_status', msg['hdmi'], hdmi);
         var usb = '<i class="fab fa-usb"></i> USB';
         if (hub && msg['usb'] == 'active' && msg['usb-channels'])
             usb += ' ' + msg['usb-channels'] + 'ch';
         if (msg['usb'] == 'error' || msg['usb'] == 'stalled') usb += ' &#9888;';
         audioChip('#usb_status', msg['usb'], usb);
+        hdmiAudioState = hub ? msg['hdmi'] : null;
+        $('#hdmi_status').toggleClass('clickable', hub);
         $('#jack_status').attr('title', 'internal jack — ' + pipe);
-        $('#hdmi_status').attr('title', 'HDMI audio — ' + pipe);
+        $('#hdmi_status').attr('title', 'HDMI audio — ' + pipe
+            + (hub ? (msg['hdmi'] == 'muted' ? ' — MUTED, click to unmute'
+                                             : ' — click to mute') : ''));
         $('#usb_status').attr('title', 'USB audio — ' + pipe
             + (hub && msg['usb-card'] ? ' — ' + msg['usb-card'] : ''));
+    });
+    $('#hdmi_status').click(function() {
+        if (hdmiAudioState == null) return;      // status-only without a hub
+        var mute = (hdmiAudioState != 'muted');
+        if (confirm(mute ? 'Mute HDMI audio ?' : 'Unmute HDMI audio ?'))
+            socket.emit('audiomute', {'mute': mute});
     });
 
     // REBOOT
