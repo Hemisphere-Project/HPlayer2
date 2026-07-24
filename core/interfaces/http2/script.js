@@ -324,15 +324,17 @@ $(document).ready(function() {
 
     // AUDIO OUTPUT STATUS — pushed by the audiohub monitor.
     // 'hub' mode (dedicated platform, Pi-tools plumbing): every present
-    // output plays, chips reflect per-forwarder health, red = mpv plays but
-    // that output is silent. 'default' mode (generic ALSA): neutral chips.
+    // output plays, chips reflect per-forwarder health on two axes:
+    // red = forwarder unit down, orange = unit up but the sink hw_ptr
+    // stopped advancing while mpv plays (silent pipeline wedge). 'default'
+    // mode (generic ALSA): neutral chips.
     function audioChip(sel, state, html) {
         var cls = { 'on': 'badge-success', 'active': 'badge-success',
                     'absent': 'badge-light', 'off': 'badge-light',
-                    'error': 'badge-danger', 'default': 'badge-secondary',
-                    'legacy': 'badge-secondary'
+                    'error': 'badge-danger', 'stalled': 'badge-warning',
+                    'default': 'badge-secondary', 'legacy': 'badge-secondary'
                   }[state] || 'badge-secondary';
-        $(sel).removeClass('badge-success badge-light badge-danger badge-secondary')
+        $(sel).removeClass('badge-success badge-light badge-danger badge-warning badge-secondary')
               .addClass(cls);
         if (html) $(sel).html(html);
     }
@@ -346,7 +348,7 @@ $(document).ready(function() {
         var usb = '<i class="fab fa-usb"></i> USB';
         if (hub && msg['usb'] == 'active' && msg['usb-channels'])
             usb += ' ' + msg['usb-channels'] + 'ch';
-        if (msg['usb'] == 'error') usb += ' &#9888;';
+        if (msg['usb'] == 'error' || msg['usb'] == 'stalled') usb += ' &#9888;';
         audioChip('#usb_status', msg['usb'], usb);
         $('#jack_status').attr('title', 'internal jack — ' + pipe);
         $('#hdmi_status').attr('title', 'HDMI audio — ' + pipe);

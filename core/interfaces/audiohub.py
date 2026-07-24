@@ -41,6 +41,41 @@ def parse_stream_playback_channels(text):
     return channels
 
 
+def parse_pcm_status(text):
+    """(state, hw_ptr) from a /proc/asound/.../subN/status dump.
+
+    The file reads 'closed' (single word, no colon) when the PCM is not
+    open — that and an unreadable file both come back ('closed', None).
+    """
+    state, ptr = 'closed', None
+    for line in text.splitlines():
+        if line.startswith('state:'):
+            state = line.split(':', 1)[1].strip()
+        elif line.startswith('hw_ptr'):
+            digits = re.sub(r'\D', '', line)
+            if digits:
+                ptr = int(digits)
+    return state, ptr
+
+
+def resolve_sink_pcms(cards):
+    """jack/hdmi -> (card index, egress pcm) for the platform in `cards`.
+
+    Mirrors audiohub-fwd's sink resolution: the Pi has one firmware card
+    per output (each on its pcm0p), x86 HDA has ONE card (PCH) carrying
+    analog as device 0 and HDMI as device 3.
+    """
+    idx = {c['id']: c['index'] for c in cards}
+    if 'PCH' in idx:
+        return {'jack': (idx['PCH'], 'pcm0p'), 'hdmi': (idx['PCH'], 'pcm3p')}
+    sinks = {}
+    if 'Headphones' in idx:
+        sinks['jack'] = (idx['Headphones'], 'pcm0p')
+    if 'b1' in idx:
+        sinks['hdmi'] = (idx['b1'], 'pcm0p')
+    return sinks
+
+
 # ---------------------------------------------------------------------------
 # interface
 # ---------------------------------------------------------------------------
@@ -61,16 +96,26 @@ class AudiohubInterface(BaseInterface):
         keep visual priority) by setting `audiohub.compensate = False`; the
         WALL-mode drifter lead is the profile's side of the deal.
 
+    Health is judged on TWO axes. Unit axis: forwarder ActiveState ('error'
+    chip when not active). Flow axis: unit liveness lies — a sink can wedge
+    with its unit 'active', alsaloop spinning and hw_ptr frozen (bench
+    2026-07-21, twice). So while the loopback cable has a writer (mpv is
+    playing), each sink's egress hw_ptr must advance between scans;
+    STALL_TICKS consecutive misses turn the chip 'stalled'. The horizon
+    (~10s) sits just past the forwarder's own ~9s flow-watchdog recycle, so
+    a successful platform self-heal never blips the chip.
+
     Without the contract file the platform is generic: no compensation, no
     monitoring, chips report 'default' — HPlayer2 never touches audio config.
 
     Emits (edges only): audiohub.connected <card> <ch>, audiohub.disconnected,
-    audiohub.error <sink>. 'error' on a chip means the silent-failure case:
-    mpv plays, that output doesn't.
+    audiohub.error <sink> (unit failed, or stall onset). 'error'/'stalled' on
+    a chip means the silent-failure case: mpv plays, that output doesn't.
     """
 
     SCAN_PERIOD = 2.0      # s
     RESEND_EVERY = 5       # ticks: re-push unchanged status for late web clients
+    STALL_TICKS = 5        # scans without hw_ptr progress before 'stalled'
     UNITS = {'jack': 'audiohub@jack.service',
              'hdmi': 'audiohub@hdmi.service',
              'usb':  'audiohub@usb.service'}
@@ -81,6 +126,7 @@ class AudiohubInterface(BaseInterface):
         self.conf = read_audio_conf()
         self._card = None           # USB card currently seen
         self._states = {}           # sink -> unit state, for error edges
+        self._flow = {}             # sink -> {'ptr', 'miss'}, for stall detection
         self._lastSent = None
         self._resend = 0
         self._appliedDelay = None
@@ -112,13 +158,17 @@ class AudiohubInterface(BaseInterface):
         return {sink: (lines[i] if i < len(lines) else 'unknown')
                 for i, sink in enumerate(self.UNITS)}
 
-    def _scanUsb(self):
-        for c in parse_cards(self._read('/proc/asound/cards')):
+    def _scanUsb(self, cards):
+        for c in cards:
             if c['usb']:
                 c['channels'] = parse_stream_playback_channels(
                                     self._read('/proc/asound/card%d/stream0' % c['index']))
                 return c
         return None
+
+    def _pcmStatus(self, card, pcm):
+        return parse_pcm_status(
+            self._read('/proc/asound/card%d/%s/sub0/status' % (card, pcm)))
 
     # -- main loop -----------------------------------------------------------
 
@@ -145,7 +195,8 @@ class AudiohubInterface(BaseInterface):
             self.conf = conf
 
         # USB card presence (plug/unplug edges)
-        card = self._scanUsb()
+        cards = parse_cards(self._read('/proc/asound/cards'))
+        card = self._scanUsb(cards)
         if self._card and (not card or card['id'] != self._card['id']):
             self.log('USB card gone:', self._card['id'])
             self._card = None
@@ -163,6 +214,9 @@ class AudiohubInterface(BaseInterface):
                 self.emit('error', sink)
         self._states = states
 
+        # sink flow (stall edges): only meaningful with a writer on the cable
+        self._flowTick(cards)
+
         # player compensation: constant by config, so video simply waits for
         # the audio to reach the speakers (profiles veto via .compensate)
         delay = -self.latency() if self.compensate else 0.0
@@ -175,15 +229,45 @@ class AudiohubInterface(BaseInterface):
             if applied:
                 self._appliedDelay = delay
 
+    def _flowTick(self, cards):
+        lb = next((c['index'] for c in cards if c['id'] == 'Loopback'), None)
+        cable = self._pcmStatus(lb, 'pcm0p')[0] if lb is not None else 'closed'
+        if cable != 'RUNNING':
+            self._flow = {}     # no writer on the cable: idle sinks are legit
+            return
+
+        sinks = resolve_sink_pcms(cards)
+        if self._card:
+            sinks['usb'] = (self._card['index'], 'pcm0p')
+        for sink, (card, pcm) in sinks.items():
+            if self._states.get(sink) != 'active':
+                self._flow.pop(sink, None)   # unit down: that's the unit axis
+                continue
+            state, ptr = self._pcmStatus(card, pcm)
+            f = self._flow.setdefault(sink, {'ptr': None, 'miss': 0})
+            if state == 'RUNNING' and ptr is not None and ptr != f['ptr']:
+                f['ptr'], f['miss'] = ptr, 0
+                continue
+            f['miss'] += 1
+            f['ptr'] = ptr if ptr is not None else f['ptr']
+            if f['miss'] == self.STALL_TICKS:
+                self.log(sink, 'sink STALLED with a live cable (%s)' % state)
+                self.emit('error', sink)
+
     # -- status --------------------------------------------------------------
 
+    def _stalled(self, sink):
+        f = self._flow.get(sink)
+        return f is not None and f['miss'] >= self.STALL_TICKS
+
     def _sinkState(self, sink):
-        unit = self._states.get(sink, 'unknown')
-        if sink == 'usb':
-            if not self._card:
-                return 'absent'
-            return 'active' if unit == 'active' else 'error'
-        return 'active' if unit == 'active' else 'error'
+        if sink == 'usb' and not self._card:
+            return 'absent'
+        if self._states.get(sink, 'unknown') != 'active':
+            return 'error'
+        if self._stalled(sink):
+            return 'stalled'
+        return 'active'
 
     def _pushStatus(self):
         if self.conf:

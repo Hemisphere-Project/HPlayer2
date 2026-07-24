@@ -13,7 +13,9 @@ from core.engine.drifter import Drifter
 from core.interfaces.audiohub import (
     AudiohubInterface,
     parse_cards,
+    parse_pcm_status,
     parse_stream_playback_channels,
+    resolve_sink_pcms,
 )
 
 
@@ -71,6 +73,41 @@ Capture:
     Channels: 2
 """
 
+CARDS_X86 = """\
+ 0 [PCH            ]: HDA-Intel - HDA Intel PCH
+                      HDA Intel PCH at 0x6001120000 irq 172
+ 1 [Loopback       ]: Loopback - Loopback
+                      Loopback 1
+"""
+
+# /proc/asound/cardN paths for the CARDS_NO_USB / CARDS_USB layout
+CABLE = '/proc/asound/card2/pcm0p/sub0/status'      # Loopback
+HDMI_SINK = '/proc/asound/card0/pcm0p/sub0/status'  # b1
+JACK_SINK = '/proc/asound/card1/pcm0p/sub0/status'  # Headphones
+USB_SINK = '/proc/asound/card3/pcm0p/sub0/status'   # Device
+
+PCM_CLOSED = 'closed\n'
+
+
+def pcm_running(ptr):
+    return ("state: RUNNING\n"
+            "owner_pid   : 617\n"
+            "trigger_time: 173.501\n"
+            "tstamp      : 0.0\n"
+            "delay       : 1200\n"
+            "avail       : 288\n"
+            "avail_max   : 4321\n"
+            "-----\n"
+            "hw_ptr      : %d\n"
+            "appl_ptr    : %d\n" % (ptr, ptr + 1200))
+
+
+def pcm_prepared(ptr):
+    # the bench wedge signature: sink stuck PREPARED, hw_ptr frozen
+    return ("state: PREPARED\n"
+            "hw_ptr      : %d\n"
+            "appl_ptr    : %d\n" % (ptr, ptr))
+
 
 # ---------------------------------------------------------------------------
 # platform contract (core/engine/audiohw.py)
@@ -113,6 +150,24 @@ def test_parse_cards_empty():
 def test_parse_stream_channels():
     assert parse_stream_playback_channels(STREAM0_STEREO) == 2
     assert parse_stream_playback_channels(STREAM0_MULTI) == 8
+
+
+def test_parse_pcm_status():
+    assert parse_pcm_status(pcm_running(4800)) == ('RUNNING', 4800)
+    assert parse_pcm_status(pcm_prepared(960)) == ('PREPARED', 960)
+    assert parse_pcm_status(PCM_CLOSED) == ('closed', None)
+    assert parse_pcm_status('') == ('closed', None)
+
+
+def test_resolve_sink_pcms_pi():
+    sinks = resolve_sink_pcms(parse_cards(CARDS_NO_USB))
+    assert sinks == {'jack': (1, 'pcm0p'), 'hdmi': (0, 'pcm0p')}
+
+
+def test_resolve_sink_pcms_x86():
+    # one HDA card: analog is device 0, HDMI device 3
+    sinks = resolve_sink_pcms(parse_cards(CARDS_X86))
+    assert sinks == {'jack': (0, 'pcm0p'), 'hdmi': (0, 'pcm3p')}
 
 
 # ---------------------------------------------------------------------------
@@ -263,6 +318,82 @@ def test_live_config_change_recompensates():
     hub.conf = {'graph': 'v2', 'latency_us': 25000}   # as if `audiohub set` ran
     hub._tick()
     assert hub.hplayer.player.delays[-1] == -0.025
+
+
+# ---------------------------------------------------------------------------
+# flow supervision (t-030): hw_ptr stall detection behind the chips
+# ---------------------------------------------------------------------------
+
+def test_stalled_sink_flagged_and_edges_once():
+    hub = FixturedHub()
+    ptr = 0
+    for _ in range(AudiohubInterface.STALL_TICKS + 2):
+        ptr += 960
+        hub.files[CABLE] = pcm_running(ptr)           # mpv writes the cable
+        hub.files[JACK_SINK] = pcm_running(ptr)       # jack flows
+        hub.files[HDMI_SINK] = pcm_prepared(4800)     # hdmi wedged, unit 'active'
+        hub._tick()
+    assert hub.events.count('error') == 1             # stall onset is an edge
+    hub._pushStatus()
+    _, msg = hub.hplayer.http2.sent[-1]
+    assert msg['hdmi'] == 'stalled'
+    assert msg['jack'] == 'active'
+
+
+def test_idle_cable_never_stalls():
+    hub = FixturedHub()
+    for _ in range(AudiohubInterface.STALL_TICKS + 2):
+        hub.files[CABLE] = PCM_CLOSED                 # mpv not playing
+        hub.files[HDMI_SINK] = pcm_prepared(0)
+        hub._tick()
+    assert 'error' not in hub.events
+    hub._pushStatus()
+    _, msg = hub.hplayer.http2.sent[-1]
+    assert msg['hdmi'] == 'active'
+
+
+def test_stall_recovers_when_flow_resumes():
+    hub = FixturedHub()
+    ptr = 0
+    for _ in range(AudiohubInterface.STALL_TICKS):
+        ptr += 960
+        hub.files[CABLE] = pcm_running(ptr)
+        hub.files[JACK_SINK] = pcm_running(ptr)
+        hub.files[HDMI_SINK] = pcm_prepared(4800)
+        hub._tick()
+    assert hub._sinkState('hdmi') == 'stalled'
+    hub.files[HDMI_SINK] = pcm_running(5760)          # forwarder recycled, flowing
+    hub._tick()
+    assert hub._sinkState('hdmi') == 'active'
+
+
+def test_unit_down_is_error_not_stall():
+    hub = FixturedHub()
+    hub.units['hdmi'] = 'inactive'                    # e.g. `audiohub test` pause
+    ptr = 0
+    for _ in range(AudiohubInterface.STALL_TICKS + 1):
+        ptr += 960
+        hub.files[CABLE] = pcm_running(ptr)
+        hub.files[JACK_SINK] = pcm_running(ptr)
+        hub.files[HDMI_SINK] = PCM_CLOSED
+        hub._tick()
+    assert 'error' not in hub.events                  # no spurious stall edge
+    assert hub._sinkState('hdmi') == 'error'
+
+
+def test_usb_sink_flow_watched_when_present():
+    hub = FixturedHub()
+    plug(hub)
+    ptr = 0
+    for _ in range(AudiohubInterface.STALL_TICKS):
+        ptr += 960
+        hub.files[CABLE] = pcm_running(ptr)
+        hub.files[JACK_SINK] = pcm_running(ptr)
+        hub.files[HDMI_SINK] = pcm_running(ptr)
+        hub.files[USB_SINK] = pcm_prepared(0)         # card there, nothing flows
+        hub._tick()
+    assert hub._sinkState('usb') == 'stalled'
+    assert hub._sinkState('jack') == 'active'
 
 
 # ---------------------------------------------------------------------------
