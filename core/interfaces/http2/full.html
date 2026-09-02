@@ -177,6 +177,36 @@
                 </div>
             </div>
 
+            <!-- Nowde ESP-NOW sync node (biennale-2026-module-radar #t-008) -->
+            <div class="row mt-2" id="nowde-panel">
+                <div class="col-12">
+                    <div class="card-header text-white bg-dark d-flex align-items-center">
+                        <span class="mr-auto">Nowde</span>
+                        <span id="nowde_role" class="badge badge-secondary mr-2">no node</span>
+                        <span id="nowde_state" class="badge badge-secondary">&mdash;</span>
+                    </div>
+                    <div class="card-body row pt-3">
+                        <div class="col-lg-6 col-12">
+                            <div class="mb-2"><span class="badge badge-secondary mr-2">layer (master)</span>
+                                <input type="text" id="nowde_layer" maxlength="15" style="width:9em;"></div>
+                            <div class="mb-2"><span class="badge badge-secondary mr-2">index for un-numbered media</span>
+                                <input type="number" id="nowde_index_default" min="0" max="127" style="width:5em;"></div>
+                            <div class="mb-2"><span class="badge badge-secondary mr-2">jumpFix (ms, slave)</span><span id="nowde_jumpfix_val"></span>
+                                <input type="range" id="nowde_jumpfix" min="0" max="2000" step="50"></div>
+                            <div class="mb-2"><span class="badge badge-secondary mr-2">smart join (slave)</span>
+                                <input type="checkbox" id="nowde_dance"></div>
+                        </div>
+                        <div class="col-lg-6 col-12">
+                            <div class="mb-2 text-muted" style="font-size:.85em;">live</div>
+                            <div id="nowde_live" class="p-3 text-center" style="border-radius:.3rem;background:#eee;">
+                                <div id="nowde_media" style="font-size:1.3em;font-weight:bold;">&mdash;</div>
+                                <div id="nowde_detail" class="text-muted" style="font-size:.85em;">waiting for a Nowde node&hellip;</div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
             <!-- Schedule (biennale-2026-module-radar #t-005) -->
             <div class="row mt-2" id="schedule-panel">
                 <div class="col-12">

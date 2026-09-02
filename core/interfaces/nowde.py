@@ -265,8 +265,10 @@ class NowdeInterface(BaseInterface):
         if self.drifter:
             self.drifter.onStalled = self._restart_on_loop
 
-        # Bind to our own events
+        # Bind to our own events (ff = MTC full-frame: a v2 node sends one on start and on
+        # jumps, so the servo gets the position before the first quarter-frame cycle completes)
         self.hplayer.on('nowde.qf')(self.handle_timecode)
+        self.hplayer.on('nowde.ff')(self.handle_timecode)
         self.hplayer.on('osc.time')(self.handle_timecode)
 
         # Master leg: push a MEDIA_SYNC on player edges, not just on the 10 Hz tick
@@ -707,7 +709,7 @@ class NowdeInterface(BaseInterface):
         if self.isStopped:
             return
 
-        if ev == 'nowde.qf':
+        if ev in ('nowde.qf', 'nowde.ff'):
             clock = round(args[0].float, 2)   # Timecode -> seconds
         else:
             clock = round(float(args[0]), 2)  # osc.time -> seconds

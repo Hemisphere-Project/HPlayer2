@@ -589,6 +589,55 @@ $(document).ready(function() {
         });
     })();
 
+    // --- Nowde panel (biennale-2026-module-radar #t-008) ---
+    // ESP-NOW sync node on USB-MIDI: tunables + 1 Hz status from the nowde interface.
+    (function() {
+        socket.on('settings.updated', function(msg) {
+            if (msg['nowde-layer'] !== undefined) $('#nowde_layer').val(msg['nowde-layer']);
+            if (msg['nowde-index-default'] !== undefined) $('#nowde_index_default').val(msg['nowde-index-default']);
+            if (msg['nowde-jumpfix'] !== undefined) { $('#nowde_jumpfix').val(msg['nowde-jumpfix']); $('#nowde_jumpfix_val').text(msg['nowde-jumpfix']); }
+            if (msg['nowde-dance'] !== undefined) $('#nowde_dance').prop('checked', !!msg['nowde-dance']);
+        });
+        $('#nowde_layer').on('change', function() { trigger('nowde-layer', this.value.trim() || 'hplayer2'); });
+        $('#nowde_index_default').on('change', function() { trigger('nowde-index-default', parseInt(this.value) || 0); });
+        $('#nowde_jumpfix').on('input change', function() { $('#nowde_jumpfix_val').text(this.value); trigger('nowde-jumpfix', parseInt(this.value)); });
+        $('#nowde_dance').on('change', function() { trigger('nowde-dance', this.checked); });
+
+        socket.on('nowde-status', function(st) {
+            var role = $('#nowde_role'), state = $('#nowde_state');
+            if (!st['linked']) {
+                role.text('no node').removeClass('badge-success badge-info badge-warning').addClass('badge-secondary');
+                state.text('—').removeClass('badge-success badge-danger badge-warning').addClass('badge-secondary');
+                $('#nowde_media').text('—').css('color', '');
+                $('#nowde_detail').text('waiting for a Nowde node…');
+                $('#nowde_live').css('background', '#eee');
+                return;
+            }
+            var r = st['role'] || 'probing';
+            role.text(r.toUpperCase()).removeClass('badge-secondary badge-success badge-info badge-warning')
+                .addClass(r === 'master' ? 'badge-info' : r === 'slave' ? 'badge-success' : 'badge-warning');
+            var node = st['node'] || {};
+            var synced = st['mesh_synced'];
+            if (r === 'master') {
+                var n = st['slaves'] || 0;
+                state.text((synced ? 'mesh synced' : 'mesh not synced') + ' · ' + n + ' slave' + (n === 1 ? '' : 's'))
+                     .removeClass('badge-secondary badge-danger badge-warning badge-success')
+                     .addClass(synced && n > 0 ? 'badge-success' : synced ? 'badge-warning' : 'badge-danger');
+            } else {
+                state.text('v' + (node['version'] || '?') + (node['board'] ? ' · ' + node['board'] : ''))
+                     .removeClass('badge-secondary badge-danger badge-warning').addClass('badge-success');
+            }
+            var playing = st['playing'];
+            var idx = st['index'] || 0;
+            $('#nowde_media').text(idx ? (playing ? '▶ ' : '■ ') + 'index ' + idx : (playing ? '▶' : '■ stopped'))
+                             .css('color', playing ? '#1a7d4f' : '#888');
+            $('#nowde_live').css('background', playing ? '#d6f5e6' : '#eee');
+            var d = (r === 'master' ? 'sending on layer ' : 'node layer ') + (st['layer'] || '?');
+            if (node['version']) d += ' · node v' + node['version'] + (node['board'] ? ' ' + node['board'] : '');
+            $('#nowde_detail').text(d);
+        });
+    })();
+
     // --- Schedule panel (biennale-2026-module-radar #t-005) ---
     // RTC-gated daily playback window. The interface fails OPEN without a real
     // clock (never gates), so the panel makes that explicit rather than pretend.
