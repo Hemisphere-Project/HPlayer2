@@ -364,6 +364,8 @@ class NowdeInterface(BaseInterface):
                 index = 0
         if index == 0:
             playing = False
+        if not playing:
+            index = 0           # paused or stopped: the slaves stop (a bare index would make them play)
         try:
             position_ms = int(float(st.get('time') or 0) * 1000)
         except (TypeError, ValueError):
@@ -499,7 +501,19 @@ class NowdeInterface(BaseInterface):
         threading.Thread(target=self._emitter_loop, name='nowde-emitter', daemon=True).start()
 
         def clbck(message):
-            # Wait for app to be running before handling MIDI
+            # SysEx (HELLO, CONFIG_STATE, RUNNING_STATE, LOG...) is parsed at any time: the node
+            # answers our first probe before app-run, and a HELLO dropped there left the role
+            # to the 6 s "assuming v1 node" fallback (a Pi master would take the wrong leg).
+            if message.type == 'sysex':
+                data = message.data
+                if len(data) >= 2 and data[0] == SYSEX_MANUFACTURER_ID:
+                    self._handle_sysex(data)
+                elif self.hplayer.appRunning and len(data) == 8 and data[0:4] == (127, 127, 1, 1):
+                    tc = mtc_decode(data[4:])
+                    self.emit('ff', tc)
+                return
+
+            # Player-driving messages wait for the app to be running
             if not self.hplayer.appRunning:
                 return
 
@@ -508,13 +522,6 @@ class NowdeInterface(BaseInterface):
                 if message.frame_type == 7:
                     tc = mtc_decode_quarter_frames(self.quarter_frames)
                     self.emit('qf', tc)
-            elif message.type == 'sysex':
-                data = message.data
-                if len(data) >= 2 and data[0] == SYSEX_MANUFACTURER_ID:
-                    self._handle_sysex(data)
-                elif len(data) == 8 and data[0:4] == (127, 127, 1, 1):
-                    tc = mtc_decode(data[4:])
-                    self.emit('ff', tc)
             elif message.type == 'control_change':
                 if message.control == 100 and not self.isMaster():
                     self.handle_media_selection(message.value)
@@ -610,6 +617,8 @@ class NowdeInterface(BaseInterface):
         self._resolved_port_name = None
         self.receivers = []
         self.mesh_synced = False
+        self.lastCC = None          # the next node's first CC#100 must act, even if it repeats ours
+        self.isStopped = False
         if self.mode == 'auto':
             self.role = None        # the next node may be another role
 

@@ -285,6 +285,11 @@ dmx = hplayer.addInterface('dmx')
 nowde = hplayer.addInterface('nowde', player)
 
 if nowde:
+	# Seek-latency compensation for the 7.x image (kernel 6.18 mpv): the interface default
+	# (500 ms, AnnaTV on 6.x) overshot by 360 ms on player-000; 200 lands in the dead zone
+	# (bench 2026-09-04). The persisted cfg still wins.
+	hplayer.settings._settings['nowde-jumpfix'] = 200
+
 	@hplayer.on('nowde.role')
 	def nowde_role(ev, *args):
 		if args[0] == 'master':
@@ -293,6 +298,11 @@ if nowde:
 				return                       # outside the window: schedule.open will start it
 			if not player.isPlaying():
 				doPlay(default_pattern())    # the role arrived after app-run: same start as boot
+		elif args[0] == 'slave':
+			# from here on the master's CC#100 drives this player: drop what boot started
+			# (the role lands ~2 s after app-run), the master's state follows within 1 s
+			if player.isPlaying() and nowde.lastCC is None:
+				player.stop()
 
 	@hplayer.on('player.playing')
 	def nowde_playing(ev, *args):
