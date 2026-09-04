@@ -490,7 +490,7 @@ $(document).ready(function() {
         // cheap on a Pi) and reports where it really landed on the next tick:
         // the bar draws that and never argues, so no optimistic redraw here.
         trigger('seek', Math.round(frac * seekDuration * 1000))
-    })
+    });
 
     // PLAYLIST
     var playlistBtn = new Button('#playlist_btn', 'info')
@@ -642,11 +642,14 @@ $(document).ready(function() {
     $('.panel-toggle').on('click', function(e) {
         if ($(e.target).closest('select, input, button, a, textarea, label').length) return
         $($(this).data('body')).collapse('toggle')
-    })
+    });
+    // NB: the panel blocks below are IIFEs `(function(){...})()`; a statement left
+    // without its `;` right before one is CALLED by ASI ("$(...).on(...) is not a
+    // function", 2026-09-04) and the whole ready handler dies — keep the `;`.
     $('.panel-body').on('show.bs.collapse hide.bs.collapse', function(e) {
         if (e.target !== this) return
         $(this).prev('.panel-toggle').toggleClass('open', e.type === 'show')
-    })
+    });
 
     // --- Surface (LED / output transform) panel (kmini minis) ---
     // Each field patches ONE key of the persisted `surface` setting ({'width': 256});
@@ -787,7 +790,10 @@ $(document).ready(function() {
         });
         socket.on('schedule-status', function(st) {
             var rtc = $('#schedule_rtc'), status = $('#schedule_status');
-            panelFollow('#schedule_body', st['rtc']);
+            // fold only when there is nothing to say: RTC present AND restriction off.
+            // No RTC is a WARNING the operator must see (Thomas, 2026-09-04: folding on
+            // rtc=false hid exactly that message), and an active window is worth a look.
+            panelFollow('#schedule_body', !st['rtc'] || st['enabled']);
             if (!st['rtc']) {
                 rtc.text('no RTC').removeClass('badge-success').addClass('badge-warning');
                 $('#schedule-panel').addClass('no-rtc');
