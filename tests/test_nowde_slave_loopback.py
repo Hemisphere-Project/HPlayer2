@@ -1,3 +1,4 @@
+import re
 """Slave leg through ALSA virtual MIDI ports: a simulated v1.2 node streams CC#100 + MTC and
 the interface must select the clip by numeric prefix and feed the Drifter with the timecode."""
 import os
@@ -50,7 +51,7 @@ def test_slave_leg_cc100_and_mtc(sim_node, monkeypatch):
     monkeypatch.setattr(hplayer.playlist, 'play', lambda pattern=None, *a, **k: plays.append(pattern))
     monkeypatch.setattr(hplayer.playlist, 'size', lambda: 1 if plays else 0)
 
-    iface = NowdeInterface(hplayer, player, mode='auto')
+    iface = NowdeInterface(hplayer, player, mode='auto', port_name=re.compile(r'^Nowde - SIM'))
     iface.PORT_LOOKUP_INTERVAL = 0.2
     iface.PROBE_TIMEOUT = 0.5
     ticks = []

@@ -48,12 +48,21 @@ player.imagetime(15)
 player.doLog['events'] = True
 player.doLog['cmds'] = False
 
-PLAY_PATTERN = "[^1-9_]*.*"
-NOWDE_PATTERN = "[0-9]*_*.*"                  # numbered content, what Nowde slaves can follow
+PLAY_PATTERN = "[^1-9_]*.*"                  # the default loop: everything but the 1_..9_ one-shots
 
 def default_pattern():
-	n = globals().get('nowde')                # defined further down, read at call time
-	return NOWDE_PATTERN if (n and n.role == 'master') else PLAY_PATTERN
+	# same content at boot, at schedule-open and on a Nowde master (Thomas 2026-09-04): the
+	# whole non-1..9_ set, looping. Only the numeric prefix of the current file travels to the
+	# Nowde slaves, so outdoor loop content is named 01_…, 02_… (zero-padded: index 1, 2, …).
+	return PLAY_PATTERN
+
+def nowde_slave():
+	n = globals().get('nowde')
+	return bool(n and n.role == 'slave')      # a Nowde master drives this player over CC#100/MTC
+
+def schedule_open_now():
+	s = globals().get('schedule')             # defined further down; disabled/no RTC = always open
+	return (s is None) or s.isOpen()
 
 
 # ROLE detection (same /boot/wifi marker convention as biennale24)
@@ -131,9 +140,10 @@ def sync_init(ev, *args):
 @hplayer.on('files.filelist-updated')
 @hplayer.on('playlist.end')
 def play0(ev, *args):
-	n = globals().get('nowde')
-	if n and n.role == 'slave':
+	if nowde_slave():
 		return                               # a Nowde master drives this player over CC#100
+	if not schedule_open_now():
+		return                               # booted (or restarted) outside the window: stay silent
 	doPlay(default_pattern())
 	if WALL or not SYNC:
 		hplayer.settings.set('loop', 2) # blackless loop (wall: mpv loop=inf below)
@@ -221,16 +231,24 @@ schedule = hplayer.addInterface('schedule', 30, True)   # requireRtc: gate only 
 
 @hplayer.on('radar.enter')
 def radar_trigger(ev, *args):
+	if nowde_slave():
+		return
 	if schedule.isOpen() and not player.isPlaying():
 		hplayer.settings.set('loop', -1)     # play the proximity piece once
 		doPlay(RADAR_PATTERN)
 
+# Nowde topology: only the MASTER's clock counts. Its stop/play reaches the slaves as
+# MEDIA_SYNC state 0/1 -> CC#100 0/N, so a slave ignores its own schedule (RTC or not).
 @hplayer.on('schedule.open')
 def schedule_open(ev, *args):
+	if nowde_slave():
+		return
 	doPlay(default_pattern())                 # resume default content when the window opens
 
 @hplayer.on('schedule.close')
 def schedule_close(ev, *args):
+	if nowde_slave():
+		return
 	if SYNC and SYNC_MASTER:
 		hplayer.interface('zyre').node.broadcast('stop')
 	elif not SYNC:
@@ -256,37 +274,42 @@ dmx = hplayer.addInterface('dmx')
 # ─── NOWDE ESP-NOW sync (biennale-2026-module-radar, lot 2: the 6 outdoor players) ──
 # Self-activating like the radar: the interface idles until a "Nowde - XXXXXX" USB-MIDI
 # node shows up, then the NODE's role picks the leg (its HELLO says master or slave):
-#  - master node (AtomS3, LCD): this player plays its numbered content as usual and the
-#    interface streams {index, position, state} to the node, which relays it over ESP-NOW.
+#  - master node (AtomS3, LCD): this player loops its default content as usual (PLAY_PATTERN,
+#    same as boot / schedule-open) and the interface streams {index, position, state} to the
+#    node, which relays it over ESP-NOW. The index is the numeric prefix of the current file.
 #  - slave node (AtomS3 Lite): CC#100 picks the clip by numeric prefix, MTC drives the
-#    Drifter chase-lock. play0 above still fires at boot; the first CC#100 overrides it.
-# Content contract: numeric prefixes on every unit (1_xxx.mp4), same index = same cue,
-# same duration if the master loops seamlessly. Distinct from the wifi wall (wallclock).
+#    Drifter chase-lock. play0 above is skipped on a slave; the master's CC#100 drives it.
+# Content contract: zero-padded numeric prefixes on every unit (01_xxx.mp4 on the master and
+# the slaves; 1_ alone is the one-shot set), same index = same cue, same duration if the
+# master loops a single file seamlessly. Distinct from the wifi wall (wallclock).
 nowde = hplayer.addInterface('nowde', player)
 
 if nowde:
 	@hplayer.on('nowde.role')
 	def nowde_role(ev, *args):
 		if args[0] == 'master':
-			# numbered content is what the slaves can follow; loop it seamlessly
-			hplayer.settings.set('loop', 2)
-			if not player.isPlaying() or media_index_of(player.status('media')) == 0:
-				hplayer.playlist.play(NOWDE_PATTERN)
+			hplayer.settings.set('loop', 2)  # blackless loop of the whole default set
+			if not schedule_open_now():
+				return                       # outside the window: schedule.open will start it
+			if not player.isPlaying():
+				doPlay(default_pattern())    # the role arrived after app-run: same start as boot
 
 	@hplayer.on('player.playing')
 	def nowde_playing(ev, *args):
-		# seamless mpv loop on both legs: the master's position wraps without a black,
-		# the slave's Drifter rides the wrap instead of restarting the clip
+		# A single-file loop wraps seamlessly in mpv (loop=inf): the master's position wraps
+		# without a black and the slave's Drifter rides the wrap. Several files: let the
+		# playlist advance (loop 2) so the index changes and the slaves switch with it.
 		if nowde.role:
-			player._applyOneLoop(True)
+			player._applyOneLoop(hplayer.playlist.size() <= 1)
 
 	# persist nowde tunables edited from the http2 web UI (interface reads them live)
-	for _k in ('nowde-layer', 'nowde-index-default', 'nowde-jumpfix', 'nowde-dance'):
+	for _k in ('nowde-layer', 'nowde-index-default', 'nowde-jumpfix', 'nowde-dance', 'nowde-nodelog'):
 		hplayer.on('http2.' + _k)(lambda ev, *a, k=_k: hplayer.settings.set(k, a[0]))
 
 	@hplayer.on('nowde.*')
 	def nowde_logs(ev, *args):
 		if ev.endswith('.qf') or ev.endswith('.ff') or ev.endswith('.receivers'): return   # high-rate
+		if ev.endswith('.nodelog'): return                                                # journal only
 		if ev.endswith('.status'):
 			hplayer.interface('http2').send('nowde-status', args[0])
 			return

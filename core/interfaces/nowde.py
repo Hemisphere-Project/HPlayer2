@@ -52,19 +52,22 @@ CMD_QUERY_CONFIG = 0x01
 CMD_QUERY_RUNNING_STATE = 0x03
 CMD_SET_ROLE = 0x08
 CMD_SET_LOCAL_LAYER = 0x09
+CMD_SET_LOG = 0x0A
 CMD_MEDIA_SYNC = 0x10
 CMD_CHANGE_RECEIVER_LAYER = 0x11
 CMD_HELLO = 0x20
 CMD_CONFIG_STATE = 0x21
 CMD_RUNNING_STATE = 0x22
 CMD_ERROR_REPORT = 0x30
+CMD_LOG = 0x31
 
 ROLE_NAMES = {0: 'slave', 1: 'master', 2: 'legacy'}
 BOARD_NAMES = {0: 'unknown', 1: 'devkit', 2: 'atoms3', 3: 'atoms3-lite'}
 ERROR_NAMES = {0x01: 'CONFIG_INVALID', 0x02: 'SYSEX_PARSE_ERROR', 0x03: 'ESPNOW_SEND_FAILED',
                0x04: 'MESH_CLOCK_LOST_SYNC', 0x05: 'RECEIVER_TIMEOUT', 0xFF: 'UNKNOWN'}
 RESET_REASONS = {1: 'POWERON', 3: 'SW', 4: 'PANIC', 5: 'INT_WDT', 6: 'TASK_WDT', 7: 'WDT',
-                 8: 'DEEPSLEEP', 9: 'BROWNOUT', 10: 'SDIO', 12: 'USB', 15: 'JTAG'}
+                 8: 'DEEPSLEEP', 9: 'BROWNOUT', 10: 'SDIO', 11: 'USB', 12: 'JTAG',
+                 13: 'EFUSE', 14: 'PWR_GLITCH', 15: 'CPU_LOCKUP'}
 
 
 def encode7(raw):
@@ -200,6 +203,7 @@ class NowdeInterface(BaseInterface):
         'nowde-index-default': 0,           # master: index sent for un-numbered media (0 = slaves stop)
         'nowde-jumpfix':       500,         # slave: seek-latency compensation ms (300 RockPro64, ~1000 laptop)
         'nowde-dance':         False,       # slave: Drifter smart-join instead of blind seeks
+        'nowde-nodelog':       False,       # v2 node: stream its own log into ours (SET_LOG / LOG frames)
     }
 
     def __init__(self, hplayer, player=None, port_name=None, max_retry=0, mode='auto'):
@@ -412,6 +416,8 @@ class NowdeInterface(BaseInterface):
             self.emit('hello', info)
             if self.mode == 'auto' and 'role' in info:
                 self._set_role(info['role'], 'HELLO')
+            if 'role' in info and self._cfg('nowde-nodelog'):
+                self._send(build_simple(CMD_SET_LOG, 1))    # v2 node only: a v1.2 node would ERROR_REPORT
             if self.isMaster():
                 self._lastSent = None           # node rebooted or (re)appeared: resend state
                 self._assigned.clear()
@@ -435,6 +441,10 @@ class NowdeInterface(BaseInterface):
                 self.receivers = list(buf)
                 self.emit('receivers', self.receivers)
                 self._auto_assign_layers()
+        elif cmd == CMD_LOG:
+            text = bytes(b & 0x7F for b in d).decode('ascii', errors='replace')
+            self.emit('nodelog', text)
+            self.log(colored('node| ' + text, 'grey'))
         elif cmd == CMD_ERROR_REPORT:
             if len(d) >= 2:
                 code = d[0]

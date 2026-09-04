@@ -1,3 +1,4 @@
+import re
 """End-to-end loopback of the Nowde master leg through ALSA virtual MIDI ports.
 
 A simulated node ("Nowde - SIM") answers the interface's role probe with a v2 HELLO
@@ -101,7 +102,7 @@ def test_master_leg_loopback(sim_node):
     hplayer._players['player'] = player
     hplayer.settings._settings['nowde-layer'] = 'loop'
 
-    iface = NowdeInterface(hplayer, player, mode='auto')
+    iface = NowdeInterface(hplayer, player, mode='auto', port_name=re.compile(r'^Nowde - SIM'))
     iface.PORT_LOOKUP_INTERVAL = 0.2
     roles = []
     hplayer.on('nowde.role')(lambda ev, *a: roles.append(a[0]))
@@ -154,7 +155,7 @@ def test_slave_leg_assumes_legacy_node_when_silent(sim_node):
     hplayer.appRunning = True
     player = FakePlayer()
     hplayer._players['player'] = player
-    iface = NowdeInterface(hplayer, player, mode='auto')
+    iface = NowdeInterface(hplayer, player, mode='auto', port_name=re.compile(r'^Nowde - SIM'))
     iface.PORT_LOOKUP_INTERVAL = 0.2
     iface.PROBE_TIMEOUT = 0.5
     iface.start()
