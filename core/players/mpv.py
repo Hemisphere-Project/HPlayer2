@@ -8,6 +8,12 @@ from .base import BasePlayer
 from ..engine.audiohw import read_audio_conf
 
 
+# HNdi input node (x86 minis): NDI arrives on this V4L2 loopback, driven by a local API
+NDI_DEVICE = '/dev/video10'
+NDI_URL = 'av://v4l2:' + NDI_DEVICE
+NDI_API = 'http://127.0.0.1:8791'
+
+
 def build_pan_filter(pan, channels):
     """mpv 'af' string for the mono/pan feature, adapted to the source layout.
 
@@ -107,6 +113,17 @@ class MpvPlayer(BasePlayer):
         self._imageExt = ['jpg', 'jpeg', 'gif', 'png', 'tif', 'tiff']
 
         self._validExt = self._videoExt + self._audioExt + self._imageExt
+
+        # NDI (HNdi input node, x86 boxes): the node writes the NDI feed to a V4L2
+        # loopback device, and mpv reads it like any live source — no browser in the
+        # chain. Two media spellings reach it: a `.ndi` FILE whose first line is the NDI
+        # source name (blank = the node's own default), so a source shows up in a synced
+        # media tree and in the Regie grid like any clip; or an `ndi://<source>` URL
+        # (playstream). Enabled only where the device exists, so a Pi (no HNdi) keeps
+        # filtering `.ndi` out of its file tree.
+        self._ndi = os.path.exists(NDI_DEVICE)
+        if self._ndi:
+            self._validExt += ['ndi', 'ndi://']
         
 
         self._mpv_procThread = None
@@ -500,13 +517,65 @@ class MpvPlayer(BasePlayer):
         
         self.update('isPaused', pause)
         self.log("isPaused", self.status('isPaused'))
-        self._mpv_send('{ "command": ["loadfile", "'+path+'"] }')
+        if self._ndi and self._isNdi(path):
+            self._ndi_play(path)
+        else:
+            self._mpv_send('{ "command": ["loadfile", "'+path+'"] }')
         
         if pause:
             self._mpv_send('{ "command": ["set_property", "pause", true] }')
         else:
             self._mpv_send('{ "command": ["set_property", "pause", false] }')
         
+
+    # ---- NDI via the HNdi loopback --------------------------------------
+    def _isNdi(self, path):
+        return path.startswith('ndi://') or path.lower().endswith('.ndi')
+
+    def _ndi_source(self, path):
+        """source name: the URL body, or the first non-comment line of the .ndi file"""
+        if path.startswith('ndi://'):
+            return path[6:].strip()
+        try:
+            with open(path) as fd:
+                for line in fd:
+                    line = line.strip()
+                    if line and not line.startswith('#'):
+                        return line
+        except OSError as e:
+            self.log('ndi: cannot read', path, e)
+        return ''
+
+    def _ndi_api(self, method, route, body=None):
+        """one call to the local HNdi node; never raises (the show goes on with
+        whatever source the node already has)"""
+        import urllib.request
+        data = json.dumps(body).encode() if body is not None else None
+        req = urllib.request.Request(NDI_API + route, data=data, method=method,
+                                     headers={'Content-Type': 'application/json'})
+        try:
+            with urllib.request.urlopen(req, timeout=1.0) as r:
+                return r.status
+        except Exception as e:  # noqa: BLE001 — URLError, timeout, refused
+            self.log('ndi: node api', method, route, 'failed:', e)
+            return None
+
+    def _ndi_play(self, path):
+        source = self._ndi_source(path)
+        if source:
+            # switch the node to the wanted source (no persist: the show's cue
+            # decides, the box default in hndi.conf stays)
+            self._ndi_api('PUT', '/source', {'name': source, 'persist': False})
+        self.log('ndi: playing', NDI_DEVICE, 'source:', source or '(node default)')
+        # a live device has no duration: clear the previous clip's so the
+        # near-end / media-end logic can't fire on a stale value
+        self.update('duration', 0)
+        # per-file options, reset when the next file loads: display frames as they
+        # arrive (no A/V clock), no cache, no audio probe, and re-open the device on
+        # EOF (the node restarting its output pipeline must not leave the wall black)
+        opts = 'untimed=yes,cache=no,audio=no,demuxer-lavf-analyzeduration=0,loop-file=inf'
+        self._mpv_send('{ "command": ["loadfile", "' + NDI_URL + '", "replace", -1, "'
+                       + opts + '"] }')
 
     def _stop(self):
         wasPlaying = self.status('isPlaying')

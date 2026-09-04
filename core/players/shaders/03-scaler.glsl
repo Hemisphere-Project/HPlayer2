@@ -22,6 +22,30 @@
 //!MAXIMUM 4096.0
 0.0
 
+//!PARAM scaler_sourceoffset_y
+//!TYPE float
+//!MINIMUM -4096.0
+//!MAXIMUM 4096.0
+0.0
+
+//!PARAM scaler_fit
+//!TYPE float
+//!MINIMUM 0.0
+//!MAXIMUM 2.0
+0.0
+
+//!PARAM scaler_output_x
+//!TYPE float
+//!MINIMUM -8192.0
+//!MAXIMUM 8192.0
+0.0
+
+//!PARAM scaler_output_y
+//!TYPE float
+//!MINIMUM -8192.0
+//!MAXIMUM 8192.0
+0.0
+
 //!PARAM scaler_halfheight
 //!TYPE float
 //!MINIMUM 0.0
@@ -53,7 +77,13 @@
         scaler_height                - Target height in pixels
         scaler_width                - Target width in pixels
         scaler_sourcealign      - Crop alignment option [1.0 = center, 0.0 = left]
-        scaler_sourceoffset_x   - Horizontal crop offset in pixels
+        scaler_sourceoffset_x   - Horizontal crop/content offset in pixels
+        scaler_sourceoffset_y   - Vertical crop/content offset in pixels
+        scaler_fit              - 0 = cover (crop the source to the target aspect, default)
+                                  1 = contain (whole source inside the target, black bars)
+                                  2 = stretch (ignore the source aspect)
+        scaler_output_x/y       - Where the finished (rotated, reshaped) block lands on
+                                  screen, in output pixels from the top-left [default 0,0]
         scaler_halfheight       - Half-height reshape option for LED display [1.0 = enabled, 0.0 = disabled]
         scaler_rotate           - Rotation in degrees [0.0-359.0]
         scaler_enable           - Enable or disable processing [1.0 = enabled, 0.0 = disabled]
@@ -72,6 +102,8 @@ vec4 hook() {
     float TARGET_WIDTH  = scaler_width > 0.0 ? scaler_width : HOOKED_size.x;
     int CROP_ALIGN_CENTER = int(scaler_sourcealign);
     float CROP_OFFSET_X = scaler_sourceoffset_x;
+    float CROP_OFFSET_Y = scaler_sourceoffset_y;
+    int FIT = int(scaler_fit + 0.5);
     int HALF_HEIGHT_RESHAPE = int(scaler_halfheight);
     float ROTATE_DEG = scaler_rotate;
     
@@ -101,7 +133,7 @@ vec4 hook() {
         cropOffset.x = 0.0;
     }
     cropOffset.x += CROP_OFFSET_X * (cropSize.x / TARGET_WIDTH); // Scale offset to source space
-    cropOffset.y = (srcSize.y - cropSize.y) / 2.0; // Always center vertically
+    cropOffset.y = (srcSize.y - cropSize.y) / 2.0 + CROP_OFFSET_Y * (cropSize.y / TARGET_HEIGHT);
     
     // Clamp crop offset to valid range
     cropOffset.x = clamp(cropOffset.x, 0.0, srcSize.x - cropSize.x);
@@ -145,11 +177,11 @@ vec4 hook() {
     // The rotated bounding box top-left corner should be at (0,0)
     vec2 bbOffset = -minBB; // This moves the BB so its min corner is at origin
     
-    // Current output pixel position in canvas
-    vec2 outPixel = HOOKED_pos * target_size;
+    // Current output pixel position in canvas, relative to where the block is placed
+    vec2 outPixel = HOOKED_pos * target_size - vec2(scaler_output_x, scaler_output_y);
     
     // Check if pixel is within the final output area
-    if (outPixel.x >= finalW || outPixel.y >= finalH) {
+    if (outPixel.x < 0.0 || outPixel.y < 0.0 || outPixel.x >= finalW || outPixel.y >= finalH) {
         return vec4(0.0, 0.0, 0.0, 1.0);
     }
     
@@ -177,9 +209,29 @@ vec4 hook() {
         return vec4(0.0, 0.0, 0.0, 1.0);
     }
     
-    // Step 7: Map from target space to crop zone in source
-    vec2 cropPos = contentPos / vec2(TARGET_WIDTH, TARGET_HEIGHT);
-    vec2 srcPos = cropOffset + cropPos * cropSize;
+    // Step 7: Map from target space to the source
+    vec2 srcPos;
+    if (FIT == 1) {
+        // contain: the whole source, aspect kept, inside the target — black around it
+        vec2 fitSize;
+        if (srcAspect > targetAspect) { fitSize.x = TARGET_WIDTH;  fitSize.y = TARGET_WIDTH / srcAspect; }
+        else                          { fitSize.y = TARGET_HEIGHT; fitSize.x = TARGET_HEIGHT * srcAspect; }
+        vec2 fitOffset = (vec2(TARGET_WIDTH, TARGET_HEIGHT) - fitSize) / 2.0;
+        if (CROP_ALIGN_CENTER == 0) fitOffset.x = 0.0;
+        fitOffset += vec2(CROP_OFFSET_X, CROP_OFFSET_Y);
+        vec2 c = contentPos - fitOffset;
+        if (c.x < 0.0 || c.y < 0.0 || c.x >= fitSize.x || c.y >= fitSize.y) {
+            return vec4(0.0, 0.0, 0.0, 1.0);
+        }
+        srcPos = c / fitSize * srcSize;
+    } else if (FIT == 2) {
+        // stretch: target fully covered, source aspect ignored
+        srcPos = contentPos / vec2(TARGET_WIDTH, TARGET_HEIGHT) * srcSize;
+    } else {
+        // cover (default): the crop zone computed in step 1
+        vec2 cropPos = contentPos / vec2(TARGET_WIDTH, TARGET_HEIGHT);
+        srcPos = cropOffset + cropPos * cropSize;
+    }
     
     // Normalize to texture coordinates
     vec2 texCoord = srcPos / srcSize;
