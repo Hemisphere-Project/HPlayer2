@@ -45,6 +45,9 @@ $(document).ready(function() {
         // Mute elements
         setElementMute(conf.mute)
 
+        // Brightness/contrast elements (profile-gated, hidden by default)
+        setElementBrightness(conf.brightness)
+
     })
 
     // FILES LIST
@@ -218,6 +221,18 @@ $(document).ready(function() {
     setElementMute = function(mode) {
         if (mode === false) {
             $('.mute-element').hide()
+        }
+    }
+
+    // brightness + contrast sliders: only the videonet backend drives them,
+    // every other player no-ops the two events — so they stay hidden unless
+    // the profile opts in: addInterface('http2', 80, {'brightness': True})
+    // (hplayer2#t-042). Hidden by style.css until then: no flash on load.
+    setElementBrightness = function(mode) {
+        if (mode === true) {
+            $('.brightness-element').show()
+        } else {
+            $('.brightness-element').hide()
         }
     }
 
@@ -546,6 +561,33 @@ $(document).ready(function() {
         });
     });
 
+    /*
+      COLLAPSIBLE ADAPTER CARDS (hplayer2#t-042)
+    */
+    // Radar / Nowde / Schedule / DMX bodies fold on the boolean each panel
+    // already renders as its badge (connected / linked / rtc / connected):
+    // folded until the adapter shows up, open once it does — so a panel
+    // whose interface is not even in the profile stays a one-line header.
+    // The fold follows *transitions* of that boolean only: a 1-5 Hz status
+    // stream never fights an operator who opened a folded card by hand, the
+    // header being the toggle. Plain Bootstrap collapse, no data-api: the
+    // DMX header holds a <select> that must not toggle its card.
+    var panelUp = {}
+    function panelFollow(body, up) {
+        up = !!up
+        if (panelUp[body] === up) return
+        panelUp[body] = up
+        $(body).collapse(up ? 'show' : 'hide')
+    }
+    $('.panel-toggle').on('click', function(e) {
+        if ($(e.target).closest('select, input, button, a, textarea, label').length) return
+        $($(this).data('body')).collapse('toggle')
+    })
+    $('.panel-body').on('show.bs.collapse hide.bs.collapse', function(e) {
+        if (e.target !== this) return
+        $(this).prev('.panel-toggle').toggleClass('open', e.type === 'show')
+    })
+
     // --- Radar panel (biennale-2026-module-radar) ---
     // Tuning sliders + live presence feedback from the radar interface. A second
     // settings.updated handler (coexists with the one above) syncs the radar-* keys.
@@ -571,6 +613,7 @@ $(document).ready(function() {
         // live presence feedback (~5Hz from the radar interface)
         socket.on('radar-status', function(st) {
             var badge = $('#radar_state');
+            panelFollow('#radar_body', st['connected']);
             if (!st['connected']) {
                 badge.text('no adapter').removeClass('badge-success badge-danger').addClass('badge-secondary');
                 $('#radar_presence').text('—').css('color', '');
@@ -605,6 +648,7 @@ $(document).ready(function() {
 
         socket.on('nowde-status', function(st) {
             var role = $('#nowde_role'), state = $('#nowde_state');
+            panelFollow('#nowde_body', st['linked']);
             if (!st['linked']) {
                 role.text('no node').removeClass('badge-success badge-info badge-warning').addClass('badge-secondary');
                 state.text('—').removeClass('badge-success badge-danger badge-warning').addClass('badge-secondary');
@@ -649,6 +693,7 @@ $(document).ready(function() {
         });
         socket.on('schedule-status', function(st) {
             var rtc = $('#schedule_rtc'), status = $('#schedule_status');
+            panelFollow('#schedule_body', st['rtc']);
             if (!st['rtc']) {
                 rtc.text('no RTC').removeClass('badge-success').addClass('badge-warning');
                 $('#schedule-panel').addClass('no-rtc');
@@ -689,13 +734,15 @@ $(document).ready(function() {
         // adapter + current-media status
         socket.on('dmx-status', function(st) {
             var c = $('#dmx_conn');
+            panelFollow('#dmx_body', st['connected']);
             if (st['connected'])
                 c.text(shortName(st['port']) + ' · ' + st['protocol']).removeClass('badge-secondary badge-danger').addClass('badge-success');
             else
                 c.text('no adapter').removeClass('badge-success badge-danger').addClass('badge-secondary');
             // auto-load the playing media's conduite when it changes and the user isn't editing
+            // (straight trigger, not dmxEdit(): a media change must not unfold the card)
             if (st['media'] && st['media'] !== editMedia && !dirty)
-                dmxEdit(st['media']);
+                trigger('dmx-edit', st['media']);
         });
 
         // live meter (~5Hz), one bar per active channel — bars are keyed and
@@ -748,7 +795,8 @@ $(document).ready(function() {
         }
 
         // global: open any media's conduite in the editor (used by the file-list badge too)
-        window.dmxEdit = function(path) { trigger('dmx-edit', path || ''); };
+        // — an explicit ask, so the card unfolds even without an adapter
+        window.dmxEdit = function(path) { trigger('dmx-edit', path || ''); $('#dmx_body').collapse('show'); };
 
         $('#dmx_reload').click(function() { trigger('dmx-edit', editMedia || ''); });
         $('#dmx_save').click(function() {

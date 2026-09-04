@@ -131,3 +131,9 @@ input[type=range]::-webkit-slider-runnable-track {
 .audio-status { vertical-align: middle; margin-right: .3rem; padding: .5em .6em; }
 .audio-status.badge-light { opacity: .5; }
 .audio-status.clickable { cursor: pointer; }
+/* brightness/contrast sliders: profile-gated, shown only when conf.brightness is true (hplayer2#t-042) */
+.brightness-element { display: none; }
+/* collapsible adapter cards: the header is the toggle, the chevron follows the fold (hplayer2#t-042) */
+.panel-toggle { cursor: pointer; user-select: none; }
+.panel-chevron { font-size: .8em; opacity: .7; transition: transform .2s ease; }
+.panel-toggle.open .panel-chevron { transform: rotate(90deg); }

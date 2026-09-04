@@ -26,7 +26,7 @@
     <script type="text/javascript" src="/res/jquery.dm-uploader.min.js"></script>
     <script type="text/javascript" src="/res/uploader-profile.js"></script>
 
-    <link rel="stylesheet" href="/style.css?6">
+    <link rel="stylesheet" href="/style.css?7">
     <script type="text/javascript" src="/script.js"></script>
 </head>
 
@@ -91,14 +91,17 @@
                     </div>
                 </div>
 
-                <div class="col-lg-3 col-md-4 col-12">
+                <!-- brightness/contrast are profile-gated, hidden by default (hplayer2#t-042):
+                     only the videonet backend drives them, every other player no-ops.
+                     hplayer.addInterface('http2', 80, {'brightness': True}) shows both. -->
+                <div class="col-lg-3 col-md-4 col-12 brightness-element">
                     <div class="">
                         <span class="badge badge-secondary mr-2 bright-main">brightness</span><span id="brightnessMain"></span>
                         <input type="range" class="" id="brightness_range" min="0" max="100">
                     </div>
                 </div>
 
-                <div class="col-lg-3 col-md-4 col-12">
+                <div class="col-lg-3 col-md-4 col-12 brightness-element">
                     <div class="">
                         <span class="badge badge-secondary mr-2 contrast-main">contrast</span><span id="contrastMain"></span>
                         <input type="range" class="" id="contrast_range" min="0" max="100">
@@ -151,10 +154,12 @@
             <!-- Radar (biennale-2026-module-radar) -->
             <div class="row mt-2" id="radar-panel">
                 <div class="col-12">
-                    <div class="card-header text-white bg-dark d-flex align-items-center">
+                    <div class="card-header text-white bg-dark d-flex align-items-center panel-toggle" data-body="#radar_body">
+                        <i class="fas fa-chevron-right panel-chevron mr-2"></i>
                         <span class="mr-auto">Radar</span>
                         <span id="radar_state" class="badge badge-secondary">no adapter</span>
                     </div>
+                    <div id="radar_body" class="collapse panel-body">
                     <div class="card-body row pt-3">
                         <div class="col-lg-6 col-12">
                             <div class="mb-2"><span class="badge badge-secondary mr-2">range (mm)</span><span id="radar_range_val"></span>
@@ -174,17 +179,20 @@
                             </div>
                         </div>
                     </div>
+                    </div><!-- /radar_body -->
                 </div>
             </div>
 
             <!-- Nowde ESP-NOW sync node (biennale-2026-module-radar #t-008) -->
             <div class="row mt-2" id="nowde-panel">
                 <div class="col-12">
-                    <div class="card-header text-white bg-dark d-flex align-items-center">
+                    <div class="card-header text-white bg-dark d-flex align-items-center panel-toggle" data-body="#nowde_body">
+                        <i class="fas fa-chevron-right panel-chevron mr-2"></i>
                         <span class="mr-auto">Nowde</span>
                         <span id="nowde_role" class="badge badge-secondary mr-2">no node</span>
                         <span id="nowde_state" class="badge badge-secondary">&mdash;</span>
                     </div>
+                    <div id="nowde_body" class="collapse panel-body">
                     <div class="card-body row pt-3">
                         <div class="col-lg-6 col-12">
                             <div class="mb-2"><span class="badge badge-secondary mr-2">layer (master)</span>
@@ -204,16 +212,19 @@
                             </div>
                         </div>
                     </div>
+                    </div><!-- /nowde_body -->
                 </div>
             </div>
 
             <!-- Schedule (biennale-2026-module-radar #t-005) -->
             <div class="row mt-2" id="schedule-panel">
                 <div class="col-12">
-                    <div class="card-header text-white bg-dark d-flex align-items-center">
+                    <div class="card-header text-white bg-dark d-flex align-items-center panel-toggle" data-body="#schedule_body">
+                        <i class="fas fa-chevron-right panel-chevron mr-2"></i>
                         <span class="mr-auto">Schedule</span>
                         <span id="schedule_rtc" class="badge badge-secondary">RTC &mdash;</span>
                     </div>
+                    <div id="schedule_body" class="collapse panel-body">
                     <div class="card-body pt-3">
                         <div class="mb-2">
                             <label><input type="checkbox" id="schedule_enable"> restrict playback to a daily window</label>
@@ -224,13 +235,15 @@
                             <input type="time" id="schedule_close"></div>
                         <div id="schedule_status" class="mt-2">RTC: &mdash;</div>
                     </div>
+                    </div><!-- /schedule_body -->
                 </div>
             </div>
 
             <!-- DMX conduite (biennale-2026-module-dmx) -->
             <div class="row mt-2" id="dmx-panel">
                 <div class="col-12">
-                    <div class="card-header text-white bg-dark d-flex align-items-center">
+                    <div class="card-header text-white bg-dark d-flex align-items-center panel-toggle" data-body="#dmx_body">
+                        <i class="fas fa-chevron-right panel-chevron mr-2"></i>
                         <span class="mr-auto">DMX</span>
                         <select id="dmx_protocol" class="custom-select custom-select-sm mr-2" style="width:auto;">
                             <option value="open">Open DMX (FTDI)</option>
@@ -238,6 +251,7 @@
                         </select>
                         <span id="dmx_conn" class="badge badge-secondary">no adapter</span>
                     </div>
+                    <div id="dmx_body" class="collapse panel-body">
                     <div class="card-body row pt-3">
                         <div class="col-lg-5 col-12">
                             <div class="mb-2 text-muted" style="font-size:.85em;">live output</div>
@@ -256,6 +270,7 @@
                             <div id="dmx_errors" class="mt-1 text-danger" style="font-size:.8em;white-space:pre;"></div>
                         </div>
                     </div>
+                    </div><!-- /dmx_body -->
                 </div>
             </div>
 
