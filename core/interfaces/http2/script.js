@@ -790,12 +790,11 @@ $(document).ready(function() {
         });
         socket.on('schedule-status', function(st) {
             var rtc = $('#schedule_rtc'), status = $('#schedule_status');
-            // fold only when there is nothing to say: RTC present AND restriction off.
-            // No RTC is a WARNING the operator must see (Thomas, 2026-09-04: folding on
-            // rtc=false hid exactly that message), and an active window is worth a look.
-            panelFollow('#schedule_body', !st['rtc'] || st['enabled']);
+            // no RTC: the card stays FOLDED (nothing in it can act — Thomas, 2026-09-04),
+            // and the warning moves up into the header badge so it is read without opening.
+            panelFollow('#schedule_body', st['rtc']);
             if (!st['rtc']) {
-                rtc.text('no RTC').removeClass('badge-success').addClass('badge-warning');
+                rtc.text('no RTC — restriction inactive').removeClass('badge-success').addClass('badge-warning');
                 $('#schedule-panel').addClass('no-rtc');
                 status.html('⚠ no RTC module — <b>restriction inactive</b>: playback is never gated without a trustworthy clock')
                       .removeClass('rtc-ok').addClass('rtc-warn');
