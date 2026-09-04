@@ -239,6 +239,9 @@ class FixturedHub(AudiohubInterface):
     def _read(self, path):
         return self.files.get(path, '')
 
+    def _hasPlayback(self, index):
+        return index not in getattr(self, 'midi_only', set())
+
     def _readConf(self):
         return self.conf
 
@@ -504,3 +507,18 @@ def test_drifter_offset_leads_the_clock():
     d2.kickStart = 0
     lead = d2.tick(10.0)['diff']
     assert abs((lead - base) - 0.03) < 1e-9
+
+
+def test_usb_midi_only_card_is_not_an_output():
+    """A USB-MIDI class device (Nowde node) shows as USB-Audio without any playback
+    PCM: it must never be taken as the USB output (chip 'absent', no 'connected')."""
+    hub = FixturedHub()
+    hub.midi_only = {3}
+    hub._tick()
+    plug(hub)
+    hub._tick()
+    assert hub.events == []
+    hub._pushStatus()
+    _, msg = hub.hplayer.http2.sent[-1]
+    assert msg['usb'] == 'absent'
+    assert msg['usb-card'] is None

@@ -1,6 +1,7 @@
 from .base import BaseInterface
 from ..engine.audiohw import read_audio_conf
 
+import os
 import re
 import shutil
 import subprocess
@@ -165,9 +166,17 @@ class AudiohubInterface(BaseInterface):
         return {sink: (lines[i] if i < len(lines) else 'unknown')
                 for i, sink in enumerate(self.UNITS)}
 
+    def _hasPlayback(self, index):
+        """A card is an OUTPUT only if it has a playback PCM. A USB-MIDI class device
+        enumerates as "USB-Audio" too (the Nowde AtomS3 node: card "D19268", midi0
+        only, no pcm*), and every Biennale outdoor player carries one: taking it as
+        the USB card made the chip cycle error/stalled while the forwarder recycled
+        on hw:D19268 every 5 s (player-000, 2026-09-04)."""
+        return os.path.isdir('/proc/asound/card%d/pcm0p' % index)
+
     def _scanUsb(self, cards):
         for c in cards:
-            if c['usb']:
+            if c['usb'] and self._hasPlayback(c['index']):
                 c['channels'] = parse_stream_playback_channels(
                                     self._read('/proc/asound/card%d/stream0' % c['index']))
                 return c
