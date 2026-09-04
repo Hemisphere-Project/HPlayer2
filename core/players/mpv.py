@@ -633,12 +633,11 @@ class MpvPlayer(BasePlayer):
         self.log("AUDIO-DELAY to", seconds)
 
     def _applyFlip(self, flip):
+        # `mirror` is gone from mpv 0.40 (kmini-001, 2026-09-04: "Option vf-del: 'mirror'
+        # isn't supported"); `hflip` is the lavfi filter both old and new builds carry
+        self._mpv_send('{ "command": ["vf", "del", "hflip"] }')
         if flip:
-            self._mpv_send('{ "command": ["vf", "del", "mirror"] }')
-            self._mpv_send('{ "command": ["vf", "add", "mirror"] }')
-        else:
-            self._mpv_send('{ "command": ["vf", "del", "mirror"] }')
-            pass
+            self._mpv_send('{ "command": ["vf", "add", "hflip"] }')
 
     def _applyOneLoop(self, oneloop):
         self._mpv_send('{ "command": ["set_property", "loop", ' + ('"inf"' if oneloop else '"no"') +'] }')

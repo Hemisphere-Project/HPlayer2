@@ -53,6 +53,24 @@ def ensure_git_repo(name: str, url: str, depth: int) -> Path:
     return dest
 
 
+PATCHES = SCRIPTS / "patches"
+
+
+def apply_patches(name: str, path: Path) -> None:
+    """Apply scripts/patches/<name>-*.patch to a freshly reset clone (idempotent).
+
+    The clones are reset to FETCH_HEAD on every run, so the patches are re-applied
+    each time; one that is already in (or upstreamed) is skipped via --reverse --check.
+    """
+    for patch in sorted(PATCHES.glob(f"{name}-*.patch")):
+        check = ["git", "apply", "--reverse", "--check", str(patch)]
+        applied = subprocess.run(check, cwd=path, capture_output=True).returncode == 0
+        if applied:
+            print(f"Patch {patch.name} already applied.", flush=True)
+            continue
+        run(["git", "apply", str(patch)], path)
+
+
 def build_repo(path: Path, prefix: Path, jobs: int) -> None:
     env = os.environ.copy()
     pkg_path = prefix / "lib" / "pkgconfig"
@@ -102,6 +120,7 @@ def main(argv: list[str]) -> int:
 
     for name, url in REPOS.items():
         repo_path = ensure_git_repo(name, url, args.depth)
+        apply_patches(name, repo_path)
         if args.skip_build:
             continue
         print(f"Building {name} with prefix {prefix}…", flush=True)

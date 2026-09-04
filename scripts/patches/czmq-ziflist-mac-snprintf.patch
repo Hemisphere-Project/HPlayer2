@@ -1,0 +1,43 @@
+ziflist: bound the MAC-string snprintf by the space left, not the buffer size
+
+`s_reload()` formats a hardware address into `mac[18]` six bytes at a time with
+`snprintf(mac+len, 18, ...)`: the bound never shrinks as `len` grows, so glibc's
+fortified snprintf (FORTIFY_SOURCE=3, Ubuntu 24.04+) aborts the process with
+"*** buffer overflow detected ***" as soon as a beacon enumerates interfaces —
+every Zyre node died on start on the KXKM kmini fleet (Ubuntu 25.10, 2026-09-04).
+Older toolchains merely never overflowed because each write is at most 3 bytes.
+
+Applied by scripts/bootstrap_native_deps.py after the clone. Upstream: czmq master
+(f22f657 era), src/ziflist.c, three occurrences (macOS, Linux, Windows branches).
+
+diff --git a/src/ziflist.c b/src/ziflist.c
+index 7789129..d873b62 100644
+--- a/src/ziflist.c
++++ b/src/ziflist.c
+@@ -227,7 +227,7 @@ s_reload (ziflist_t *self, bool ipv6)
+                     int len = 0;
+                     for (i = 0; i < 6; i++)
+                     {
+-                        len += snprintf(mac+len, 18, "%02X%s", rawmac[i], i < 5 ? ":":"");
++                        len += snprintf(mac+len, sizeof(mac)-len, "%02X%s", rawmac[i], i < 5 ? ":":"");
+                     }
+                     zhash_insert(mactable, interface->ifa_name, (void *)mac);
+                 }
+@@ -240,7 +240,7 @@ s_reload (ziflist_t *self, bool ipv6)
+                 int i;
+                 int len = 0;
+                 for (i = 0; i < 6; i++) {
+-                    len += snprintf(mac+len, 18, "%02X%s", s->sll_addr[i], i < 5 ? ":":"");
++                    len += snprintf(mac+len, sizeof(mac)-len, "%02X%s", s->sll_addr[i], i < 5 ? ":":"");
+                 }
+                 zhash_insert(mactable, (interface)->ifa_name, (void *)mac);
+             }
+@@ -320,7 +320,7 @@ s_reload (ziflist_t *self, bool ipv6)
+                 memcpy(rawmac, ifr->ifr_hwaddr.sa_data, 6);
+                 int len = 0;
+                 for (int i = 0; i < 6; i++) {
+-                    len += snprintf(mac+len, 18, "%02X%s", rawmac[i], i < 5 ? ":":"" );
++                    len += snprintf(mac+len, sizeof(mac)-len, "%02X%s", rawmac[i], i < 5 ? ":":"" );
+                 }
+             }
+ 
