@@ -137,3 +137,8 @@ input[type=range]::-webkit-slider-runnable-track {
 .panel-toggle { cursor: pointer; user-select: none; }
 .panel-chevron { font-size: .8em; opacity: .7; transition: transform .2s ease; }
 .panel-toggle.open .panel-chevron { transform: rotate(90deg); }
+/* click-to-jump progress beside the time counter (hplayer2#t-043) */
+#time_ellapsed { min-width: 5em; }
+#seekbar { height: 10px; background: #444; cursor: pointer; }
+#seekbar.disabled { cursor: default; opacity: .3; }
+#seekbar_fill { transition: width .25s linear; }

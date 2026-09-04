@@ -89,8 +89,10 @@ $(document).ready(function() {
 
         //console.log(msg)
 
-        // TIME
+        // TIME + PROGRESS (hplayer2#t-043) -- the fill is written before
+        // 'time' is dropped from the change-guard string below
         $('#time_ellapsed').text(msg['time'])
+        seekbarTick(msg)
         delete msg['time']
 
         // STATUS
@@ -106,6 +108,7 @@ $(document).ready(function() {
 
             $('#media_name').text(msg['media'])
             playlistMedia()
+            seekbarArm(msg)
 
             $("button").blur();
         }
@@ -431,6 +434,49 @@ $(document).ready(function() {
         $('.vol-more').toggle()
     });
     $('.vol-more').hide()
+
+    /*
+      PROGRESS BAR (hplayer2#t-043) -- click-to-jump only
+    */
+    // status() ticks at 10 Hz with time + duration in seconds. The bar is one
+    // style write on a cached element, and only when the whole percent moves
+    // (the same change-guard idea as last_status_str); the card is never
+    // re-rendered. No drag, no scrub: a click sends one absolute seek.
+    var seekFill = document.getElementById('seekbar_fill')
+    var seekBar = $('#seekbar')
+    var seekPct = -1        // last percent written to the DOM
+    var seekDuration = 0    // seconds while seekable, else 0
+
+    // seek acts only while playing or paused (hplayer.py 'seek' -> isPlaying()),
+    // and duration is filled only by mpv -- 0 on every other backend and
+    // between media loads. Live only when both hold: 0/0 never draws a full
+    // bar, and a stopped player never takes a click that would do nothing.
+    function seekableDuration(st) {
+        return ((st['isPlaying'] || st['isPaused']) && st['duration'] > 0) ? st['duration'] : 0
+    }
+    // every tick: whole percent, DOM touched only when it changes
+    function seekbarTick(st) {
+        var d = seekableDuration(st)
+        var pct = d > 0 ? Math.round(Math.max(0, Math.min(1, st['time'] / d)) * 100) : 0
+        if (pct === seekPct) return
+        seekPct = pct
+        seekFill.style.width = pct + '%'
+    }
+    // on a status change only: arm / disarm the click
+    function seekbarArm(st) {
+        seekDuration = seekableDuration(st)
+        seekBar.toggleClass('disabled', seekDuration <= 0)
+    }
+    seekBar.on('click', function(e) {
+        if (seekDuration <= 0) return
+        var r = this.getBoundingClientRect()
+        if (!r.width) return
+        var frac = Math.max(0, Math.min(1, (e.clientX - r.left) / r.width))
+        // one absolute seek, in ms. mpv snaps to a keyframe (seekTo exact=False,
+        // cheap on a Pi) and reports where it really landed on the next tick:
+        // the bar draws that and never argues, so no optimistic redraw here.
+        trigger('seek', Math.round(frac * seekDuration * 1000))
+    })
 
     // PLAYLIST
     var playlistBtn = new Button('#playlist_btn', 'info')
