@@ -373,6 +373,35 @@ class ThreadedHTTPServer(object):
         def event(data):
             self.regieinterface.emit('peers.triggers', data, self.regieinterface._latency)
 
+        @socketio.on('ndifile')
+        def ndifile(data):
+            """An NDI source picked in the grid becomes a `.ndi` FILE in the scene folder
+            (first line = source name). It travels with the synced media tree and every
+            peer plays it as an ordinary media, so the sequence chaining stays compatible
+            with players whose regie.py knows nothing of NDI (the sacvp Pis)."""
+            try:
+                scene = os.path.basename(str(data.get('scene', '')).strip())
+                source = str(data.get('source', '')).strip()
+                if not scene or not source:
+                    return
+                safe = ''.join(c if c.isalnum() or c in ' ()-_.' else '_' for c in source)
+                name = safe + '.ndi'
+                # the scene folder lives in the first base path that has it (the synced show tree)
+                for base in self.regieinterface.hplayer.files.root_paths:
+                    folder = os.path.join(base, scene)
+                    if os.path.isdir(folder):
+                        path = os.path.join(folder, name)
+                        if not os.path.exists(path):
+                            with open(path, 'w') as fd:
+                                fd.write(source + '\n')
+                            self.regieinterface.log('ndi file created', path)
+                            self.regieinterface.hplayer.files.refresh()
+                        emit('ndifile', {'scene': scene, 'name': name})
+                        return
+                self.regieinterface.log('ndifile: no folder for scene', scene)
+            except Exception as e:  # noqa: BLE001
+                self.regieinterface.log('ndifile error', e)
+
 
         # prepare sub-thread
         self.server_thread = threading.Thread(target=lambda:socketio.run(app, host='0.0.0.0', port=port))
