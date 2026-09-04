@@ -74,7 +74,10 @@ def apply_patches(name: str, path: Path) -> None:
 def build_repo(path: Path, prefix: Path, jobs: int) -> None:
     env = os.environ.copy()
     pkg_path = prefix / "lib" / "pkgconfig"
-    env["PKG_CONFIG_PATH"] = f"{pkg_path}:{env.get('PKG_CONFIG_PATH', '')}" if pkg_path.exists() else env.get("PKG_CONFIG_PATH", "")
+    if pkg_path.exists():
+        env["PKG_CONFIG_PATH"] = f"{pkg_path}:{env.get('PKG_CONFIG_PATH', '')}"
+    else:
+        env["PKG_CONFIG_PATH"] = env.get("PKG_CONFIG_PATH", "")
 
     run(["./autogen.sh"], path, env)
     run(["./configure", f"--prefix={prefix}"], path, env)

@@ -70,7 +70,7 @@ else:
 
 # INTERFACES
 hplayer.addInterface('http2', 8080)                    # web UI + media management
-hplayer.addInterface('http', 8081)                     # plain GET API (/stop, /status …) for scripts
+hplayer.addInterface('http', 8081)                     # plain GET API (/stop, /status …)
 hplayer.addInterface('regie', 9111, projectfolder)     # RPi-Regie page + sequence dispatch
 
 
