@@ -194,6 +194,7 @@ class NowdeInterface(BaseInterface):
     CONNECTION_CHECK_INTERVAL = 2.0  # Check connection health every 2 seconds
     SYNC_INTERVAL = 0.1              # master: MEDIA_SYNC cadence
     SYNC_IDLE_INTERVAL = 1.0         # master: cadence while stopped
+    STOP_DEBOUNCE = 0.5              # master: a stop must last this long before the slaves hear it
     POLL_INTERVAL = 1.0              # master: QUERY_RUNNING_STATE
     PROBE_INTERVAL = 2.0             # slave/auto: keepalive + role probe (silent on v1.2 nodes)
     PROBE_TIMEOUT = 6.0              # auto: no HELLO after this -> assume a legacy (v1.2) slave node
@@ -253,6 +254,7 @@ class NowdeInterface(BaseInterface):
         self._lastProbe = 0.0
         self._lastStatus = 0.0
         self._lastSent = None           # (index, playing) of the last MEDIA_SYNC
+        self._stopSince = None          # master: when the player last went not-playing
         self._assigned = set()          # macs we already re-layered
 
         # Slave sync state (the chase-lock servo lives in the shared Drifter)
@@ -377,6 +379,17 @@ class NowdeInterface(BaseInterface):
             return
         index, position_ms, playing = self._media_state()
         now = time.time()
+        # mpv reports the loop point of a seamless loop (and a playlist step) as a
+        # stopped/playing flicker of ~100 ms; relayed as is, every slave would stop and
+        # restart at each wrap (bench 2026-09-04). A stop reaches the slaves only once it
+        # has lasted STOP_DEBOUNCE; meanwhile the last playing index carries on.
+        if not playing:
+            if self._stopSince is None:
+                self._stopSince = now
+            if self._lastSent and self._lastSent[1] and now - self._stopSince < self.STOP_DEBOUNCE:
+                index, playing = self._lastSent[0], True
+        else:
+            self._stopSince = None
         interval = self.SYNC_INTERVAL if playing else self.SYNC_IDLE_INTERVAL
         changed = (index, playing) != self._lastSent
         if not (force or changed or now - self._lastSyncSend >= interval):
