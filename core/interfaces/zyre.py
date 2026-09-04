@@ -618,11 +618,17 @@ class ZyreNode ():
             peer.stop()
 
         self.interface.log('stopping node')
-        self.actor.sock().send(b"ss", b"$TERM")
-        retry = 0
-        while not self.done and retry < 10:
-            sleep(0.1)
-            retry += 1
+        # The actor usually leaves by itself (its loop breaks on `stopped`), and czmq
+        # closes its side of the pipe when the fn returns. A $TERM sent into that
+        # finished actor is a PAIR send with no peer: it blocks forever — that held
+        # every `systemctl stop` until the 90 s SIGKILL (kmini-001, 2026-09-04). Only
+        # ask a still-running actor to leave, and give it a bounded second.
+        if not self.done:
+            self.actor.sock().send(b"ss", b"$TERM")
+            retry = 0
+            while not self.done and retry < 10:
+                sleep(0.1)
+                retry += 1
 
         # self.zyre.stop()        # HANGS !
         self.zyre.__del__()

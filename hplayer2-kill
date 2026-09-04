@@ -1,14 +1,20 @@
 #!/bin/bash
-# Kill leftover player processes. Never ourselves or our sh -c wrapper:
-# their cmdlines match 'hplayer2' too, and a kill -9 suicide here leaves
-# the unit 'failed (signal)' on every stop (ExecStopPost is the control
-# process).
-for pat in hplayer2 HPlayer2 mpv; do
-    for pid in $(pgrep -f "$pat"); do
+# Kill leftover PLAYER processes before a start / after a stop: an HPlayer2 engine
+# (uv/python running launcher.py) or an mpv it spawned that outlived its unit.
+#
+# Match the two exact launch signatures, never a loose substring: the old
+# `pgrep -f hplayer2|HPlayer2|mpv` killed ANY process whose command line mentioned
+# them — the `systemctl restart hplayer2@…` that triggered this very script, an ssh
+# shell running a deploy, a grep… (kmini-001, 2026-09-04). Never ourselves or our
+# sh -c wrapper either: their cmdlines are the control process of the unit.
+kill_matching() {
+    for pid in $(pgrep -f -- "$1"); do
         [ "$pid" = "$$" ] && continue
         [ "$pid" = "$PPID" ] && continue
         kill -9 "$pid" 2>/dev/null
     done
-done
+}
+kill_matching 'launcher\.py'                        # the engine: uv run … python launcher.py <profile>
+kill_matching '--input-ipc-server=/tmp/hplayer-'    # an mpv spawned by core/players/mpv.py
 sleep 1
 exit 0
