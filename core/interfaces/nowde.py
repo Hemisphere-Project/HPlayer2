@@ -149,6 +149,50 @@ def parse_config_state(d):
     return info
 
 
+ALSA_SEQ_CLIENTS = '/proc/asound/seq/clients'
+
+
+def alsa_client_of(port_name):
+    """ALSA client number from a mido/rtmidi port name ('Nowde - X:Nowde - X MIDI 1 20:0' -> 20)."""
+    m = re.search(r'\s(\d+):(\d+)$', port_name or '')
+    return int(m.group(1)) if m else None
+
+
+def _seq_blocks(text):
+    """{client number: block text} from a /proc/asound/seq/clients dump."""
+    blocks = {}
+    for chunk in re.split(r'(?m)^Client\s+', text or ''):
+        m = re.match(r'(\d+)\s*:', chunk)
+        if m:
+            blocks[int(m.group(1))] = chunk
+    return blocks
+
+
+def seq_subscriber_of(text, node_client):
+    """Our sequencer client: the highest-numbered client fed by `node_client` ("Connected
+    From: 20:0"). Read right after opening the port, when we are the newest subscriber."""
+    if node_client is None:
+        return None
+    pat = re.compile(r'Connected From:\s*%d:\d+' % node_client)
+    ours = [n for n, b in _seq_blocks(text).items() if pat.search(b)]
+    return max(ours) if ours else None
+
+
+def seq_subscribed(text, our_client, node_client):
+    """Is client `our_client` still fed by `node_client`? A USB node that reboots
+    re-enumerates with the SAME client number and name (player-000, 2026-09-04 19:31:
+    'Nowde - D19268' came back as client 20), so a port-name check never fires — but the
+    kernel dropped every subscription with the old client: we sent into the void, heard
+    nothing, and the status froze on the last table. The subscription is the truth.
+    Unknown (no dump, client not listed) reads as alive: never relink on a guess."""
+    if our_client is None or node_client is None:
+        return True
+    block = _seq_blocks(text).get(our_client)
+    if block is None:
+        return True
+    return re.search(r'Connected From:\s*%d:\d+' % node_client, block) is not None
+
+
 def parse_running_state(d):
     """One chunk. Returns (meta, [receiver dicts])."""
     if len(d) < 10:
@@ -247,6 +291,7 @@ class NowdeInterface(BaseInterface):
         self.role = None if mode == 'auto' else mode
         self.node = {}                  # last HELLO / CONFIG_STATE
         self.receivers = []             # master: slave table from RUNNING_STATE
+        self._seq_client = None         # our ALSA sequencer client, for the subscription check
         self.mesh_synced = False
         self._connected_at = 0.0
         self._lastSyncSend = 0.0
@@ -290,6 +335,13 @@ class NowdeInterface(BaseInterface):
 
     def isSlave(self):
         return self.role == 'slave'
+
+    def _seq_clients(self):
+        try:
+            with open(ALSA_SEQ_CLIENTS) as fd:
+                return fd.read()
+        except OSError:
+            return ''
 
     def isLinked(self):
         return self.port is not None
@@ -438,6 +490,12 @@ class NowdeInterface(BaseInterface):
                 self._assigned.clear()
                 if info.get('uptime', 0) < 5000:
                     self._handshake()
+            if info.get('uptime', 0) < 5000 and self.receivers:
+                # a node that just booted has an empty table: drop ours instead of showing
+                # yesterday's slaves until the next RUNNING_STATE lands
+                self.receivers = []
+                self.mesh_synced = False
+                self.emit('receivers', self.receivers)
         elif cmd == CMD_CONFIG_STATE:
             info = parse_config_state(d)
             if info:
@@ -578,6 +636,8 @@ class NowdeInterface(BaseInterface):
                     self.out = None
                 self._connected_at = time.time()
                 self._lastSent = None
+                node_client = alsa_client_of(target_port)
+                self._seq_client = seq_subscriber_of(self._seq_clients(), node_client)
                 self.emit('linked', target_port)
                 if self.out:
                     if self.mode == 'master':
@@ -591,6 +651,11 @@ class NowdeInterface(BaseInterface):
                     available_ports = mido.get_input_names()
                     if target_port not in available_ports:
                         self.log(colored(f"WARNING: MIDI port '{target_port}' disconnected!", 'red'))
+                        break
+                    # same name, same client number, dead link: the node re-enumerated
+                    # (reboot / power glitch) and the kernel dropped our subscriptions
+                    if not seq_subscribed(self._seq_clients(), self._seq_client, node_client):
+                        self.log(colored(f"WARNING: subscription to '{target_port}' gone (node re-enumerated?) — relinking", 'red'))
                         break
 
                     # Wait before next check

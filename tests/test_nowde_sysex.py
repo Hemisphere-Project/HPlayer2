@@ -117,3 +117,56 @@ def test_media_index_of():
     assert media_index_of('0_mire.mp4') == 0
     assert media_index_of('intro.mp4') == 0
     assert media_index_of(None) == 0
+
+
+SEQ_LIVE = """Client info
+  cur  clients : 5
+Client  20 : "Nowde - D19268" [Kernel Legacy]
+  Port   0 : "Nowde - D19268 MIDI 1" (RWeX) [In/Out]
+    Connecting To: 130:0
+    Connected From: 131:0[r:0]
+Client 128 : "RtMidiIn Client" [User Legacy]
+  Port   0 : "RtMidi input" (-We-) [Out]
+Client 130 : "RtMidiIn Client" [User Legacy]
+  Port   0 : "RtMidi input" (-We-) [Out]
+    Connected From: 20:0
+Client 131 : "RtMidiOut Client" [User Legacy]
+  Port   0 : "RtMidi output" (R-e-) [In]
+    Connecting To: 20:0[r:0]
+"""
+
+SEQ_DEAD = """Client  20 : "Nowde - D19268" [Kernel Legacy]
+  Port   0 : "Nowde - D19268 MIDI 1" (RWeX) [In/Out]
+Client 130 : "RtMidiIn Client" [User Legacy]
+  Port   0 : "RtMidi input" (-We-) [Out]
+Client 131 : "RtMidiOut Client" [User Legacy]
+  Port   0 : "RtMidi output" (R-e-) [In]
+"""
+
+
+def test_alsa_client_of():
+    from core.interfaces.nowde import alsa_client_of
+    assert alsa_client_of('Nowde - D19268:Nowde - D19268 MIDI 1 20:0') == 20
+    assert alsa_client_of('Nowde - SIM') is None
+
+
+def test_seq_subscriber_is_the_newest_client_fed_by_the_node():
+    from core.interfaces.nowde import seq_subscriber_of
+    assert seq_subscriber_of(SEQ_LIVE, 20) == 130       # 128 is an older, unsubscribed client
+    assert seq_subscriber_of(SEQ_DEAD, 20) is None
+    assert seq_subscriber_of('', 20) is None
+
+
+def test_seq_subscribed_live_then_node_reenumerated():
+    from core.interfaces.nowde import seq_subscribed
+    assert seq_subscribed(SEQ_LIVE, 130, 20) is True
+    # node rebooted: same client 20, same name, our subscription is gone
+    assert seq_subscribed(SEQ_DEAD, 130, 20) is False
+
+
+def test_seq_subscribed_unknown_reads_alive():
+    from core.interfaces.nowde import seq_subscribed
+    assert seq_subscribed('', 130, 20) is True          # no /proc dump on this platform
+    assert seq_subscribed(SEQ_LIVE, None, 20) is True   # we never identified our client
+    assert seq_subscribed(SEQ_LIVE, 130, None) is True  # virtual port, no node client
+    assert seq_subscribed(SEQ_DEAD, 999, 20) is True    # our client not listed at all
