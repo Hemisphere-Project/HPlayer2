@@ -643,15 +643,15 @@ class MpvPlayer(BasePlayer):
         if not self._shaders:
             return
         s = clean_surface(surface)
-        # Enabled = pixel-exact output for an LED controller: the video sits at the
-        # screen's TOP-LEFT, unscaled (1 source pixel = 1 HDMI pixel), so the block the
-        # shader places at output_x/y lands on those exact HDMI pixels. Disabled = mpv's
-        # normal centred, scaled-to-fit picture.
+        # Enabled = the picture is anchored at the screen's TOP-LEFT (an LED controller
+        # reads from there), so the block the shader places at output_x/y lands on those
+        # HDMI pixels. The video stays scaled-to-fit: the shader's pixel math maps the
+        # source onto the output size, which is exact for screen-aspect content (1080p
+        # on a 1080p output, the show's case) — an unscaled 1:1 mode would break it for
+        # any other source size. Disabled = mpv's normal centred picture.
         anchor = '-1' if s['enable'] else '0'
         self._mpv_send('{ "command": ["set_property", "video-align-x", ' + anchor + '] }')
         self._mpv_send('{ "command": ["set_property", "video-align-y", ' + anchor + '] }')
-        self._mpv_send('{ "command": ["set_property", "video-unscaled", "'
-                       + ('yes' if s['enable'] else 'no') + '"] }')
         if not s['enable']:
             self._shaderParam('scaler_enable', 0.0)
             return

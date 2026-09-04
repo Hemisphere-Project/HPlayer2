@@ -20,7 +20,7 @@ from core.engine.hplayer import HPlayer2
 #   core/engine/settings.py SURFACE_DEFAULTS, disabled by default) edited live in the
 #   http2 page's "Surface (LED)" card (shown only where the player has the GLSL scaler,
 #   i.e. mpv on x86) and saved with the other settings in the profile's .cfg.
-#   Enabled = the picture is anchored TOP-LEFT and unscaled (1 px = 1 HDMI px).
+#   Enabled = the picture is anchored TOP-LEFT (use screen-aspect content, e.g. 1080p).
 #   From scripts: GET http://<box>:8081/surface/{"width":256,"height":512,"halfheight":true}
 
 SHOW = 'sacvp'
