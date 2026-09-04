@@ -6,7 +6,9 @@ import core.interfaces as ifacelib
 from core.engine.sampler import Sampler
 from core.engine.filemanager import FileManager
 from core.engine.playlist import Playlist
+import json
 from core.engine.settings import Settings
+from .settings import SURFACE_DEFAULTS, clean_surface
 from core.engine.imgen import ImGen
 
 from collections import OrderedDict
@@ -215,6 +217,11 @@ class HPlayer2(Module):
             @self.settings.on('do-flip')
             def flip(ev, value, settings):
                 p._applyFlip( settings['flip'] )
+
+            # Bind Surface (LED / output transform)
+            @self.settings.on('do-surface')
+            def surface(ev, value, settings):
+                p._applySurface( settings['surface'] )
 
             # Bind OneLoop
             @self.settings.on('do-loop')
@@ -775,6 +782,30 @@ class HPlayer2(Module):
         @module.on('unflip')
         def unflip(ev, *args):
             self.settings.set('flip', False)
+
+        # SURFACE: a (partial) dict merges into the persisted surface — http2 sends one
+        # field at a time ({'width': 256}); http/osc may pass the dict as a JSON string.
+        @module.on('surface')
+        def surface(ev, *args):
+            if len(args) == 0:
+                return
+            patch = args[0]
+            if isinstance(patch, str):
+                try:
+                    patch = json.loads(patch)
+                except ValueError:
+                    self.log('surface: expected a dict or JSON, got', patch)
+                    return
+            if not isinstance(patch, dict):
+                self.log('surface: expected a dict, got', patch)
+                return
+            current = dict(self.settings.get('surface') or SURFACE_DEFAULTS)
+            current.update(patch)
+            self.settings.set('surface', clean_surface(current))
+
+        @module.on('unsurface')
+        def unsurface(ev, *args):
+            surface(ev, {'enable': False})
 
         @module.on('autoplay')
         def autoplay(ev, *args):

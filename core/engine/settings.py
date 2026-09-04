@@ -1,6 +1,54 @@
-from ..module import Module
 import json
 import os
+
+from ..module import Module
+
+# SURFACE — the LED / output transform of the video player, persisted with the other
+# settings and edited live from http2 (kmini minis: the mpv GLSL scaler, 03-scaler.glsl).
+# `enable: False` = the transform is bypassed (plain full-screen output).
+SURFACE_DEFAULTS = {
+    'enable':           False,
+    'width':            0,          # target block in output pixels, 0 = source size
+    'height':           0,
+    'rotate':           0.0,        # degrees, any angle
+    'halfheight':       False,      # even-line LED panels: squash the block to half height
+    'fit':              'cover',    # cover | contain | stretch
+    'align':            'center',   # center | left  (horizontal crop / content alignment)
+    'source_offset_x':  0,
+    'source_offset_y':  0,
+    'output_x':         0,          # where the finished block lands on the output
+    'output_y':         0,
+}
+SURFACE_FIT = ('cover', 'contain', 'stretch')
+SURFACE_ALIGN = ('center', 'left')
+
+
+def clean_surface(surface):
+    """Coerce a (partial) surface dict onto SURFACE_DEFAULTS: bad values fall back to the
+    default rather than raising — a slider on a phone must never break the player."""
+    src = surface if isinstance(surface, dict) else {}
+    out = {}
+    for key, default in SURFACE_DEFAULTS.items():
+        val = src.get(key, default)
+        try:
+            if isinstance(default, bool):
+                if not isinstance(val, bool):
+                    val = str(val).lower() in ('1', 'true', 'yes', 'on')
+            elif isinstance(default, float):
+                val = float(val)
+            elif isinstance(default, int):
+                val = int(float(val))
+            else:
+                val = str(val).lower()
+        except (TypeError, ValueError):
+            val = default
+        out[key] = val
+    if out['fit'] not in SURFACE_FIT:
+        out['fit'] = SURFACE_DEFAULTS['fit']
+    if out['align'] not in SURFACE_ALIGN:
+        out['align'] = SURFACE_DEFAULTS['align']
+    return out
+
 
 class Settings(Module):
 
@@ -17,7 +65,8 @@ class Settings(Module):
         'playlist':     None, 
         'brightness':   100,
         'contrast':     50,
-        'filter':       ''
+        'filter':       '',
+        'surface':      None            # see SURFACE_DEFAULTS; None = never set (bypass)
     }
 
     def __init__(self, hplayer, persistent=None):
@@ -88,7 +137,7 @@ class Settings(Module):
         if not self._ready:
             self.log('WARNING: settings not ready to set', key, val)
             return
-        if not key in self._settings:
+        if key not in self._settings:
             self._settings[key] = None
         if self._settings[key] != val:
             self._settings[key] = val

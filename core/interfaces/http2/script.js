@@ -48,6 +48,9 @@ $(document).ready(function() {
         // Brightness/contrast elements (profile-gated, hidden by default)
         setElementBrightness(conf.brightness)
 
+        // Surface (LED transform) card (profile-gated, hidden by default)
+        setElementSurface(conf.surface)
+
     })
 
     // FILES LIST
@@ -236,6 +239,17 @@ $(document).ready(function() {
             $('.brightness-element').show()
         } else {
             $('.brightness-element').hide()
+        }
+    }
+
+    // Surface (LED / output transform) card: only the mpv backend with the GLSL scaler
+    // (x86 minis) applies it, so it stays hidden unless the profile opts in:
+    // addInterface('http2', 8080, {'surface': True})
+    setElementSurface = function(mode) {
+        if (mode === true) {
+            $('.surface-element').show()
+        } else {
+            $('.surface-element').hide()
         }
     }
 
@@ -633,6 +647,40 @@ $(document).ready(function() {
         if (e.target !== this) return
         $(this).prev('.panel-toggle').toggleClass('open', e.type === 'show')
     })
+
+    // --- Surface (LED / output transform) panel (kmini minis) ---
+    // Each field patches ONE key of the persisted `surface` setting ({'width': 256});
+    // the engine merges, cleans, persists and echoes the whole dict via settings.updated.
+    (function() {
+        var numKeys = ['width', 'height', 'rotate', 'source_offset_x', 'source_offset_y', 'output_x', 'output_y'];
+        function fill(sf) {
+            sf = sf || {};
+            $('#surface_enable').prop('checked', !!sf.enable);
+            $('#surface_halfheight').prop('checked', !!sf.halfheight);
+            $('#surface_fit').val(sf.fit || 'cover');
+            $('#surface_align').val(sf.align || 'center');
+            numKeys.forEach(function(k) {
+                var el = $('#surface_' + k);
+                if (!el.is(':focus')) el.val(sf[k] === undefined ? 0 : sf[k]);
+            });
+            var label = 'bypass';
+            if (sf.enable) {
+                label = (sf.width || 0) + ' x ' + (sf.height || 0) + (sf.halfheight ? ' half' : '') + (sf.rotate ? ' ' + sf.rotate + '°' : '') + ' ' + (sf.fit || 'cover');
+            }
+            $('#surface_state').text(label).toggleClass('badge-success', !!sf.enable).toggleClass('badge-secondary', !sf.enable);
+        }
+        socket.on('settings.updated', function(msg) {
+            if (msg['surface'] !== undefined) fill(msg['surface']);
+        });
+        function patch(obj) { trigger('surface', obj); }
+        $('#surface_enable').on('change', function() { patch({ enable: this.checked }); });
+        $('#surface_halfheight').on('change', function() { patch({ halfheight: this.checked }); });
+        $('#surface_fit').on('change', function() { patch({ fit: this.value }); });
+        $('#surface_align').on('change', function() { patch({ align: this.value }); });
+        numKeys.forEach(function(k) {
+            $('#surface_' + k).on('change', function() { var o = {}; o[k] = Number(this.value) || 0; patch(o); });
+        });
+    })();
 
     // --- Radar panel (biennale-2026-module-radar) ---
     // Tuning sliders + live presence feedback from the radar interface. A second

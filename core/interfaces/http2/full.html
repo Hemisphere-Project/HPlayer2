@@ -156,6 +156,42 @@
                 </div>
             </div>
 
+            <!-- Surface / LED transform — profile-gated, hidden by default:
+                 hplayer.addInterface('http2', 8080, {'surface': True}) shows it (kmini minis,
+                 mpv GLSL scaler on x86). Fields patch the persisted `surface` setting. -->
+            <div class="row mt-2 surface-element" id="surface-panel">
+                <div class="col-12">
+                    <div class="card-header text-white bg-dark d-flex align-items-center panel-toggle" data-body="#surface_body">
+                        <i class="fas fa-chevron-right panel-chevron mr-2"></i>
+                        <span class="mr-auto">Surface (LED)</span>
+                        <span id="surface_state" class="badge badge-secondary">bypass</span>
+                    </div>
+                    <div id="surface_body" class="collapse panel-body">
+                    <div class="card-body row pt-3">
+                        <div class="col-lg-6 col-12">
+                            <div class="mb-2"><label class="mb-0"><input type="checkbox" id="surface_enable"> <b>enable</b> the transform (off = plain full screen)</label></div>
+                            <div class="mb-2"><span class="badge badge-secondary mr-2">width</span><input type="number" id="surface_width" min="0" max="8192" step="1">
+                                <span class="badge badge-secondary mx-2">height</span><input type="number" id="surface_height" min="0" max="8192" step="1">
+                                <span class="text-muted ml-2" style="font-size:.85em;">px, 0 x 0 = source size</span></div>
+                            <div class="mb-2"><span class="badge badge-secondary mr-2">fit</span>
+                                <select id="surface_fit"><option value="cover">cover (crop)</option><option value="contain">contain (bars)</option><option value="stretch">stretch</option></select>
+                                <span class="badge badge-secondary mx-2">align</span>
+                                <select id="surface_align"><option value="center">center</option><option value="left">left</option></select></div>
+                            <div class="mb-2"><label class="mb-0"><input type="checkbox" id="surface_halfheight"> half height (even-line LED panels)</label></div>
+                        </div>
+                        <div class="col-lg-6 col-12">
+                            <div class="mb-2"><span class="badge badge-secondary mr-2">rotate</span><input type="number" id="surface_rotate" min="0" max="359" step="1"> <span class="text-muted" style="font-size:.85em;">degrees</span></div>
+                            <div class="mb-2"><span class="badge badge-secondary mr-2">source offset</span>
+                                x <input type="number" id="surface_source_offset_x" step="1"> y <input type="number" id="surface_source_offset_y" step="1"></div>
+                            <div class="mb-2"><span class="badge badge-secondary mr-2">output position</span>
+                                x <input type="number" id="surface_output_x" step="1"> y <input type="number" id="surface_output_y" step="1"></div>
+                            <div class="text-muted" style="font-size:.85em;">applied live, saved with the player settings</div>
+                        </div>
+                    </div>
+                    </div><!-- /surface_body -->
+                </div>
+            </div>
+
             <!-- Radar (biennale-2026-module-radar) -->
             <div class="row mt-2" id="radar-panel">
                 <div class="col-12">

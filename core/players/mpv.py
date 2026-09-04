@@ -6,6 +6,7 @@ from pathlib import Path
 from shutil import which
 from .base import BasePlayer
 from ..engine.audiohw import read_audio_conf
+from ..engine.settings import clean_surface
 
 
 # HNdi input node (x86 minis): NDI arrives on this V4L2 loopback, driven by a local API
@@ -631,6 +632,29 @@ class MpvPlayer(BasePlayer):
         # delay accounting)
         self._mpv_send(json.dumps({"command": ["set_property", "audio-delay", round(seconds, 4)]}))
         self.log("AUDIO-DELAY to", seconds)
+
+    # SURFACE (LED / output transform) -> the GLSL scaler params (03-scaler.glsl, x86).
+    # Nothing to do where no shader is loaded (Pi): the hook stays silent.
+    def _applySurface(self, surface):
+        if not self._shaders:
+            return
+        s = clean_surface(surface)
+        if not s['enable']:
+            self._shaderParam('scaler_enable', 0.0)
+            return
+        self._shaderParam({
+            'scaler_enable':          1.0,
+            'scaler_width':           float(s['width']),
+            'scaler_height':          float(s['height']),
+            'scaler_rotate':          float(s['rotate']),
+            'scaler_halfheight':      1.0 if s['halfheight'] else 0.0,
+            'scaler_fit':             {'cover': 0.0, 'contain': 1.0, 'stretch': 2.0}[s['fit']],
+            'scaler_sourcealign':     0.0 if s['align'] == 'left' else 1.0,
+            'scaler_sourceoffset_x':  float(s['source_offset_x']),
+            'scaler_sourceoffset_y':  float(s['source_offset_y']),
+            'scaler_output_x':        float(s['output_x']),
+            'scaler_output_y':        float(s['output_y']),
+        })
 
     def _applyFlip(self, flip):
         # `mirror` is gone from mpv 0.40 (kmini-001, 2026-09-04: "Option vf-del: 'mirror'

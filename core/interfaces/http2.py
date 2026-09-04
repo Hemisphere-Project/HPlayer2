@@ -92,6 +92,7 @@ class Http2Interface (BaseInterface):
             'playlist'  : True,
             'loop'      : True,
             'mute'      : True,
+            'surface'   : False,      # LED/output transform card (mpv GLSL scaler, x86 minis)
             'page'      : 'full'
         }
         self.conf.update(confe)

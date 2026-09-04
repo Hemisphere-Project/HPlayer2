@@ -72,6 +72,12 @@ REGIE_PATH1 = '/opt/RPi-Regie'
 REGIE_PATH2 = '/data/RPi-Regie'
 
 
+# HNdi input node (x86 minis): its local API lists the NDI sources seen on the LAN.
+# A Regie served from a mini offers them in the grid's media picker as `ndi:<name>`.
+NDI_API = 'http://127.0.0.1:8791'
+NDI_POLL_S = 5
+
+
 class RegieInterface (BaseInterface):
 
     def  __init__(self, hplayer, port, datapath, latency=437):
@@ -86,6 +92,7 @@ class RegieInterface (BaseInterface):
         self._datapath = datapath
         self._server = None
         self._latency = latency
+        self._ndi_sources = []      # names seen by the local HNdi node ([] = no node here)
         
 
     # HTTP receiver THREAD
@@ -110,7 +117,9 @@ class RegieInterface (BaseInterface):
         self.log( "regie interface on port", self._port)
         with ThreadedHTTPServer(self, self._port) as server:
             self._server = server
-            self.stopped.wait()
+            # keep the NDI source list fresh while serving (no node → stays empty)
+            while not self.stopped.wait(NDI_POLL_S):
+                self.pollNdiSources()
             self._server.stop()
 
         self._server = None
@@ -122,6 +131,21 @@ class RegieInterface (BaseInterface):
         
     def projectPath(self):
         return os.path.join(self._datapath, 'project.json')
+
+    def pollNdiSources(self):
+        """ask the local HNdi node which NDI sources it sees; push the list to the
+        Regie pages when it changes. No node on this box → nothing, silently."""
+        import urllib.request
+        try:
+            with urllib.request.urlopen(NDI_API + '/sources', timeout=1.0) as r:
+                names = [x.get('name', '') for x in json.loads(r.read().decode()) if x.get('name')]
+        except Exception:  # noqa: BLE001 — refused, timeout, bad json: no node here
+            names = []
+        if names != self._ndi_sources:
+            self._ndi_sources = names
+            self.log('NDI sources:', names)
+            if self._server:
+                self._server.sendBuffer.put(('data', {'ndiSources': names}))
     
 
     def projectRaw(self):
@@ -163,6 +187,10 @@ class RegieInterface (BaseInterface):
                     order["event"] = b["media"]
                 elif b["media"] == '...':
                     order["event"] = 'continue'
+                elif b["media"].startswith('ndi:'):
+                    # NDI source picked in the grid: the peer's mpv plays its HNdi loopback
+                    order["event"] = 'playstream'
+                    order["data"] = 'ndi://' + b["media"][4:]
                 elif b["media"].startswith('fade'):
                     order["event"] = 'fade'
                     order["data"] = b["media"].split('fade ')[1]
@@ -379,7 +407,8 @@ class ThreadedHTTPServer(object):
     def projectData(self):
         data={
             'fullproject':  self.regieinterface.projectRaw(),
-            'fileTree':     self.regieinterface.hplayer.files()
+            'fileTree':     self.regieinterface.hplayer.files(),
+            'ndiSources':   self.regieinterface._ndi_sources
         }
         return data
     

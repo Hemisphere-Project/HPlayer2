@@ -224,6 +224,9 @@ class BasePlayer(Module):
     def _applyContrast(self, contrast):
         self.log("contrast set to", contrast)
 
+    def _applySurface(self, surface):
+        self.log("surface", surface)
+
     def _shaderParam(self, param, value=None):
         if not isinstance(param, dict):
             param = {param: value}
