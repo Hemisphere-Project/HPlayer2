@@ -28,7 +28,8 @@ else
 fi
 
 # Build tools / dependencies
-apt install libtool pkg-config alsa-utils alsa-base libasound2-dev $APT_YES_FLAG
+apt install libtool pkg-config alsa-utils alsa-base libasound2-dev v4l-utils $APT_YES_FLAG
+
 
 # Exit on error
 set -e

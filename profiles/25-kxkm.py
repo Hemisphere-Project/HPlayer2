@@ -393,18 +393,31 @@ def keyboard(ev, *args):
 #
 
 # Scaler Test toggle
-toggle = False
-@hplayer.on('video.playing')
-def video_playing(ev, *args):
-    global toggle
-    toggle = not toggle
-    video.shaderParam('scaler_enable', 1.0 if toggle else 0.0)
-    video.shaderParam({'color_r': 255.0, 'color_g': 0.0, 'color_b': 0.0, 'color_alpha': 128.0} if not toggle else {'color_r': 255.0, 'color_g': 255.0, 'color_b': 255.0, 'color_alpha': 0.0})
+# toggle = False
+# @hplayer.on('video.playing')
+# def video_playing(ev, *args):
+#     global toggle
+#     toggle = not toggle
+#     video.shaderParam('scaler_enable', 1.0 if toggle else 0.0)
+#     video.shaderParam({'color_r': 255.0, 'color_g': 0.0, 'color_b': 0.0, 'color_alpha': 128.0} if not toggle else {'color_r': 255.0, 'color_g': 255.0, 'color_b': 255.0, 'color_alpha': 0.0})
+
+
 # default volume
 @hplayer.on('app-run')
 def init(ev, *args):
     hplayer.settings.set('volume', 100)
     hplayer.settings.set('loop', 1)
+
+    video.shaderParam({ 'scaler_enable': 1.0, 
+        'scaler_width': 256.0,
+        'scaler_height': 512.0,
+        'scaler_rotate': 0.0, 
+        'scaler_halfheight': 1.0,
+    })
+    
+    video.shaderParam({ 'correction_brightness': 70.0 })
+    
+    hplayer.playlist.playindex(0)
 
 
 # RUN
