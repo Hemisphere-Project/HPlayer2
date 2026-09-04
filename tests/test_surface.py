@@ -20,3 +20,24 @@ def test_surface_event_merges_partial_updates():
     assert hplayer.settings.get('surface')['rotate'] == 45.0
     hplayer.emit('unsurface')
     assert hplayer.settings.get('surface')['enable'] is False
+
+
+def test_surface_card_follows_player_capability():
+    import core.interfaces.http2 as http2mod
+    hplayer = HPlayer2(mediaPath=[])
+
+    class NoSurfacePlayer:
+        def hasSurface(self): return False
+
+    class LedPlayer:
+        def hasSurface(self): return True
+
+    iface = http2mod.Http2Interface.__new__(http2mod.Http2Interface)
+    iface.hplayer = hplayer
+    iface.conf = {'surface': None}
+    hplayer._players = {'a': NoSurfacePlayer()}
+    assert iface.config()['surface'] is False          # a Pi-style player: no card
+    hplayer._players = {'a': NoSurfacePlayer(), 'b': LedPlayer()}
+    assert iface.config()['surface'] is True           # mpv/x86 present: card shown
+    iface.conf = {'surface': False}
+    assert iface.config()['surface'] is False          # a profile may force it off

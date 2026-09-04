@@ -92,7 +92,7 @@ class Http2Interface (BaseInterface):
             'playlist'  : True,
             'loop'      : True,
             'mute'      : True,
-            'surface'   : False,      # LED/output transform card (mpv GLSL scaler, x86 minis)
+            'surface'   : None,       # LED/output transform card: None = follow the players (hasSurface)
             'page'      : 'full'
         }
         self.conf.update(confe)
@@ -129,6 +129,15 @@ class Http2Interface (BaseInterface):
             t.start()
             t.join(3.0)
 
+
+    # Effective config for a page: a None gate resolves against the players' capabilities
+    # (the Surface card exists only where a backend applies the transform — mpv on x86;
+    # a Pi's MMAL output has no GLSL, so its page never shows the card)
+    def config(self):
+        conf = dict(self.conf)
+        if conf.get('surface') is None:
+            conf['surface'] = any(p.hasSurface() for p in self.hplayer.players())
+        return conf
 
     # SEND socketio message to clients
     def send(self, event, message):
@@ -332,7 +341,7 @@ class ThreadedHTTPServer(object):
 
         @socketio.on('connect')
         def client_connect():
-            socketio.emit('config',             self.http2interface.conf)
+            socketio.emit('config',             self.http2interface.config())
             socketio.emit('settings.updated',   self.http2interface.hplayer.settings())
             socketio.emit('playlist.updated',   self.http2interface.hplayer.playlist())
             global thread

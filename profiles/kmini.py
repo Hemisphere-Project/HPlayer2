@@ -17,8 +17,10 @@ from core.engine.hplayer import HPlayer2
 # Media tree (synced, same as the Pis):    /data/sync/<SHOW>/<scene>/<media>
 # Per-box folder (solo media, overrides):   /data/sync/solo/<hostname>/
 # Surface (LED / output transform):         a persisted SETTING (`surface`, see
-#   core/engine/settings.py SURFACE_DEFAULTS) edited live in the http2 page's
-#   "Surface (LED)" card and saved with the other settings in the profile's .cfg.
+#   core/engine/settings.py SURFACE_DEFAULTS, disabled by default) edited live in the
+#   http2 page's "Surface (LED)" card (shown only where the player has the GLSL scaler,
+#   i.e. mpv on x86) and saved with the other settings in the profile's .cfg.
+#   Enabled = the picture is anchored TOP-LEFT and unscaled (1 px = 1 HDMI px).
 #   From scripts: GET http://<box>:8081/surface/{"width":256,"height":512,"halfheight":true}
 
 SHOW = 'sacvp'
@@ -58,7 +60,7 @@ else:
 
 
 # INTERFACES
-hplayer.addInterface('http2', 8080, {'surface': True})  # web UI + media management + Surface card
+hplayer.addInterface('http2', 8080)                    # web UI + media management (+ Surface card, mpv/x86)
 hplayer.addInterface('http', 8081)                     # plain GET API (/stop, /status …)
 hplayer.addInterface('regie', 9111, projectfolder)     # RPi-Regie page + sequence dispatch
 

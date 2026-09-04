@@ -242,9 +242,9 @@ $(document).ready(function() {
         }
     }
 
-    // Surface (LED / output transform) card: only the mpv backend with the GLSL scaler
-    // (x86 minis) applies it, so it stays hidden unless the profile opts in:
-    // addInterface('http2', 8080, {'surface': True})
+    // Surface (LED / output transform) card: shown when a player applies it — the
+    // server resolves the gate from the players' hasSurface() (mpv with the GLSL scaler,
+    // x86 only; a Pi's MMAL output has none), unless the profile forces {'surface': bool}
     setElementSurface = function(mode) {
         if (mode === true) {
             $('.surface-element').show()

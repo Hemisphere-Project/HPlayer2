@@ -224,6 +224,10 @@ class BasePlayer(Module):
     def _applyContrast(self, contrast):
         self.log("contrast set to", contrast)
 
+    def hasSurface(self):
+        """does this backend apply the LED / output transform? (mpv on x86 only)"""
+        return False
+
     def _applySurface(self, surface):
         self.log("surface", surface)
 

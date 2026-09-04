@@ -633,12 +633,25 @@ class MpvPlayer(BasePlayer):
         self._mpv_send(json.dumps({"command": ["set_property", "audio-delay", round(seconds, 4)]}))
         self.log("AUDIO-DELAY to", seconds)
 
-    # SURFACE (LED / output transform) -> the GLSL scaler params (03-scaler.glsl, x86).
-    # Nothing to do where no shader is loaded (Pi): the hook stays silent.
+    # SURFACE (LED / output transform) -> the GLSL scaler params (03-scaler.glsl).
+    # Only where the shaders are loaded, i.e. the x86 gpu-next path: the Pi runs
+    # --vo=rpi (MMAL) with no GLSL at all, so hasSurface() is False and the hook is silent.
+    def hasSurface(self):
+        return bool(self._shaders)
+
     def _applySurface(self, surface):
         if not self._shaders:
             return
         s = clean_surface(surface)
+        # Enabled = pixel-exact output for an LED controller: the video sits at the
+        # screen's TOP-LEFT, unscaled (1 source pixel = 1 HDMI pixel), so the block the
+        # shader places at output_x/y lands on those exact HDMI pixels. Disabled = mpv's
+        # normal centred, scaled-to-fit picture.
+        anchor = '-1' if s['enable'] else '0'
+        self._mpv_send('{ "command": ["set_property", "video-align-x", ' + anchor + '] }')
+        self._mpv_send('{ "command": ["set_property", "video-align-y", ' + anchor + '] }')
+        self._mpv_send('{ "command": ["set_property", "video-unscaled", "'
+                       + ('yes' if s['enable'] else 'no') + '"] }')
         if not s['enable']:
             self._shaderParam('scaler_enable', 0.0)
             return
