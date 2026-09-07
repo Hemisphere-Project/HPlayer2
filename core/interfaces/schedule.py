@@ -7,7 +7,8 @@ import glob
 
 class ScheduleInterface(BaseInterface):
     """
-    Generic playback window: enable/disable autonomous playback on a daily schedule.
+    Generic playback window: enable/disable autonomous playback on a daily schedule,
+    optionally restricted to certain weekdays (a museum closed on Mondays).
 
     Settable from a profile and from http2 (settings keys below). Emits edge events
         schedule.open   — the window just opened
@@ -27,7 +28,12 @@ class ScheduleInterface(BaseInterface):
         'schedule-enable': False,       # off = always open (no behaviour change)
         'schedule-open':   '10:00',     # daily window start "HH:MM"
         'schedule-close':  '19:00',     # daily window end   "HH:MM"
+        # Which weekdays the window applies to: 7 chars, Monday first (Mon..Sun), '1' = open
+        # that day, '0' = closed all day. Default = every day, so adding this changes nothing
+        # for an existing config. A museum closed on Mondays is "0111111".
+        'schedule-days':   '1111111',
     }
+    DAYS_ALL = '1111111'
 
     def __init__(self, hplayer, tick=30, requireRtc=False):
         super().__init__(hplayer, "Schedule")
@@ -51,10 +57,17 @@ class ScheduleInterface(BaseInterface):
         c = self._parseHM(self.hplayer.settings.get('schedule-close'))
         if o is None or c is None or o == c:
             return True                 # misconfigured / degenerate -> fail open
-        mins = datetime.now().hour * 60 + datetime.now().minute
+        now = datetime.now()
+        mins = now.hour * 60 + now.minute
         if o < c:
-            return o <= mins < c
-        return mins >= o or mins < c    # window crosses midnight
+            # The window sits inside one day: that day must be an open day.
+            return self._dayOpen(now.weekday()) and (o <= mins < c)
+        # Window crosses midnight: it BELONGS to the day it started on, so the small hours
+        # after midnight are still the previous day's window (a Sunday 22:00-02:00 window
+        # plays into Monday morning even when Monday itself is a closed day).
+        if mins >= o:
+            return self._dayOpen(now.weekday())
+        return self._dayOpen((now.weekday() - 1) % 7)
 
     #
     # thread
@@ -107,7 +120,22 @@ class ScheduleInterface(BaseInterface):
                 'enabled': self._cfgBool('schedule-enable'),
                 'rtc': self.rtcPresent,
                 'open': openNow,
+                'days': self._cfgDays(),
+                'dayOpen': self._dayOpen(datetime.now().weekday()),
             })
+
+    def _cfgDays(self):
+        """The weekday mask, normalised to exactly 7 chars of '0'/'1' (Monday first).
+        Anything malformed falls back to every day — the interface fails OPEN, never silent."""
+        raw = str(self.hplayer.settings.get('schedule-days') or '')
+        mask = ''.join('1' if c not in ('0', 'false', 'False') else '0' for c in raw)
+        if len(mask) != 7:
+            return self.DAYS_ALL
+        return mask
+
+    def _dayOpen(self, weekday):
+        """weekday: Monday=0 .. Sunday=6 (datetime.weekday())."""
+        return self._cfgDays()[weekday] == '1'
 
     def _cfgBool(self, key):
         return self.hplayer.settings.get(key) in (True, 1, '1', 'true', 'True', 'on')

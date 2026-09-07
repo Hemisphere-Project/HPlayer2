@@ -795,6 +795,13 @@ $(document).ready(function() {
             if (msg['schedule-enable'] !== undefined) $('#schedule_enable').prop('checked', !!msg['schedule-enable']);
             if (msg['schedule-open'] !== undefined) $('#schedule_open').val(msg['schedule-open']);
             if (msg['schedule-close'] !== undefined) $('#schedule_close').val(msg['schedule-close']);
+            if (msg['schedule-days'] !== undefined) {
+                var m = String(msg['schedule-days'] || '1111111');
+                if (m.length !== 7) m = '1111111';
+                $('.schedule-day').each(function() {
+                    $(this).prop('checked', m.charAt(parseInt($(this).data('day'), 10)) === '1');
+                });
+            }
         });
         socket.on('schedule-status', function(st) {
             var rtc = $('#schedule_rtc'), status = $('#schedule_status');
@@ -812,13 +819,23 @@ $(document).ready(function() {
             $('#schedule-panel').removeClass('no-rtc');
             if (!st['enabled'])
                 status.text('restriction off — always playing').removeClass('rtc-warn').addClass('rtc-ok');
-            else
-                status.text(st['open'] ? 'window OPEN — playing' : 'window CLOSED — silent')
-                      .removeClass('rtc-warn').addClass('rtc-ok');
+            else {
+                // A closed DAY is a different reason for silence than a closed hour — say which,
+                // so "silent on a Monday" never reads as a fault.
+                var why = st['open'] ? 'window OPEN — playing'
+                        : (st['dayOpen'] === false ? 'closed TODAY (day off) — silent'
+                                                   : 'window CLOSED — silent');
+                status.text(why).removeClass('rtc-warn').addClass('rtc-ok');
+            }
         });
         $('#schedule_enable').on('change', function() { trigger('schedule-enable', this.checked); });
         $('#schedule_open').on('change', function() { trigger('schedule-open', this.value); });
         $('#schedule_close').on('change', function() { trigger('schedule-close', this.value); });
+        $('.schedule-day').on('change', function() {
+            var m = '';
+            for (var d = 0; d < 7; d++) m += $('.schedule-day[data-day="' + d + '"]').prop('checked') ? '1' : '0';
+            trigger('schedule-days', m);
+        });
     })();
 
     // --- DMX conduite panel (biennale-2026-module-dmx) ---

@@ -256,7 +256,7 @@ def schedule_close(ev, *args):
 
 # persist radar + schedule tunables edited from the http2 web UI (interfaces read live)
 for _k in ('radar-range', 'radar-width', 'radar-enter-ms', 'radar-leave-ms',
-           'schedule-enable', 'schedule-open', 'schedule-close'):
+           'schedule-enable', 'schedule-open', 'schedule-close', 'schedule-days'):
 	hplayer.on('http2.' + _k)(lambda ev, *a, k=_k: hplayer.settings.set(k, a[0]))
 
 @hplayer.on('radar.*')
