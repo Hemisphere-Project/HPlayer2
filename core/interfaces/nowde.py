@@ -134,6 +134,8 @@ def parse_hello(d):
     if len(d) >= 18:                       # v2 trailer
         info['role'] = ROLE_NAMES.get(d[16], 'unknown')
         info['board'] = BOARD_NAMES.get(d[17], 'unknown')
+    if len(d) >= 19:                       # 2.0.1: this node's own lock quality
+        info['sync_quality'] = d[18]       # 0 none, 1 coarse (following, mesh off), 2 locked
     return info
 
 
@@ -204,10 +206,10 @@ def parse_running_state(d):
     receivers = []
     idx = 10
     for _ in range(n):
-        if idx + 42 > len(d):
+        if idx + 43 > len(d):              # 2.0.1: 37 raw -> 43 encoded (was 36 -> 42)
             break
-        r = decode7(d[idx:idx + 42])
-        idx += 42
+        r = decode7(d[idx:idx + 43])
+        idx += 43
         if len(r) < 36:
             break
         mac = r[0:6]
@@ -217,6 +219,7 @@ def parse_running_state(d):
             'version': bytes(r[22:30]).decode('ascii', errors='ignore').rstrip('\x00'),
             'last_seen': (r[30] << 24) | (r[31] << 16) | (r[32] << 8) | r[33],
             'index': r[35],
+            'sync_quality': r[36] if len(r) >= 37 else 0xFF,   # 2.0.1: 0 none, 1 coarse, 2 locked
         })
     return meta, receivers
 
@@ -533,10 +536,22 @@ class NowdeInterface(BaseInterface):
             return
         self._lastStatus = now
         index, position_ms, playing = self._media_state() if self.isMaster() else (self.lastCC or 0, 0, not self.isStopped)
+        # 2.0.1 honest lock: a master is the reference (2 = locked); a slave reports its own
+        # quality in its HELLO trailer (0 none / 1 coarse / 2 locked). `mesh_synced` was
+        # master-only and read False on locked slaves -- `locked`/`sync_quality` replace it.
+        if self.isMaster():
+            own_quality = 2
+            slaves_locked = sum(1 for r in self.receivers if r.get('sync_quality') == 2)
+        else:
+            own_quality = self.node.get('sync_quality')   # None on a pre-2.0.1 node
+            slaves_locked = None
         self.emit('status', {
             'linked': self.isLinked(), 'role': self.role, 'port': self._resolved_port_name,
             'node': {k: v for k, v in self.node.items() if k in ('version', 'role', 'board', 'layer')},
             'mesh_synced': self.mesh_synced, 'slaves': len(self.receivers),
+            'sync_quality': own_quality,
+            'locked': (own_quality == 2) if own_quality is not None else None,
+            'slaves_locked': slaves_locked,
             'layer': self._cfg('nowde-layer') if self.isMaster() else self.node.get('layer'),
             'index': index, 'playing': playing,
         })

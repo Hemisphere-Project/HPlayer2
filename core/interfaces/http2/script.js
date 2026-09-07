@@ -758,15 +758,23 @@ $(document).ready(function() {
             role.text(r.toUpperCase()).removeClass('badge-secondary badge-success badge-info badge-warning')
                 .addClass(r === 'master' ? 'badge-info' : r === 'slave' ? 'badge-success' : 'badge-warning');
             var node = st['node'] || {};
-            var synced = st['mesh_synced'];
             if (r === 'master') {
+                // 2.0.1: honest count -- M of N slaves actually LOCKED (delivering in sync),
+                // not merely alive. M<N is the "listed but not delivering" warning.
                 var n = st['slaves'] || 0;
-                state.text((synced ? 'mesh synced' : 'mesh not synced') + ' · ' + n + ' slave' + (n === 1 ? '' : 's'))
+                var lk = (st['slaves_locked'] != null) ? st['slaves_locked'] : n;
+                var allLocked = (n > 0 && lk >= n);
+                state.text(n + ' slave' + (n === 1 ? '' : 's') + ' · ' + lk + ' locked')
                      .removeClass('badge-secondary badge-danger badge-warning badge-success')
-                     .addClass(synced && n > 0 ? 'badge-success' : synced ? 'badge-warning' : 'badge-danger');
+                     .addClass(allLocked ? 'badge-success' : (n > 0 ? 'badge-warning' : 'badge-danger'));
             } else {
-                state.text('v' + (node['version'] || '?') + (node['board'] ? ' · ' + node['board'] : ''))
-                     .removeClass('badge-secondary badge-danger badge-warning').addClass('badge-success');
+                // 2.0.1: this node's own lock (from its HELLO), not the master-only mesh_synced.
+                var q = st['sync_quality'];
+                var qtxt = (q === 2) ? 'locked' : (q === 1) ? 'coarse (mesh off)'
+                         : (q === 0) ? 'unsynced' : 'v' + (node['version'] || '?');
+                var qcls = (q === 2) ? 'badge-success' : (q === 1 || q === 0) ? 'badge-warning' : 'badge-secondary';
+                state.text(qtxt + (node['board'] ? ' · ' + node['board'] : ''))
+                     .removeClass('badge-secondary badge-danger badge-warning badge-success').addClass(qcls);
             }
             var playing = st['playing'];
             var idx = st['index'] || 0;
