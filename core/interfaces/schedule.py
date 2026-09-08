@@ -42,6 +42,7 @@ class ScheduleInterface(BaseInterface):
         self.tick = tick
         self.requireRtc = requireRtc    # if True, never gate without a real RTC (fail open + warn)
         self.rtcPresent = False
+        self._warnedClock = False
         self._lastOpen = None
 
     #
@@ -53,6 +54,8 @@ class ScheduleInterface(BaseInterface):
             return True
         if self.requireRtc and not self.rtcPresent:
             return True                 # no trustworthy clock -> don't gate (see _checkRtc warning)
+        if not self._clockSane():
+            return True                 # RTC present but never set (dead cell, 2000-01-01) -> same thing
         o = self._parseHM(self.hplayer.settings.get('schedule-open'))
         c = self._parseHM(self.hplayer.settings.get('schedule-close'))
         if o is None or c is None or o == c:
@@ -113,12 +116,25 @@ class ScheduleInterface(BaseInterface):
             self.log("WARNING: schedule enabled but no RTC found — timekeeping relies on "
                      "NTP/system clock; offline players will drift")
 
+    def _clockSane(self):
+        """A system clock before 2021 is a clock nobody set: a virgin or dead-cell DS1307 wakes on
+        2000-01-01 and the schedule would then gate on a date that means nothing -- the whole
+        installation silent, no error anywhere (Biennale 2026, master 069, 2026-09-08). Treat it
+        like a missing RTC: play unrestricted, say so once. Same year<2021 rule as pi-tools' datesync."""
+        sane = datetime.now().year >= 2021
+        if not sane and not self._warnedClock:
+            self._warnedClock = True
+            self.log("WARNING: system clock reads %s — RTC never set or its cell is dead; "
+                     "schedule NOT enforced until the clock is set" % datetime.now().strftime('%Y-%m-%d'))
+        return sane
+
     def _pushStatus(self, openNow):
         h = self.hplayer.interface('http2')
         if h:
             h.send('schedule-status', {
                 'enabled': self._cfgBool('schedule-enable'),
                 'rtc': self.rtcPresent,
+                'clockOk': self._clockSane(),
                 'open': openNow,
                 'days': self._cfgDays(),
                 'dayOpen': self._dayOpen(datetime.now().weekday()),
