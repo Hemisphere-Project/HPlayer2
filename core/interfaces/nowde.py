@@ -136,6 +136,8 @@ def parse_hello(d):
         info['board'] = BOARD_NAMES.get(d[17], 'unknown')
     if len(d) >= 19:                       # 2.0.1: this node's own lock quality
         info['sync_quality'] = d[18]       # 0 none, 1 coarse (following, mesh off), 2 locked
+    if len(d) >= 20:                       # 2.0.3: long-range PHY switch as the node runs it
+        info['lr'] = bool(d[19])
     return info
 
 
@@ -547,7 +549,7 @@ class NowdeInterface(BaseInterface):
             slaves_locked = None
         self.emit('status', {
             'linked': self.isLinked(), 'role': self.role, 'port': self._resolved_port_name,
-            'node': {k: v for k, v in self.node.items() if k in ('version', 'role', 'board', 'layer')},
+            'node': {k: v for k, v in self.node.items() if k in ('version', 'role', 'board', 'layer', 'lr')},
             'mesh_synced': self.mesh_synced, 'slaves': len(self.receivers),
             'sync_quality': own_quality,
             'locked': (own_quality == 2) if own_quality is not None else None,
