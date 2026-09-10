@@ -594,6 +594,14 @@ class WallclockInterface (BaseInterface):
                         continue
                 wrapDur = mdur
 
+            # A stopped slave whose master is inside the last 2 s of its file is not stalled:
+            # its own file ended a few frames early. Under a playlist-owned loop the master
+            # will broadcast the restart (or wrap to a new cue); a self-start here would play
+            # the tail of the set alone (TAUPAKI loop-gap bench, 2026-09-10).
+            if not self.player.isPlaying() and mdur > 3 and clock > mdur - 2.0:
+                self.drifter.release()
+                continue
+
             extraBase = (pkt.get('pos', 0.0), atLocal, mdur, s, cs, wrapDur)   # chase-eligible: gaps extrapolate from here
             res = self.drifter.tick(clock, wrapDur)
             if res:
