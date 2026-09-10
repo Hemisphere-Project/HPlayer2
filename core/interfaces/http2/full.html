@@ -193,35 +193,58 @@
                 </div>
             </div>
 
-            <!-- Radar (biennale-2026-module-radar) -->
-            <div class="row mt-2" id="radar-panel">
+            <!-- Schedule (biennale-2026-module-radar #t-005) -->
+            <div class="row mt-2" id="schedule-panel">
                 <div class="col-12">
-                    <div class="card-header text-white bg-dark d-flex align-items-center panel-toggle" data-body="#radar_body">
+                    <div class="card-header text-white bg-dark d-flex align-items-center panel-toggle" data-body="#schedule_body">
                         <i class="fas fa-chevron-right panel-chevron mr-2"></i>
-                        <span class="mr-auto">Radar</span>
-                        <span id="radar_state" class="badge badge-secondary">no adapter</span>
+                        <span class="mr-auto">Schedule</span>
+                        <span id="schedule_rtc" class="badge badge-secondary">RTC &mdash;</span>
                     </div>
-                    <div id="radar_body" class="collapse panel-body">
-                    <div class="card-body row pt-3">
-                        <div class="col-lg-6 col-12">
-                            <div class="mb-2"><span class="badge badge-secondary mr-2">range (mm)</span><span id="radar_range_val"></span>
-                                <input type="range" id="radar_range" min="200" max="6000" step="100"></div>
-                            <div class="mb-2"><span class="badge badge-secondary mr-2">width &plusmn;x (mm)</span><span id="radar_width_val"></span>
-                                <input type="range" id="radar_width" min="100" max="3000" step="50"></div>
-                            <div class="mb-2"><span class="badge badge-secondary mr-2">enter (ms)</span><span id="radar_enter_val"></span>
-                                <input type="range" id="radar_enter" min="0" max="3000" step="50"></div>
-                            <div class="mb-2"><span class="badge badge-secondary mr-2">leave (ms)</span><span id="radar_leave_val"></span>
-                                <input type="range" id="radar_leave" min="0" max="10000" step="100"></div>
+                    <div id="schedule_body" class="collapse panel-body">
+                    <div class="card-body pt-3">
+                        <div class="mb-2">
+                            <label><input type="checkbox" id="schedule_enable"> restrict playback to a daily window</label>
                         </div>
-                        <div class="col-lg-6 col-12">
-                            <div class="mb-2 text-muted" style="font-size:.85em;">live</div>
-                            <div id="radar_live" class="p-3 text-center" style="border-radius:.3rem;background:#eee;">
-                                <div id="radar_presence" style="font-size:1.3em;font-weight:bold;">&mdash;</div>
-                                <div id="radar_detail" class="text-muted" style="font-size:.85em;">waiting for radar&hellip;</div>
-                            </div>
-                        </div>
+                        <div id="schedule_ctrls" class="mb-2"><span class="badge badge-secondary mr-2">open</span>
+                            <input type="time" id="schedule_open">
+                            <span class="badge badge-secondary mr-2 ml-3">close</span>
+                            <input type="time" id="schedule_close"></div>
+                        <div id="schedule_days_ctrls" class="mb-2"><span class="badge badge-secondary mr-2">days</span>
+                            <label class="mr-2 mb-0"><input type="checkbox" class="schedule-day" data-day="0"> Mon</label>
+                            <label class="mr-2 mb-0"><input type="checkbox" class="schedule-day" data-day="1"> Tue</label>
+                            <label class="mr-2 mb-0"><input type="checkbox" class="schedule-day" data-day="2"> Wed</label>
+                            <label class="mr-2 mb-0"><input type="checkbox" class="schedule-day" data-day="3"> Thu</label>
+                            <label class="mr-2 mb-0"><input type="checkbox" class="schedule-day" data-day="4"> Fri</label>
+                            <label class="mr-2 mb-0"><input type="checkbox" class="schedule-day" data-day="5"> Sat</label>
+                            <label class="mr-2 mb-0"><input type="checkbox" class="schedule-day" data-day="6"> Sun</label></div>
+                        <div id="schedule_status" class="mt-2">RTC: &mdash;</div>
                     </div>
-                    </div><!-- /radar_body -->
+                    </div><!-- /schedule_body -->
+                </div>
+            </div>
+
+            <!-- Sync options (2026-09-10): loop gap + linked volumes — both read on the MASTER -->
+            <div class="row mt-2" id="sync-panel">
+                <div class="col-12">
+                    <div class="card-header text-white bg-dark d-flex align-items-center panel-toggle" data-body="#sync_body">
+                        <i class="fas fa-chevron-right panel-chevron mr-2"></i>
+                        <span class="mr-auto">Sync options</span>
+                        <span class="badge badge-secondary">master settings</span>
+                    </div>
+                    <div id="sync_body" class="collapse panel-body">
+                    <div class="card-body pt-3">
+                        <div class="mb-2"><span class="badge badge-secondary mr-2">loop gap</span>
+                            <input type="number" id="loop_gap" min="0" max="3600" step="0.5" style="width:6em"> s
+                            <small class="text-muted ml-2">black + silence at the end of the set before it loops (0 = seamless)</small></div>
+                        <div class="mb-2"><span class="badge badge-secondary mr-2">volume link</span>
+                            <select id="volume_link" class="custom-select custom-select-sm" style="width:auto;">
+                                <option value="off">off — each player alone</option>
+                                <option value="absolute">absolute — master's value on every player</option>
+                                <option value="relative">relative — master's move added to each player's trim</option>
+                            </select></div>
+                    </div>
+                    </div><!-- /sync_body -->
                 </div>
             </div>
 
@@ -258,61 +281,6 @@
                 </div>
             </div>
 
-            <!-- Sync options (2026-09-10): loop gap + linked volumes — both read on the MASTER -->
-            <div class="row mt-2" id="sync-panel">
-                <div class="col-12">
-                    <div class="card-header text-white bg-dark d-flex align-items-center panel-toggle" data-body="#sync_body">
-                        <i class="fas fa-chevron-right panel-chevron mr-2"></i>
-                        <span class="mr-auto">Sync options</span>
-                        <span class="badge badge-secondary">master settings</span>
-                    </div>
-                    <div id="sync_body" class="collapse panel-body">
-                    <div class="card-body pt-3">
-                        <div class="mb-2"><span class="badge badge-secondary mr-2">loop gap</span>
-                            <input type="number" id="loop_gap" min="0" max="3600" step="0.5" style="width:6em"> s
-                            <small class="text-muted ml-2">black + silence at the end of the set before it loops (0 = seamless)</small></div>
-                        <div class="mb-2"><span class="badge badge-secondary mr-2">volume link</span>
-                            <select id="volume_link" class="custom-select custom-select-sm" style="width:auto;">
-                                <option value="off">off — each player alone</option>
-                                <option value="absolute">absolute — master's value on every player</option>
-                                <option value="relative">relative — master's move added to each player's trim</option>
-                            </select></div>
-                    </div>
-                    </div><!-- /sync_body -->
-                </div>
-            </div>
-
-            <!-- Schedule (biennale-2026-module-radar #t-005) -->
-            <div class="row mt-2" id="schedule-panel">
-                <div class="col-12">
-                    <div class="card-header text-white bg-dark d-flex align-items-center panel-toggle" data-body="#schedule_body">
-                        <i class="fas fa-chevron-right panel-chevron mr-2"></i>
-                        <span class="mr-auto">Schedule</span>
-                        <span id="schedule_rtc" class="badge badge-secondary">RTC &mdash;</span>
-                    </div>
-                    <div id="schedule_body" class="collapse panel-body">
-                    <div class="card-body pt-3">
-                        <div class="mb-2">
-                            <label><input type="checkbox" id="schedule_enable"> restrict playback to a daily window</label>
-                        </div>
-                        <div id="schedule_ctrls" class="mb-2"><span class="badge badge-secondary mr-2">open</span>
-                            <input type="time" id="schedule_open">
-                            <span class="badge badge-secondary mr-2 ml-3">close</span>
-                            <input type="time" id="schedule_close"></div>
-                        <div id="schedule_days_ctrls" class="mb-2"><span class="badge badge-secondary mr-2">days</span>
-                            <label class="mr-2 mb-0"><input type="checkbox" class="schedule-day" data-day="0"> Mon</label>
-                            <label class="mr-2 mb-0"><input type="checkbox" class="schedule-day" data-day="1"> Tue</label>
-                            <label class="mr-2 mb-0"><input type="checkbox" class="schedule-day" data-day="2"> Wed</label>
-                            <label class="mr-2 mb-0"><input type="checkbox" class="schedule-day" data-day="3"> Thu</label>
-                            <label class="mr-2 mb-0"><input type="checkbox" class="schedule-day" data-day="4"> Fri</label>
-                            <label class="mr-2 mb-0"><input type="checkbox" class="schedule-day" data-day="5"> Sat</label>
-                            <label class="mr-2 mb-0"><input type="checkbox" class="schedule-day" data-day="6"> Sun</label></div>
-                        <div id="schedule_status" class="mt-2">RTC: &mdash;</div>
-                    </div>
-                    </div><!-- /schedule_body -->
-                </div>
-            </div>
-
             <!-- DMX conduite (biennale-2026-module-dmx) -->
             <div class="row mt-2" id="dmx-panel">
                 <div class="col-12">
@@ -345,6 +313,38 @@
                         </div>
                     </div>
                     </div><!-- /dmx_body -->
+                </div>
+            </div>
+
+            <!-- Radar (biennale-2026-module-radar) -->
+            <div class="row mt-2" id="radar-panel">
+                <div class="col-12">
+                    <div class="card-header text-white bg-dark d-flex align-items-center panel-toggle" data-body="#radar_body">
+                        <i class="fas fa-chevron-right panel-chevron mr-2"></i>
+                        <span class="mr-auto">Radar</span>
+                        <span id="radar_state" class="badge badge-secondary">no adapter</span>
+                    </div>
+                    <div id="radar_body" class="collapse panel-body">
+                    <div class="card-body row pt-3">
+                        <div class="col-lg-6 col-12">
+                            <div class="mb-2"><span class="badge badge-secondary mr-2">range (mm)</span><span id="radar_range_val"></span>
+                                <input type="range" id="radar_range" min="200" max="6000" step="100"></div>
+                            <div class="mb-2"><span class="badge badge-secondary mr-2">width &plusmn;x (mm)</span><span id="radar_width_val"></span>
+                                <input type="range" id="radar_width" min="100" max="3000" step="50"></div>
+                            <div class="mb-2"><span class="badge badge-secondary mr-2">enter (ms)</span><span id="radar_enter_val"></span>
+                                <input type="range" id="radar_enter" min="0" max="3000" step="50"></div>
+                            <div class="mb-2"><span class="badge badge-secondary mr-2">leave (ms)</span><span id="radar_leave_val"></span>
+                                <input type="range" id="radar_leave" min="0" max="10000" step="100"></div>
+                        </div>
+                        <div class="col-lg-6 col-12">
+                            <div class="mb-2 text-muted" style="font-size:.85em;">live</div>
+                            <div id="radar_live" class="p-3 text-center" style="border-radius:.3rem;background:#eee;">
+                                <div id="radar_presence" style="font-size:1.3em;font-weight:bold;">&mdash;</div>
+                                <div id="radar_detail" class="text-muted" style="font-size:.85em;">waiting for radar&hellip;</div>
+                            </div>
+                        </div>
+                    </div>
+                    </div><!-- /radar_body -->
                 </div>
             </div>
 
