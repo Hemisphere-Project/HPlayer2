@@ -150,12 +150,27 @@ class WallclockInterface (BaseInterface):
         sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
         sock.setsockopt(socket.IPPROTO_IP, socket.IP_MULTICAST_TTL, 1)
         sock.setsockopt(socket.IPPROTO_IP, socket.IP_MULTICAST_LOOP, 0)
-        ip = network.get_ip(self.iface) if self.iface else network.get_ip()
-        if ip and ip != '127.0.0.1':
-            try:
-                sock.setsockopt(socket.IPPROTO_IP, socket.IP_MULTICAST_IF, socket.inet_aton(ip))
-            except OSError:
-                self.log('could not pin multicast egress to', self.iface)
+        # Pin the multicast egress to the sync interface — and keep trying if that
+        # interface has no address yet (same boot race as the slave join below): an
+        # unpinned socket sends the clock down the default route, i.e. nowhere useful.
+        pinned = [False]
+        lastPin = [0.0]
+
+        def pin():
+            ip = network.get_ip(self.iface) if self.iface else network.get_ip()
+            lastPin[0] = time.time()
+            if ip and ip != '127.0.0.1':
+                try:
+                    sock.setsockopt(socket.IPPROTO_IP, socket.IP_MULTICAST_IF, socket.inet_aton(ip))
+                    pinned[0] = True
+                    return
+                except OSError:
+                    pass
+            if not pinned[0] and lastPin[0] and not getattr(pin, 'noted', False):
+                pin.noted = True
+                self.log('could not pin multicast egress to', self.iface, '(no address yet): retrying every 2 s')
+
+        pin()
 
         dest = 'unicast to zyre peers' if self.unicast else self.group
         self.log('master clock: emitting on', dest, 'port', self.port, 'at', self.rate, 'Hz')
@@ -165,6 +180,11 @@ class WallclockInterface (BaseInterface):
 
         while not self.stopped.is_set():
             self.stopped.wait(interval)
+
+            if not pinned[0] and not self.unicast and time.time() - lastPin[0] > 2.0:
+                pin()
+                if pinned[0]:
+                    self.log('multicast egress pinned to', self.iface, '(late: interface was not up at start)')
 
             latch = self._latch
             # player silent (stopped / paused): latch goes stale, stop emitting
@@ -314,13 +334,32 @@ class WallclockInterface (BaseInterface):
         sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
         sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
         sock.bind(('', self.port))
-        ip = network.get_ip(self.iface) if self.iface else network.get_ip()
-        try:
-            bindIp = ip if ip and ip != '127.0.0.1' else '0.0.0.0'
-            mreq = socket.inet_aton(self.group) + socket.inet_aton(bindIp)
-            sock.setsockopt(socket.IPPROTO_IP, socket.IP_ADD_MEMBERSHIP, mreq)
-        except OSError as e:
-            self.log('multicast join failed (unicast mode still works):', e)
+        # Multicast membership on the sync interface. At boot HPlayer2 can start before
+        # the interface has its (DHCP) address: the join then fails with ENODEV and, done
+        # once, left the slave deaf for good — S02-28-L / S05-28-P came up black after a
+        # reboot while zyre (which retries) recovered (LEA, 2026-09-10). Retry until it
+        # sticks: a late lease is the normal case on a fleet power-on, where the master's
+        # DHCP server boots at the same time as its slaves.
+        joined = [False]
+        lastTry = [0.0]
+        noted = [False]
+
+        def join():
+            ip = network.get_ip(self.iface) if self.iface else network.get_ip()
+            try:
+                bindIp = ip if ip and ip != '127.0.0.1' else '0.0.0.0'
+                mreq = socket.inet_aton(self.group) + socket.inet_aton(bindIp)
+                sock.setsockopt(socket.IPPROTO_IP, socket.IP_ADD_MEMBERSHIP, mreq)
+                joined[0] = True
+                if noted[0]:
+                    self.log('multicast group joined on ' + (ip or '0.0.0.0') + ' (late: interface was not up at start)')
+            except OSError as e:
+                if not noted[0]:
+                    noted[0] = True
+                    self.log('multicast join failed (' + str(e) + '): retrying every 2 s until the interface is up')
+            lastTry[0] = time.time()
+
+        join()
         sock.settimeout(0.25)
 
         self._openCsv()
@@ -329,6 +368,9 @@ class WallclockInterface (BaseInterface):
         extraBase = None    # (pos, atLocal, dur, seq, cs) of the last chase-eligible packet
 
         while not self.stopped.is_set():
+
+            if not joined[0] and time.time() - lastTry[0] > 2.0:
+                join()
 
             # Staleness: master silent beyond the extrapolation budget ->
             # freewheel at speed 1.0, keep listening
