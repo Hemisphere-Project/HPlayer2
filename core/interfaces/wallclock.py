@@ -37,7 +37,7 @@ class WallclockInterface (BaseInterface):
     def __init__(self, hplayer, netiface=None, master=False, player=None,
                     port=3737, group='239.192.0.37', rate=20, unicast=False,
                     masterName=None, staleness=1.0, extrapolate=4.0,
-                    driftLog='/data/var/wallclock-drift.csv'):
+                    driftLog='/data/var/wallclock-drift.csv', durTolerance=1.0):
 
         super().__init__(hplayer, "WALLCLOCK")
         self.logQuietEvents.extend(['drift'])
@@ -57,6 +57,10 @@ class WallclockInterface (BaseInterface):
         # crystal drift over 4s is microseconds — the estimate stays exact.
         self.extrapolate = max(extrapolate, staleness)
         self.driftLog = driftLog
+        # A different file of the SAME duration (± s) is a legitimate timeline to chase:
+        # one content per screen, all cut to one length (the LEA fleet, 2026-09-10).
+        self.durTolerance = durTolerance
+        self._diffNoted = set()
 
         self._myName = network.get_hostname()
 
@@ -358,15 +362,27 @@ class WallclockInterface (BaseInterface):
                 self.drifter.release()
                 continue
 
-            # Media mismatch guard: never chase file A's clock on file B's timeline
+            # Media mismatch guard: never chase file A's clock on file B's timeline —
+            # unless both files have the same duration (one content per screen, same cut):
+            # then the timeline IS the same and position chase is exactly what is wanted.
             m = pkt.get('m') or ''
             if m and self.player:
                 mine = self.player.status('media')
                 mine = os.path.basename(mine) if mine else ''
                 if mine and mine != m:
-                    self._quietLog('media mismatch: master plays ' + m + ' / self plays ' + mine + ' -> not chasing')
-                    self.drifter.release()
-                    continue
+                    mdur = pkt.get('dur', 0) or 0
+                    try:
+                        mydur = float(self.player.status('duration') or 0)
+                    except (TypeError, ValueError):
+                        mydur = 0
+                    if mdur > 3 and mydur > 3 and abs(mydur - mdur) <= self.durTolerance:
+                        if (m, mine) not in self._diffNoted:       # once per file pair, not every 5 s
+                            self._diffNoted.add((m, mine))
+                            self.log('media differs (' + m + ' / ' + mine + ') but same duration -> chasing')
+                    else:
+                        self._quietLog('media mismatch: master plays ' + m + ' / self plays ' + mine + ' -> not chasing')
+                        self.drifter.release()
+                        continue
 
             # Estimate master position at local now:
             # packet timestamp -> local clock (zyre clockshift), then extrapolate.
