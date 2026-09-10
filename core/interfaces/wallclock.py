@@ -119,7 +119,8 @@ class WallclockInterface (BaseInterface):
             # Cue following (numbered media): the master's NN_ prefix is the cue, every
             # slave plays its OWN NN_ file — the wired twin of the Nowde CC#100 contract.
             self._followIdx = 0         # cue currently followed (0 = master plays un-numbered media)
-            self._noMedia = 0           # cue we have no file for (stay stopped until it changes)
+            self._noMedia = 0           # cue we have no file for (stay stopped, re-check every 5 s)
+            self._noMediaAt = 0.0       # last time we looked for that cue's file
             self._holdEnd = False       # our file is shorter: ended, waiting for the master to loop/change
             self._myDur = 0.0           # duration of our current cue file (kept while stopped)
             self._sameDur = True        # our file and the master's share one length (seamless loop ok)
@@ -305,7 +306,8 @@ class WallclockInterface (BaseInterface):
         if not files:
             if self._noMedia != idx:
                 self._noMedia = idx
-                self.log(colored('cue %d: no %s media here -> stopped, waiting for another cue' % (idx, pattern), 'yellow'))
+                self.log(colored('cue %d: no %s media here -> stopped, looking again every 5 s' % (idx, pattern), 'yellow'))
+            self._noMediaAt = time.time()
             if self.player.isPlaying():
                 self.player.stop()
             return False
@@ -516,6 +518,13 @@ class WallclockInterface (BaseInterface):
                         continue
                     # already on this cue (boot self-start): let it come up, the stall hook covers a real stall
                 if self._noMedia == midx:
+                    # Keep looking: media arrives while the cue is playing (an http2 upload
+                    # replaces the file — it is absent for a moment, S04-24-P stayed dark
+                    # for an hour on 2026-09-10 because only a cue change re-checked).
+                    if time.time() - self._noMediaAt > 5.0:
+                        self._noMediaAt = time.time()
+                        if self._startCue(midx, 'media appeared'):
+                            continue
                     self.drifter.release()
                     continue
                 if self.player.isPlaying() and mydur > 3:
