@@ -124,6 +124,7 @@ class WallclockInterface (BaseInterface):
             self._myDur = 0.0           # duration of our current cue file (kept while stopped)
             self._sameDur = True        # our file and the master's share one length (seamless loop ok)
             self._loopApplied = None    # last loop mode we pushed to the player (None = profile's choice)
+            self._cueStartedAt = 0.0    # when we last started a cue (a start is not a stall for 3 s)
             self._legacyStalled = None  # the profile's stall hook, restored when leaving cue mode
 
     #
@@ -290,6 +291,7 @@ class WallclockInterface (BaseInterface):
             return False
         self._noMedia = 0
         self.log('cue %d: %s -> playing %s' % (idx, why, os.path.basename(files[0])))
+        self._cueStartedAt = time.time()
         self.hplayer.playlist.play(pattern)
         if self.drifter:
             self.drifter.arm()
@@ -302,6 +304,8 @@ class WallclockInterface (BaseInterface):
         if self._holdEnd or self._noMedia:
             return
         if self._followIdx:
+            if time.time() - self._cueStartedAt < 3.0:
+                return                  # mpv is still bringing the cue up: not a stall
             self._startCue(self._followIdx, 'stalled, master still playing')
         elif self._legacyStalled:
             self._legacyStalled()
@@ -465,9 +469,10 @@ class WallclockInterface (BaseInterface):
                     if self.drifter.onStalled is not self._indexStalled:
                         self._legacyStalled = self.drifter.onStalled
                         self.drifter.onStalled = self._indexStalled
-                    if media_index_of(mine) != midx or not self.player.isPlaying():
+                    if media_index_of(mine) != midx:
                         self._startCue(midx, 'master plays ' + m)
                         continue
+                    # already on this cue (boot self-start): let it come up, the stall hook covers a real stall
                 if self._noMedia == midx:
                     self.drifter.release()
                     continue
