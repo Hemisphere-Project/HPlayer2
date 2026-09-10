@@ -90,6 +90,12 @@ class WallclockInterface (BaseInterface):
         players = hplayer.players()
         self.player = player if player else (players[0] if players else None)
 
+        # Loop ownership (2026-09-10): the master says in every packet whether it loops its
+        # file seamlessly in mpv (one file, no end gap) or hands the loop to the playlist
+        # (several cues, or a loop-gap); slaves mirror it so nobody wraps on its own.
+        self.seamless = True            # master: set by the profile; slave: last value heard
+        self._masterSeamless = True
+
         if self.master:
             self.drifter = None
             # Latch (pos, at) pairs from the player status events; the send
@@ -203,7 +209,8 @@ class WallclockInterface (BaseInterface):
                 'pos': pos,
                 'dur': round(float(dur), 2) if dur else 0,
                 'm': os.path.basename(media) if media else '',
-                'p': bool(self.player.isPlaying())
+                'p': bool(self.player.isPlaying()),
+                'l': 1 if self.seamless else 0
             }
             data = json.dumps(pkt).encode()
 
@@ -295,10 +302,11 @@ class WallclockInterface (BaseInterface):
     #
 
     def oneLoop(self):
-        """Should mpv loop our file seamlessly? Yes unless we follow a cue whose master
-        file has another length: then our file must END (shorter: stop and wait for the
-        master; longer: the master's wrap seeks us back) instead of wrapping on its own."""
-        return self._followIdx == 0 or self._sameDur
+        """Should mpv loop our file seamlessly? Only if the master does (one file, no loop
+        gap — it says so in every packet), and unless we follow a cue whose master file has
+        another length: then our file must END (shorter: stop and wait for the master;
+        longer: the master's wrap seeks us back) instead of wrapping on its own."""
+        return self._masterSeamless and (self._followIdx == 0 or self._sameDur)
 
     def _startCue(self, idx, why):
         pattern = index_pattern(idx)
@@ -476,6 +484,20 @@ class WallclockInterface (BaseInterface):
                     self.drifter.release()
                     continue
 
+            # Loop ownership announced by the master: mirror it live, so a master that hands
+            # its loop to the playlist (several cues, loop gap) never leaves a slave wrapping
+            # seamlessly on its own — and the other way round.
+            l = bool(pkt.get('l', 1))
+            if l != self._masterSeamless:
+                self._masterSeamless = l
+                self.log('master loops ' + ('seamlessly (mpv)' if l else 'through its playlist') + ' -> mirroring')
+                # playlist loop too: under a playlist-owned loop our file must END and stay
+                # ended (the master's next play broadcast restarts us), not wrap to index 0
+                self.hplayer.settings.set('loop', 2 if l else 0)
+                if self.player and self.player.isPlaying():
+                    self.player._applyOneLoop(self.oneLoop())
+                    self._loopApplied = self.oneLoop()
+
             # Master not playing
             if not pkt.get('p', False):
                 self.drifter.release()
@@ -531,9 +553,10 @@ class WallclockInterface (BaseInterface):
                     self._myDur = mydur
                 if self._myDur > 3:
                     self._sameDur = bool(mdur > 3 and abs(self._myDur - mdur) <= self.durTolerance)
-                    if self._sameDur != self._loopApplied and self.player.isPlaying():
-                        self.player._applyOneLoop(self._sameDur)     # lengths differ: our file must end
-                        self._loopApplied = self._sameDur
+                    want = self.oneLoop()
+                    if want != self._loopApplied and self.player.isPlaying():
+                        self.player._applyOneLoop(want)      # lengths differ / master not seamless: our file must end
+                        self._loopApplied = want
                     if not self._sameDur and clock >= self._myDur - 0.05:
                         if not self._holdEnd:
                             self._holdEnd = True

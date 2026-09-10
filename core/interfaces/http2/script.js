@@ -787,6 +787,16 @@ $(document).ready(function() {
         });
     })();
 
+    // --- Sync options panel (2026-09-10): loop gap + volume link, read on the master ---
+    (function() {
+        socket.on('settings.updated', function(msg) {
+            if (msg['loop-gap'] !== undefined && !$('#loop_gap').is(':focus')) $('#loop_gap').val(msg['loop-gap']);
+            if (msg['volume-link'] !== undefined) $('#volume_link').val(msg['volume-link'] || 'off');
+        });
+        $('#loop_gap').on('change', function() { trigger('loop-gap', parseFloat(this.value) || 0); });
+        $('#volume_link').on('change', function() { trigger('volume-link', this.value); });
+    })();
+
     // --- Schedule panel (biennale-2026-module-radar #t-005) ---
     // RTC-gated daily playback window. The interface fails OPEN without a real
     // clock (never gates), so the panel makes that explicit rather than pretend.

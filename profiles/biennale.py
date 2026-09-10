@@ -102,6 +102,36 @@ if WALL:
 	hplayer.addInterface('wallclock', SYNC_IFACE, SYNC_MASTER)
 
 
+# ── Loop gap + volume link (2026-09-10, Thomas) — both default OFF: no behaviour change.
+#   loop-gap    : seconds of black + silence at the end of the playlist before it loops.
+#                 0 = today's behaviour. On a SYNC master the gap is a real stop (broadcast),
+#                 then the usual synchronized play; the slaves' files end on their own (they
+#                 mirror the master's loop mode from the clock packet) so nobody wraps alone.
+#   volume-link : off | absolute | relative — MASTER only. absolute = the master's slider
+#                 sets every player to the same value (what WALL did for any peer before);
+#                 relative = the master's move is a delta each player adds to its own level,
+#                 so per-player trims survive. A slave's own slider is always local.
+for _k, _v in (('loop-gap', 0), ('volume-link', 'off')):
+	hplayer.settings._settings.setdefault(_k, _v)
+
+def loop_gap():
+	try:
+		return max(0.0, float(hplayer.settings.get('loop-gap') or 0))
+	except (TypeError, ValueError):
+		return 0.0
+
+def seamless_master():
+	# mpv loops the file itself only when there is exactly one file and no gap; otherwise
+	# the playlist owns the loop (media ends -> playlist.end -> play0), the 2024 path.
+	return hplayer.playlist.size() <= 1 and loop_gap() <= 0
+
+_gapTimer = None
+def gap_cancel():
+	global _gapTimer
+	if _gapTimer is not None:
+		_gapTimer.cancel()
+		_gapTimer = None
+
 # PLAY action
 debounceLastTime = 0
 debounceLastMedia = ""
@@ -140,15 +170,39 @@ def sync_init(ev, *args):
 @hplayer.on('files.filelist-updated')
 @hplayer.on('playlist.end')
 def play0(ev, *args):
+	global _gapTimer
 	if nowde_slave():
 		return                               # a Nowde master drives this player over CC#100
 	if not schedule_open_now():
 		return                               # booted (or restarted) outside the window: stay silent
-	doPlay(default_pattern())
-	if WALL or not SYNC:
+	gap = loop_gap()
+	slave = SYNC and not SYNC_MASTER
+	if slave:
+		pass                                 # a slave never (re)starts the set on its own: the master's
+		                                     # play broadcast / wallclock do (doPlay was a no-op here)
+	elif ev == 'playlist.end' and gap > 0:
+		# End gap: black + silence, then the usual (synchronized) play. Playlist loop is 0
+		# below so the set stops here instead of wrapping; a manual play cancels the timer.
+		import threading
+		gap_cancel()
+		if SYNC_MASTER:
+			hplayer.interface('zyre').node.broadcast('stop')
+		else:
+			player.stop()
+		print('loop-gap: end of set, black for %.1f s' % gap)
+		_gapTimer = threading.Timer(gap, lambda: doPlay(default_pattern()))
+		_gapTimer.daemon = True
+		_gapTimer.start()
+	else:
+		gap_cancel()
+		doPlay(default_pattern())
+	# playlist loop flag: seamless (2) for a WALL/solo set with no gap — a WALL slave starts
+	# there too and the wallclock mirrors the master's mode live; 0 = end -> playlist.end ->
+	# play0 (the 2024 sync trigger, and the gap)
+	if (WALL or not SYNC) and (gap <= 0 or (slave and WALL)):
 		hplayer.settings.set('loop', 2) # blackless loop (wall: mpv loop=inf below)
 	else:
-		hplayer.settings.set('loop', 0) # 2024 sync: re-broadcast a synced play each loop
+		hplayer.settings.set('loop', 0)
 
 # SYNC_MASTER INIT PART 2
 @hplayer.on('app-run')
@@ -169,7 +223,9 @@ if WALL:
 		# Slave following a cue whose master file has another length: its file must END
 		# (shorter: hold and wait; longer: the master's wrap seeks it back), not wrap alone.
 		if SYNC_MASTER:
-			player._applyOneLoop(hplayer.playlist.size() <= 1)
+			s = seamless_master()
+			player._applyOneLoop(s)
+			hplayer.interface('wallclock').seamless = s     # announced in every clock packet
 		else:
 			player._applyOneLoop(hplayer.interface('wallclock').oneLoop())
 			hplayer.interface('wallclock').drifter.arm()
@@ -186,8 +242,9 @@ if WALL:
 
 
 if SYNC:
-	# HTTP2 Ctrl unbind
-	uev = ['play', 'pause', 'resume', 'stop'] + (['volume'] if WALL else [])
+	# HTTP2 Ctrl unbind — the MASTER's volume slider too (its link mode decides what it does);
+	# a slave's slider stays local: it is that player's trim.
+	uev = ['play', 'pause', 'resume', 'stop'] + (['volume'] if SYNC_MASTER else [])
 	for ev in uev:
 		for func in hplayer.interface('http2').listeners(ev):
 			hplayer.interface('http2').off(ev, func)
@@ -199,16 +256,40 @@ if SYNC:
 	@hplayer.on('http2.stop')
 	def ctrl2(ev, *args):
 		ev = ev.replace('http2.', '')
+		gap_cancel()                          # a manual transport action ends a loop gap
 		if ev == 'play':
 			hplayer.interface('zyre').node.broadcast('stop')
 		hplayer.interface('zyre').node.broadcast(ev, args, SYNC_BUFFER)
 		if ev == 'play':
-			hplayer.interface('zyre').node.broadcast('loop', [2 if WALL else 0], SYNC_BUFFER)
+			hplayer.interface('zyre').node.broadcast('loop', [2 if (WALL and loop_gap() <= 0) else 0], SYNC_BUFFER)
 
-	if WALL:
+	if SYNC_MASTER:
 		@hplayer.on('http2.volume')
 		def vol2(ev, *args):
-			hplayer.interface('zyre').node.broadcast('volume', args[0], 0)
+			try:
+				v = int(args[0])
+			except (TypeError, ValueError, IndexError):
+				return
+			mode = str(hplayer.settings.get('volume-link') or 'off')
+			if mode == 'absolute':
+				hplayer.interface('zyre').node.broadcast('volume', v, 0)          # reaches self too
+			elif mode == 'relative':
+				try:
+					cur = int(hplayer.settings.get('volume') or 0)
+				except (TypeError, ValueError):
+					cur = v
+				hplayer.interface('zyre').node.broadcast('volume-delta', v - cur, 0)  # self too
+			else:
+				hplayer.settings.set('volume', v)                                  # local only
+
+	@hplayer.on('zyre.volume-delta')
+	def voldelta(ev, *args):
+		# relative link: every player (master included) moves by the master's delta, keeps its trim
+		try:
+			d = int(args[0]); cur = int(hplayer.settings.get('volume') or 0)
+		except (TypeError, ValueError, IndexError):
+			return
+		hplayer.settings.set('volume', max(0, min(100, cur + d)))
 
 
 # HTTP2 Logs
@@ -262,8 +343,23 @@ def schedule_close(ev, *args):
 
 # persist radar + schedule tunables edited from the http2 web UI (interfaces read live)
 for _k in ('radar-range', 'radar-width', 'radar-enter-ms', 'radar-leave-ms',
-           'schedule-enable', 'schedule-open', 'schedule-close', 'schedule-days'):
+           'schedule-enable', 'schedule-open', 'schedule-close', 'schedule-days',
+           'volume-link'):
 	hplayer.on('http2.' + _k)(lambda ev, *a, k=_k: hplayer.settings.set(k, a[0]))
+
+@hplayer.on('http2.loop-gap')
+def set_loop_gap(ev, *args):
+	# persist, then re-apply the loop rule live: the playlist loop flag and, on a master,
+	# mpv's own loop + the mode announced to the slaves
+	hplayer.settings.set('loop-gap', args[0])
+	gap = loop_gap()
+	if not (SYNC and not SYNC_MASTER):
+		hplayer.settings.set('loop', 2 if ((WALL or not SYNC) and gap <= 0) else 0)
+	if WALL and SYNC_MASTER:
+		s = seamless_master()
+		player._applyOneLoop(s)
+		hplayer.interface('wallclock').seamless = s
+	print('loop-gap set to', gap)
 
 @hplayer.on('radar.*')
 @hplayer.on('schedule.*')
