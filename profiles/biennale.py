@@ -164,8 +164,14 @@ if WALL:
 	def wall_playing(ev, *args):
 		# mpv loop=inf: blackless wrap, position wraps seamlessly on master
 		# and slaves alike; the drifter only trims the residual drift.
-		player._applyOneLoop(True)
-		if not SYNC_MASTER:
+		# Master with several files (01_, 02_ cues): let the playlist advance (loop 2) so the
+		# cue changes and the slaves switch with it — same rule as the Nowde master.
+		# Slave following a cue whose master file has another length: its file must END
+		# (shorter: hold and wait; longer: the master's wrap seeks it back), not wrap alone.
+		if SYNC_MASTER:
+			player._applyOneLoop(hplayer.playlist.size() <= 1)
+		else:
+			player._applyOneLoop(hplayer.interface('wallclock').oneLoop())
 			hplayer.interface('wallclock').drifter.arm()
 
 	if not SYNC_MASTER:

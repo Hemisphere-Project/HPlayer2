@@ -6,8 +6,30 @@ import socket
 import json
 import time
 import os
+import re
 
 PRECISION = 1000000     # us - same clock base as the zyre TimeClient
+
+
+def media_index_of(path):
+    """Numeric prefix of a media file name (01_xxx.mp4 -> 1), 0 when un-numbered.
+    Same contract as the Nowde line (core/interfaces/nowde.py): the INDEX is the cue."""
+    if not path:
+        return 0
+    m = re.match(r'^0*(\d{1,3})_', os.path.basename(str(path)))
+    if not m:
+        return 0
+    n = int(m.group(1))
+    return n if 1 <= n <= 127 else 0
+
+
+def index_pattern(idx):
+    """Glob alternation matching every zero-padding of a cue index (7 -> 007_*|07_*|7_*)."""
+    if idx < 10:
+        return "(00%d_*|0%d_*|%d_*)" % (idx, idx, idx)
+    if idx < 100:
+        return "(0%d_*|%d_*)" % (idx, idx)
+    return "%d_*" % idx
 
 #
 #  WALLCLOCK: continuous position sync for synchronized video walls
@@ -94,6 +116,15 @@ class WallclockInterface (BaseInterface):
             self._ring = []
             self._lastSummary = time.time()
             self._csvFile = None
+            # Cue following (numbered media): the master's NN_ prefix is the cue, every
+            # slave plays its OWN NN_ file — the wired twin of the Nowde CC#100 contract.
+            self._followIdx = 0         # cue currently followed (0 = master plays un-numbered media)
+            self._noMedia = 0           # cue we have no file for (stay stopped until it changes)
+            self._holdEnd = False       # our file is shorter: ended, waiting for the master to loop/change
+            self._myDur = 0.0           # duration of our current cue file (kept while stopped)
+            self._sameDur = True        # our file and the master's share one length (seamless loop ok)
+            self._loopApplied = None    # last loop mode we pushed to the player (None = profile's choice)
+            self._legacyStalled = None  # the profile's stall hook, restored when leaving cue mode
 
     #
     # MASTER side
@@ -237,6 +268,44 @@ class WallclockInterface (BaseInterface):
                         'jumps=' + str(jumps))
             self._ring = []
 
+    #
+    # Cue following (slave): numbered media, one file per cue per player
+    #
+
+    def oneLoop(self):
+        """Should mpv loop our file seamlessly? Yes unless we follow a cue whose master
+        file has another length: then our file must END (shorter: stop and wait for the
+        master; longer: the master's wrap seeks us back) instead of wrapping on its own."""
+        return self._followIdx == 0 or self._sameDur
+
+    def _startCue(self, idx, why):
+        pattern = index_pattern(idx)
+        files = self.hplayer.files.listFiles(pattern)
+        if not files:
+            if self._noMedia != idx:
+                self._noMedia = idx
+                self.log(colored('cue %d: no %s media here -> stopped, waiting for another cue' % (idx, pattern), 'yellow'))
+            if self.player.isPlaying():
+                self.player.stop()
+            return False
+        self._noMedia = 0
+        self.log('cue %d: %s -> playing %s' % (idx, why, os.path.basename(files[0])))
+        self.hplayer.playlist.play(pattern)
+        if self.drifter:
+            self.drifter.arm()
+        return True
+
+    def _indexStalled(self):
+        """Drifter stall hook while following a cue: the local file ended (or never
+        started) while the master clock runs. Restart it only when the master is inside
+        our timeline; a shorter file waits, a missing cue stays dark."""
+        if self._holdEnd or self._noMedia:
+            return
+        if self._followIdx:
+            self._startCue(self._followIdx, 'stalled, master still playing')
+        elif self._legacyStalled:
+            self._legacyStalled()
+
     def _runSlave(self):
         sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
         sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
@@ -279,11 +348,13 @@ class WallclockInterface (BaseInterface):
                 # until the freewheel budget runs out.
                 if extraBase and self.drifter and not self._freewheeling \
                         and time.time() - self._lastAccept > 0.2:
-                    bpos, batLocal, bdur, bseq, bcs = extraBase
+                    bpos, batLocal, bdur, bseq, bcs, bwrap = extraBase
                     clock = bpos + (time.time() * PRECISION - batLocal) / PRECISION
                     if bdur > 3:
                         clock = clock % bdur
-                    res = self.drifter.tick(clock, bdur)
+                    if self._followIdx and not self._sameDur and self._myDur > 3 and clock >= self._myDur - 0.05:
+                        continue                # past our shorter file: the packet path holds us
+                    res = self.drifter.tick(clock, bwrap)
                     if res:
                         res['seq'] = bseq
                         res['cs'] = bcs
@@ -362,19 +433,78 @@ class WallclockInterface (BaseInterface):
                 self.drifter.release()
                 continue
 
-            # Media mismatch guard: never chase file A's clock on file B's timeline —
-            # unless both files have the same duration (one content per screen, same cut):
-            # then the timeline IS the same and position chase is exactly what is wanted.
             m = pkt.get('m') or ''
-            if m and self.player:
-                mine = self.player.status('media')
-                mine = os.path.basename(mine) if mine else ''
-                if mine and mine != m:
-                    mdur = pkt.get('dur', 0) or 0
-                    try:
-                        mydur = float(self.player.status('duration') or 0)
-                    except (TypeError, ValueError):
-                        mydur = 0
+            mdur = pkt.get('dur', 0) or 0
+            midx = media_index_of(m)
+            mine = self.player.status('media') if self.player else None
+            mine = os.path.basename(mine) if mine else ''
+            try:
+                mydur = float(self.player.status('duration') or 0) if self.player else 0.0
+            except (TypeError, ValueError):
+                mydur = 0.0
+
+            # Estimate master position at local now:
+            # packet timestamp -> local clock (zyre clockshift), then extrapolate.
+            # Delivery delay/jitter cancels out by construction.
+            cs = peer.clockshift()
+            atLocal = pkt.get('at', 0) - cs
+            clock = pkt.get('pos', 0.0) + (time.time() * PRECISION - atLocal) / PRECISION
+            if mdur > 3:
+                clock = clock % mdur
+
+            if midx and self.player:
+                # ── Cue mode: the master plays NN_ -> we play OUR NN_ file and chase its
+                # position. No NN_ here -> stay dark. Ours shorter -> end, hold, wait for
+                # the master to loop or move on. Ours longer -> the master's wrap seeks us back.
+                if self._followIdx != midx:
+                    self._followIdx = midx
+                    self._holdEnd = False
+                    self._myDur = 0.0
+                    self._sameDur = True
+                    self._loopApplied = None
+                    if self.drifter.onStalled is not self._indexStalled:
+                        self._legacyStalled = self.drifter.onStalled
+                        self.drifter.onStalled = self._indexStalled
+                    if media_index_of(mine) != midx or not self.player.isPlaying():
+                        self._startCue(midx, 'master plays ' + m)
+                        continue
+                if self._noMedia == midx:
+                    self.drifter.release()
+                    continue
+                if self.player.isPlaying() and mydur > 3:
+                    self._myDur = mydur
+                if self._myDur > 3:
+                    self._sameDur = bool(mdur > 3 and abs(self._myDur - mdur) <= self.durTolerance)
+                    if self._sameDur != self._loopApplied and self.player.isPlaying():
+                        self.player._applyOneLoop(self._sameDur)     # lengths differ: our file must end
+                        self._loopApplied = self._sameDur
+                    if not self._sameDur and clock >= self._myDur - 0.05:
+                        if not self._holdEnd:
+                            self._holdEnd = True
+                            self.log('cue %d: our file ends at %.1fs, master is at %.1fs -> stopped, waiting for it' % (midx, self._myDur, clock))
+                            if self.player.isPlaying():
+                                self.player.stop()
+                        self.drifter.release()
+                        continue
+                    if self._holdEnd:
+                        self._holdEnd = False
+                        self._startCue(midx, 'master back inside our file (%.1fs)' % clock)
+                        continue
+                if self.player.isPlaying() and media_index_of(mine) != midx:
+                    self._startCue(midx, 'own playlist moved to ' + mine)
+                    continue
+                wrapDur = mdur if self._sameDur else 0      # wrap-aware diff only on one shared length
+            else:
+                # ── Un-numbered master media: same file, or a different file of the same
+                # length (one content per screen, same cut), is a timeline we chase; a file
+                # of another length is not (never chase file A's clock on file B's timeline).
+                if self._followIdx:
+                    self._followIdx = 0
+                    self._holdEnd = False
+                    self._noMedia = 0
+                    if self.drifter.onStalled is self._indexStalled:
+                        self.drifter.onStalled = self._legacyStalled
+                if m and mine and mine != m:
                     if mdur > 3 and mydur > 3 and abs(mydur - mdur) <= self.durTolerance:
                         if (m, mine) not in self._diffNoted:       # once per file pair, not every 5 s
                             self._diffNoted.add((m, mine))
@@ -383,20 +513,10 @@ class WallclockInterface (BaseInterface):
                         self._quietLog('media mismatch: master plays ' + m + ' / self plays ' + mine + ' -> not chasing')
                         self.drifter.release()
                         continue
+                wrapDur = mdur
 
-            # Estimate master position at local now:
-            # packet timestamp -> local clock (zyre clockshift), then extrapolate.
-            # Delivery delay/jitter cancels out by construction.
-            cs = peer.clockshift()
-            atLocal = pkt.get('at', 0) - cs
-            clock = pkt.get('pos', 0.0) + (time.time() * PRECISION - atLocal) / PRECISION
-            dur = pkt.get('dur', 0) or 0
-            if dur > 3:
-                clock = clock % dur
-
-            extraBase = (pkt.get('pos', 0.0), atLocal, dur, s, cs)
-
-            res = self.drifter.tick(clock, dur)
+            extraBase = (pkt.get('pos', 0.0), atLocal, mdur, s, cs, wrapDur)   # chase-eligible: gaps extrapolate from here
+            res = self.drifter.tick(clock, wrapDur)
             if res:
                 res['seq'] = s
                 res['cs'] = cs
