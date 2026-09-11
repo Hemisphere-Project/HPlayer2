@@ -7,6 +7,7 @@ from flask_socketio import SocketIO, emit, join_room, leave_room, close_room, ro
 from werkzeug.utils import secure_filename
 import threading, os, time, queue
 import logging, sys, json
+import urllib.request
 
 from ..engine.network import get_allip, get_hostname
 import socket
@@ -19,6 +20,19 @@ thread_lock = threading.Lock()
 REGIE_PATH1 = '/opt/RPi-Regie'
 REGIE_PATH2 = '/data/RPi-Regie'
 
+# NDI sources for the grid's media picker (backport of master's regie.py, 2026-09-11, IMA-Niort).
+# HNdi input nodes (the x86 kmini players) expose the NDI sources they see on http://<node>:8791
+# (hndi.conf api_bind = 0.0.0.0). This Régie — served from casa, which runs no HNdi — asks:
+#   - the hosts listed in /boot/ndi-nodes.txt (one per line, host[:port]), if that file exists;
+#   - else itself and EVERY active Zyre peer (a Pi refuses the connection in a millisecond, a
+#     mini answers) — zero configuration, follows the fleet as it changes.
+# The union of names is pushed to the pages as {'ndiSources': [...]} whenever it changes; a
+# pick becomes a `<source>.ndi` file in the scene folder (see the 'ndifile' handler) — an
+# ordinary synced media that every player, 2025 Pi or 2026 mini, dispatches unchanged.
+NDI_API_PORT = 8791
+NDI_POLL_S = 5
+NDI_NODES_FILE = '/boot/ndi-nodes.txt'
+
 
 class RegieInterface (BaseInterface):
 
@@ -27,8 +41,9 @@ class RegieInterface (BaseInterface):
         self._port = port
         self._datapath = datapath
         self._server = None
-        
-        
+        self._ndi_sources = []      # names seen by the HNdi nodes of the fleet ([] = none)
+
+
 
     # HTTP receiver THREAD
     def listen(self):
@@ -52,7 +67,9 @@ class RegieInterface (BaseInterface):
         self.log( "regie interface on port", self._port)
         with ThreadedHTTPServer(self, self._port) as server:
             self._server = server
-            self.stopped.wait()
+            # keep the NDI source list fresh while serving (no node anywhere → stays empty)
+            while not self.stopped.wait(NDI_POLL_S):
+                self.pollNdiSources()
 
         self._server = None
         
@@ -61,6 +78,45 @@ class RegieInterface (BaseInterface):
         zeroconf.close()
         
         
+    def ndiNodes(self):
+        """base URLs of the HNdi APIs to ask: /boot/ndi-nodes.txt if present, else self + active peers"""
+        hosts = []
+        try:
+            with open(NDI_NODES_FILE) as fd:
+                hosts = [l.strip() for l in fd if l.strip() and not l.strip().startswith('#')]
+        except Exception:  # noqa: BLE001 — no file: discover
+            pass
+        if not hosts:
+            hosts = ['127.0.0.1']
+            try:
+                zyre = self.hplayer.interface('zyre')
+                for peer in list(zyre.node.book.values()) if zyre else []:
+                    ip = getattr(peer, 'ip', None)
+                    if ip and getattr(peer, 'active', True) and ip not in hosts:
+                        hosts.append(ip)
+            except Exception:  # noqa: BLE001
+                pass
+        return ['http://' + (h if ':' in h else h + ':' + str(NDI_API_PORT)) for h in hosts]
+
+    def pollNdiSources(self):
+        """ask every HNdi node for the NDI sources it sees; push the union to the Regie
+        pages when it changes. A host with no node refuses or times out: silently skipped."""
+        names = []
+        for base in self.ndiNodes():
+            try:
+                with urllib.request.urlopen(base + '/sources', timeout=0.7) as r:
+                    for x in json.loads(r.read().decode()):
+                        n = x.get('name', '') if isinstance(x, dict) else ''
+                        if n and n not in names:
+                            names.append(n)
+            except Exception:  # noqa: BLE001 — refused, timeout, bad json: no node there
+                continue
+        if names != self._ndi_sources:
+            self._ndi_sources = names
+            self.log('NDI sources:', names)
+            if self._server:
+                self._server.sendBuffer.put(('data', {'ndiSources': names}))
+
     def projectPath(self):
         return os.path.join(self._datapath, 'project.json')
     
@@ -285,6 +341,35 @@ class ThreadedHTTPServer(object):
         @socketio.on('event')
         def event(data):
             self.regieinterface.emit('peers.triggers', data, 437)
+
+        @socketio.on('ndifile')
+        def ndifile(data):
+            """An NDI source picked in the grid becomes a `.ndi` FILE in the scene folder
+            (first line = source name). It travels with the synced media tree and every
+            peer plays it as an ordinary media, so the sequence chaining stays compatible
+            with players whose regie.py knows nothing of NDI (the sacvp Pis)."""
+            try:
+                scene = os.path.basename(str(data.get('scene', '')).strip())
+                source = str(data.get('source', '')).strip()
+                if not scene or not source:
+                    return
+                safe = ''.join(c if c.isalnum() or c in ' ()-_.' else '_' for c in source)
+                name = safe + '.ndi'
+                # the scene folder lives in the first base path that has it (the synced show tree)
+                for base in self.regieinterface.hplayer.files.root_paths:
+                    folder = os.path.join(base, scene)
+                    if os.path.isdir(folder):
+                        path = os.path.join(folder, name)
+                        if not os.path.exists(path):
+                            with open(path, 'w') as fd:
+                                fd.write(source + '\n')
+                            self.regieinterface.log('ndi file created', path)
+                            self.regieinterface.hplayer.files.refresh()
+                        emit('ndifile', {'scene': scene, 'name': name})
+                        return
+                self.regieinterface.log('ndifile: no folder for scene', scene)
+            except Exception as e:  # noqa: BLE001
+                self.regieinterface.log('ndifile error', e)
 
 
         # prepare sub-thread
