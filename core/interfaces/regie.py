@@ -104,13 +104,19 @@ class RegieInterface (BaseInterface):
         names = []
         for base in self.ndiNodes():
             try:
-                with urllib.request.urlopen(base + '/sources', timeout=0.7) as r:
+                with urllib.request.urlopen(base + '/sources', timeout=1.5) as r:
                     for x in json.loads(r.read().decode()):
                         n = x.get('name', '') if isinstance(x, dict) else ''
                         if n and n not in names:
                             names.append(n)
             except Exception:  # noqa: BLE001 — refused, timeout, bad json: no node there
                 continue
+        # one empty poll (a node rebooting, a slow answer) must not blank the picker: publish an
+        # empty list only when two polls in a row agree (the first boot of kmini-002 flickered)
+        if not names and self._ndi_sources and not getattr(self, '_ndi_miss', False):
+            self._ndi_miss = True
+            return
+        self._ndi_miss = False
         if names != self._ndi_sources:
             self._ndi_sources = names
             self.log('NDI sources:', names)
@@ -324,6 +330,9 @@ class ThreadedHTTPServer(object):
 
             # send project
             emit('data', self.projectData())
+            # and the NDI sources we already know — the list is otherwise pushed only when it
+            # CHANGES, so a Régie opened after the fleet settled showed no NDI group (2026-09-13)
+            emit('data', {'ndiSources': self.regieinterface._ndi_sources})
 
             # Start update broadcaster
             global thread
