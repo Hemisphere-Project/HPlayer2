@@ -547,7 +547,7 @@ class MpvPlayer(BasePlayer):
             self.log('ndi: cannot read', path, e)
         return ''
 
-    def _ndi_api(self, method, route, body=None):
+    def _ndi_api(self, method, route, body=None, timeout=1.0):
         """one call to the local HNdi node; never raises (the show goes on with
         whatever source the node already has)"""
         import urllib.request
@@ -555,18 +555,47 @@ class MpvPlayer(BasePlayer):
         req = urllib.request.Request(NDI_API + route, data=data, method=method,
                                      headers={'Content-Type': 'application/json'})
         try:
-            with urllib.request.urlopen(req, timeout=1.0) as r:
+            with urllib.request.urlopen(req, timeout=timeout) as r:
                 return r.status
         except Exception as e:  # noqa: BLE001 — URLError, timeout, refused
             self.log('ndi: node api', method, route, 'failed:', e)
+            return None
+
+    def _ndi_get(self, route):
+        """GET a JSON route of the local HNdi node; None on any failure"""
+        import urllib.request
+        try:
+            with urllib.request.urlopen(NDI_API + route, timeout=1.0) as r:
+                return json.loads(r.read().decode())
+        except Exception as e:  # noqa: BLE001
+            self.log('ndi: node api GET', route, 'failed:', e)
             return None
 
     def _ndi_play(self, path):
         source = self._ndi_source(path)
         if source:
             # switch the node to the wanted source (no persist: the show's cue
-            # decides, the box default in hndi.conf stays)
-            self._ndi_api('PUT', '/source', {'name': source, 'persist': False})
+            # decides, the box default in hndi.conf stays). wait: with HNdi
+            # `size = follow` the node re-opens the loopback at the new source's
+            # frame size — allowed by v4l2loopback only while nobody reads the
+            # device, i.e. right now, between the `stop` above and the loadfile
+            # below. The call returns once the caps are settled (or after 4 s:
+            # source offline → play whatever the node shows).
+            t0 = time.time()
+            st = self._ndi_api('PUT', '/source', {'name': source, 'persist': False, 'wait': 4}, timeout=6.0)
+            if st != 200:
+                # not settled within the node's wait: a busy sender can take a few more
+                # seconds to accept the connection — keep waiting while the node still has
+                # a source to connect to (connecting / retrying / adopting), give up at once
+                # when it found none (resolving) and play whatever the device shows
+                deadline = time.time() + 6.0
+                while time.time() < deadline:
+                    ns = self._ndi_get('/status')
+                    if not ns or ns.get('settled') or ns.get('state') == 'resolving':
+                        st = 200 if ns and ns.get('settled') else st
+                        break
+                    time.sleep(0.25)
+            self.log('ndi: source set', source, 'settled' if st == 200 else 'not settled', '%.1fs' % (time.time() - t0))
         self.log('ndi: playing', NDI_DEVICE, 'source:', source or '(node default)')
         # a live device has no duration: clear the previous clip's so the
         # near-end / media-end logic can't fire on a stale value
