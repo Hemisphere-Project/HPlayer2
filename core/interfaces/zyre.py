@@ -95,6 +95,9 @@ class TimeClient():
         self.client_ip = ip
         self.url = ("tcp://"+self.client_ip+":"+port).encode()
         self.clockshift = 0
+        self.status = 0
+        self._refresh = None
+        self._terminated = False
         self._actor_fn = zactor_fn(self.actor_fn) # ctypes function reference must live as long as the actor.
         self.done = True
         self.start()
@@ -103,6 +106,7 @@ class TimeClient():
         if not self.done: 
             self.stop()
         
+        self._terminated = False
         self.actor = Zactor(self._actor_fn, create_string_buffer(b"Sync request"))
         self.done = False
         
@@ -110,6 +114,7 @@ class TimeClient():
         self._refresh.start()
 
     def stop(self):
+        self._terminated = True
         if not self.done:
             self.actor.sock().send(b"s", b"$TERM")
             retry = 0
@@ -163,6 +168,15 @@ class TimeClient():
         self.compute(sampler)
         req_sock.__del__()
         self.done = True
+        # A round that did not fill the sampler (master's time server not answering yet at a
+        # fleet power-on, boot-storm packet loss) used to wait the full 120 s refresh before
+        # trying again — a wall slave shows black that whole time (no clockshift, no chase, no
+        # self-start). Retry a failed round after 10 s instead; a good round keeps the 120 s pace.
+        if self.status != 1 and not self._terminated:
+            if self._refresh:
+                self._refresh.cancel()
+            self._refresh = Timer(10, self.start)
+            self._refresh.start()
 
 
     #  COMPUTE average Clock Shift
