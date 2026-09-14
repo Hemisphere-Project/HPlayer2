@@ -1,5 +1,6 @@
 from .base import BaseInterface
 from ..module import safe_print
+from ..engine import network
 import importlib
 import time
 import random
@@ -794,7 +795,36 @@ class ZyreInterface (BaseInterface):
         super().__init__(hplayer, "ZYRE")
         self.iface = netiface
 
+    # A node started on an interface that has no address yet never beacons: on a fleet
+    # power-on the slaves' HPlayer2 comes up before the master's DHCP has answered, zyre
+    # is started on a bare eth0/wlan0 and the wallclock waits for discovery forever — the
+    # 6-screen wall came up master-only after every full power cycle (atafuwa, 2026-09-14).
+    # Wait for the address (bounded), and rebuild the node if the address changes later.
+    IP_WAIT = 90.0
+
+    def _ifaceIp(self):
+        if not self.iface:
+            return None
+        ip = network.get_ip(self.iface)
+        return ip if ip and ip != '127.0.0.1' else None
+
+    def _waitIfaceIp(self):
+        if not self.iface:
+            return None
+        ip = self._ifaceIp()
+        if ip:
+            return ip
+        self.log('no address on', self.iface, 'yet: waiting up to', int(self.IP_WAIT), 's before starting the node')
+        t0 = time.time()
+        while not ip and time.time() - t0 < self.IP_WAIT and self.isRunning() and not self.stopped.is_set():
+            self.stopped.wait(1)
+            ip = self._ifaceIp()
+        self.log(('address on ' + self.iface + ': ' + ip + ' after %.0f s' % (time.time() - t0)) if ip
+                 else (self.iface + ' still has no address after ' + str(int(self.IP_WAIT)) + ' s: starting the node anyway'))
+        return ip
+
     def listen(self):
+        self._boundIp = self._waitIfaceIp()
         self.node = ZyreNode(self, self.iface)
 
         # Publish self status
@@ -863,6 +893,26 @@ class ZyreInterface (BaseInterface):
             self.stopped.wait(2)
             if not self.isRunning():
                 break
+            # address appeared or changed under the node (late DHCP lease, renewed lease
+            # with another address): the beacon is bound to the old one -> rebuild, not
+            # counted as a failure
+            ip = self._ifaceIp()
+            if self.iface and ip and ip != self._boundIp:
+                self.log('address on', self.iface, 'changed', self._boundIp, '->', ip, ': rebuilding zyre node')
+                self._boundIp = ip
+                try:
+                    self.node.stop()
+                except Exception as e:
+                    self.log('old node teardown error (continuing):', e)
+                if self.stopped.is_set() or not self.isRunning():
+                    break
+                try:
+                    self.node = ZyreNode(self, self.iface)
+                except Exception as e:
+                    self.log('zyre node rebuild FAILED:', e, '— exiting for a clean app restart')
+                    self.hplayer.request_shutdown(exit_code=1, force_delay=10.0)
+                    break
+                continue
             if not getattr(self.node, 'broken', False):
                 continue
             now = time.time()
