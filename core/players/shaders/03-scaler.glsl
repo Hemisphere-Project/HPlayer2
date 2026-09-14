@@ -66,13 +66,18 @@
 
 //!HOOK MAIN
 //!BIND HOOKED
-//!WIDTH HOOKED.w
-//!HEIGHT HOOKED.h
+//!WIDTH OUTPUT.w
+//!HEIGHT OUTPUT.h
 //!DESC Live Video Scaler
 
 /*
     LED Scaler Shader
     Scales and crops video input to fit LED display dimensions.
+    The pass renders at OUTPUT size (the screen, e.g. 1024x768), not at the source size:
+    every pixel below is a screen pixel, so a 256x512 media lands pixel-exact in a
+    256x512 (or 256x256 halfheight) block at the top-left whatever the HDMI mode — with a
+    source-sized pass mpv scaled the result to fit the screen and the block grew with it
+    (kmini bench 2026-09-15; the 2026-09-04 "1024² clipped strip" was the same thing).
     Parameters:
         scaler_height                - Target height in pixels
         scaler_width                - Target width in pixels
