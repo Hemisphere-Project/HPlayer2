@@ -33,6 +33,11 @@ class DmxInterface(BaseInterface):
     PROD_FILTER = "0403:6001|FT232|USB DMX|DMX USB|Enttec|DMX512"
 
     BAUD = {'open': 250000, 'pro': 115200}
+    # mpv reports core-idle for a few frames at a loop wrap (loop-file) or a seek: the
+    # player flips isPlaying off and back within ~100 ms. Without a grace the output
+    # blacks out for that instant -- a visible blink on fixtures with dimmer smoothing
+    # off (MAC 2026-09-14). Keep evaluating the conduite that long; a real stop lasts longer.
+    WRAP_GRACE = 0.6
 
     def __init__(self, hplayer, filter=None):
         super().__init__(hplayer, "DMX")
@@ -50,6 +55,7 @@ class DmxInterface(BaseInterface):
         self._conduiteFile = None
         self._conduiteMtime = 0
         self._mediaLoaded = -1          # sentinel != any media (incl. None)
+        self._lastActive = 0            # last time the player reported playing (wrap grace)
         self._lastLevelsEmit = 0
         self._lastStatus = None
         self._lastStatusSent = 0
@@ -135,8 +141,14 @@ class DmxInterface(BaseInterface):
         media, t, active = self._playerState()
         self._syncMedia(media)
 
+        now = time.time()
+        if active and media:
+            self._lastActive = now
+        elif media and media == self._mediaLoaded and now - self._lastActive < self.WRAP_GRACE:
+            active = True               # loop wrap / seek transient: hold the conduite, no blackout
+
         if active and media and self._conduite:
-            frame = self._conduite.frame(t)
+            frame = self._conduite.frame(t or 0.0)
         else:
             frame = bytearray(512)      # blackout
 
