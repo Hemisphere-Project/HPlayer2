@@ -74,6 +74,7 @@ class MpvPlayer(BasePlayer):
     def __init__(self, hplayer, name):
         super().__init__(hplayer, name)
 
+        self._out_dim = {}                       # osd-dimensions/w,h → status 'output' ("1024x768")
         self._mpv_command = self._BASE_ARGS.copy()
         if sys.platform.startswith('linux'):
             self._mpv_command.append('--ao=alsa')
@@ -290,6 +291,10 @@ class MpvPlayer(BasePlayer):
             self._mpv_send('{ "command": ["observe_property", 4, "duration"] }')
             self._mpv_send('{ "command": ["observe_property", 5, "eof-reached"] }')
             self._mpv_send('{ "command": ["observe_property", 6, "audio-params/channel-count"] }')
+            # the size the video output actually runs at (DRM: the selected mode) — shown in
+            # http2 next to the surface's target size and output mode
+            self._mpv_send('{ "command": ["observe_property", 7, "osd-dimensions/w"] }')
+            self._mpv_send('{ "command": ["observe_property", 8, "osd-dimensions/h"] }')
             closeToTheEnd = False
             nearendEmitted = False
             
@@ -361,6 +366,12 @@ class MpvPlayer(BasePlayer):
                             elif mpvsays['name'] == 'duration':
                                 if 'data' in mpvsays and mpvsays['data']:
                                     self.update('duration', round(float(mpvsays['data']),2))
+
+                            elif mpvsays['name'] in ('osd-dimensions/w', 'osd-dimensions/h'):
+                                d = mpvsays.get('data')
+                                self._out_dim[mpvsays['name'][-1]] = int(d) if d else 0
+                                w, h = self._out_dim.get('w', 0), self._out_dim.get('h', 0)
+                                self.update('output', f'{w}x{h}' if w and h else None)
 
                             elif mpvsays['name'] == 'audio-params/channel-count':
                                 if 'data' in mpvsays and mpvsays['data']:

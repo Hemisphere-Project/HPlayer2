@@ -110,6 +110,7 @@ $(document).ready(function() {
             stopBtn.setState(!msg['isPaused'] && !msg['isPlaying'])
 
             $('#media_name').text(msg['media'])
+            $('#surface_output').text('output: ' + (msg['output'] || '\u2014'))
             playlistMedia()
             seekbarArm(msg)
 
