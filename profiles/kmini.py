@@ -51,12 +51,24 @@ def _iface_with_ip(candidates):
             return iface
     return None
 
-ZYRE_IFACE = _iface_with_ip(['eth0', 'enp1s0', 'wint', 'wlan0'])
-hplayer.log('zyre interface:', ZYRE_IFACE or '(default)')
-if ZYRE_IFACE:
-    hplayer.addInterface('zyre', ZYRE_IFACE)
-else:
-    hplayer.addInterface('zyre')
+# The wired link (or the WiFi) must carry an address BEFORE Zyre starts: the service comes
+# up before NetworkManager has finished, and with no candidate Zyre used to fall back to
+# its own default — the first interface it found, which on a two-port box was eth1, the
+# venue/DHCP link, so the Régie learnt the box at an address it could not reach
+# (kmini-004, 2026-09-16). Wait for eth0 / the WiFi, never eth1, never the default.
+import time as _time
+ZYRE_CANDIDATES = ['eth0', 'enp1s0', 'wint', 'wlan0']
+ZYRE_IFACE = _iface_with_ip(ZYRE_CANDIDATES)
+_waited = 0
+while not ZYRE_IFACE and _waited < 120:
+    if _waited % 10 == 0:
+        hplayer.log('zyre: waiting for an address on', '/'.join(ZYRE_CANDIDATES), '(%ds)' % _waited)
+    _time.sleep(2); _waited += 2
+    ZYRE_IFACE = _iface_with_ip(ZYRE_CANDIDATES)
+if not ZYRE_IFACE:
+    ZYRE_IFACE = ZYRE_CANDIDATES[0]      # still nothing: pin the wired link anyway, never a default pick
+hplayer.log('zyre interface:', ZYRE_IFACE)
+hplayer.addInterface('zyre', ZYRE_IFACE)
 
 
 # INTERFACES
