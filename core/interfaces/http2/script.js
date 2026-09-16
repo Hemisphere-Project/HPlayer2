@@ -662,6 +662,7 @@ $(document).ready(function() {
             $('#surface_halfheight').prop('checked', !!sf.halfheight);
             $('#surface_fit').val(sf.fit || 'cover');
             $('#surface_align').val(sf.align || 'center');
+            $('#surface_output_mode').val(sf.output_mode || '');
             numKeys.forEach(function(k) {
                 var el = $('#surface_' + k);
                 if (!el.is(':focus')) el.val(sf[k] === undefined ? 0 : sf[k]);
@@ -680,6 +681,7 @@ $(document).ready(function() {
         $('#surface_halfheight').on('change', function() { patch({ halfheight: this.checked }); });
         $('#surface_fit').on('change', function() { patch({ fit: this.value }); });
         $('#surface_align').on('change', function() { patch({ align: this.value }); });
+        $('#surface_output_mode').on('change', function() { patch({ output_mode: this.value }); });
         numKeys.forEach(function(k) {
             $('#surface_' + k).on('change', function() { var o = {}; o[k] = Number(this.value) || 0; patch(o); });
         });

@@ -471,6 +471,16 @@ class MpvPlayer(BasePlayer):
         else:
             command.append('--image-display-duration=inf')
 
+        # output mode (x86 DRM): the surface setting's `output_mode` pins the HDMI mode —
+        # an LED controller whose EDID prefers 800x600 still gets 1024x768. --drm-mode is
+        # a start-time option and mpv is spawned before Settings.load() runs, so the
+        # value is read straight from the persisted settings file.
+        self._drm_mode = ''
+        if '--vo=gpu-next' in self._mpv_command:
+            self._drm_mode = self._persistedOutputMode()
+            if self._drm_mode:
+                command.append('--drm-mode=' + self._drm_mode)
+
         self.log("starting mpv subprocess:", ' '.join(command))
         
         self._mpv_subproc = subprocess.Popen(command,
@@ -668,10 +678,30 @@ class MpvPlayer(BasePlayer):
     def hasSurface(self):
         return bool(self._shaders)
 
+    def _persistedOutputMode(self):
+        """`surface.output_mode` from the persisted settings file ('' = preferred)."""
+        try:
+            with open(self.hplayer.settings._settingspath) as fd:
+                sf = json.load(fd).get('surface') or {}
+            mode = str(sf.get('output_mode') or '').strip().lower()
+            return '' if mode == 'preferred' else mode
+        except Exception:  # noqa: BLE001 — no file yet, unreadable: the EDID decides
+            return ''
+
     def _applySurface(self, surface):
         if not self._shaders:
             return
         s = clean_surface(surface)
+        # output mode: a start-time mpv option, so a change means a player restart. The
+        # timer lets Settings.set() persist the new value first (it emits before it saves),
+        # and the restart is the engine's own hard-kill path: mpv is killed so the next
+        # instance can take the DRM device, and systemd brings HPlayer2 back.
+        wanted = '' if s['output_mode'] == 'preferred' else s['output_mode']
+        if '--vo=gpu-next' in self._mpv_command and wanted != getattr(self, '_drm_mode', '') and self.isRunning():
+            self.log('surface: output mode', self._drm_mode or 'preferred', '->', wanted or 'preferred',
+                     '- restarting the player (--drm-mode is a start-time option)')
+            self._drm_mode = wanted
+            threading.Timer(1.0, lambda: self.emit('hardreset')).start()
         # Enabled = the picture is anchored at the screen's TOP-LEFT (an LED controller
         # reads from there), so the block the shader places at output_x/y lands on those
         # HDMI pixels. The video stays scaled-to-fit: the shader's pixel math maps the

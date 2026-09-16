@@ -1,5 +1,6 @@
 import json
 import os
+import re
 
 from ..module import Module
 
@@ -18,7 +19,12 @@ SURFACE_DEFAULTS = {
     'source_offset_y':  0,
     'output_x':         0,          # where the finished block lands on the output
     'output_y':         0,
+    'output_mode':      '',         # HDMI mode mpv asks the display for (x86 DRM): '' = the EDID's
+                                    # preferred, 'highest', or 'WxH[@R]' e.g. '1024x768@60' — an LED
+                                    # controller whose EDID prefers 800x600 still takes 1024x768.
+                                    # Start-time option: a change restarts the player.
 }
+SURFACE_MODE_RE = re.compile(r'^(preferred|highest|\d{3,4}x\d{3,4}(@\d{2,3}(\.\d+)?)?)$')
 SURFACE_FIT = ('cover', 'contain', 'stretch')
 SURFACE_ALIGN = ('center', 'left')
 
@@ -47,6 +53,8 @@ def clean_surface(surface):
         out['fit'] = SURFACE_DEFAULTS['fit']
     if out['align'] not in SURFACE_ALIGN:
         out['align'] = SURFACE_DEFAULTS['align']
+    if out['output_mode'] and not SURFACE_MODE_RE.match(out['output_mode']):
+        out['output_mode'] = SURFACE_DEFAULTS['output_mode']
     return out
 
 
