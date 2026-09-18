@@ -365,7 +365,9 @@ class WallclockInterface (BaseInterface):
                 if noted[0]:
                     self.log('multicast group joined on ' + (ip or '0.0.0.0') + ' (late: interface was not up at start)')
             except OSError as e:
-                if not noted[0]:
+                if getattr(e, 'errno', None) == 98:          # EADDRINUSE: membership already present
+                    joined[0] = True
+                elif not noted[0]:
                     noted[0] = True
                     self.log('multicast join failed (' + str(e) + '): retrying every 2 s until the interface is up')
             lastTry[0] = time.time()
@@ -401,6 +403,13 @@ class WallclockInterface (BaseInterface):
             try:
                 data, addr = sock.recvfrom(1500)
             except socket.timeout:
+                # Silent for 5 s while we believe we are joined: the membership may be gone (a
+                # driver reload or interface re-creation drops IGMP state silently — kouagou03
+                # sat unchased for two days with its socket bound and no group, 2026-09-18).
+                # Re-join every 5 s; an already-present membership answers EADDRINUSE, harmless.
+                if joined[0] and time.time() - lastTry[0] > 5.0 and time.time() - self._lastAccept > 5.0:
+                    joined[0] = False
+                    join()
                 # Delivery gap: keep servoing on the extrapolated clock
                 # until the freewheel budget runs out.
                 if extraBase and self.drifter and not self._freewheeling \

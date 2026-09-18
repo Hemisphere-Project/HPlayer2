@@ -729,7 +729,11 @@ class NowdeInterface(BaseInterface):
             attempts += 1
             ports_display = ", ".join(available) if available else "none"
             total = self.max_retry if self.max_retry else "inf"
-            self.log(f"retry {attempts}/{total}: waiting for MIDI input {self._port_filter_label()} (available: {ports_display})")
+            # A player without a node retried every 5 s for weeks: 17 000 lines a day, each one
+            # followed by the log delimiter — the journal of every non-Nowde player was 90 % this
+            # (2026-09-18). Say it three times, then once every 5 minutes.
+            if attempts <= 3 or attempts % 60 == 0:
+                self.log(f"retry {attempts}/{total}: waiting for MIDI input {self._port_filter_label()} (available: {ports_display})")
 
             if self.max_retry and attempts >= self.max_retry:
                 break
