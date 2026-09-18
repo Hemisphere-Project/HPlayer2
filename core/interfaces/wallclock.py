@@ -132,6 +132,7 @@ class WallclockInterface (BaseInterface):
             self._sameDur = True        # our file and the master's share one length (seamless loop ok)
             self._loopApplied = None    # last loop mode we pushed to the player (None = profile's choice)
             self._cueStartedAt = 0.0    # when we last started a cue (a start is not a stall for 3 s)
+            self._noPeerSince = None    # master clock heard but no zyre peer since (rebuild request)
             self._legacyStalled = None  # the profile's stall hook, restored when leaving cue mode
 
     #
@@ -470,7 +471,20 @@ class WallclockInterface (BaseInterface):
             if not peer:
                 self._quietLog('waiting for zyre discovery of ' + name)
                 self.drifter.release()
+                # The master's clock is heard, so the link is up — only discovery is missing. A master
+                # rebooted or swapped under running slaves leaves it that way for good (LACROIX,
+                # 2026-09-15): after a minute ask zyre to rebuild its node, and again every minute.
+                now = time.time()
+                if not self._noPeerSince:
+                    self._noPeerSince = now
+                elif now - self._noPeerSince > 60.0:
+                    self._noPeerSince = now
+                    z = self.hplayer.interface('zyre')
+                    if z and hasattr(z, 'requestRebuild'):
+                        self.log('master clock heard for 60 s without a zyre peer -> asking zyre to rebuild its node')
+                        z.requestRebuild('wallclock: ' + name + ' heard for 60 s, no peer')
                 continue
+            self._noPeerSince = None
             tc = getattr(peer, 'timeclient', None)
             if tc is not self._csClient:
                 self._csClient = tc

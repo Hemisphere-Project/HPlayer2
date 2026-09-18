@@ -837,7 +837,14 @@ class ZyreInterface (BaseInterface):
                  else (self.iface + ' still has no address after ' + str(int(self.IP_WAIT)) + ' s: starting the node anyway'))
         return ip
 
+    def requestRebuild(self, why):
+        """Ask the supervisor to rebuild the node in place (e.g. the wallclock hears the master's
+        clock but no zyre peer appears for a minute: a master rebooted or swapped under running
+        slaves keeps our address, so the address-change rebuild never fires — LACROIX 2026-09-15)."""
+        self._rebuildWhy = why
+
     def listen(self):
+        self._rebuildWhy = None
         self._boundIp = self._waitIfaceIp()
         self.node = ZyreNode(self, self.iface)
 
@@ -911,9 +918,14 @@ class ZyreInterface (BaseInterface):
             # with another address): the beacon is bound to the old one -> rebuild, not
             # counted as a failure
             ip = self._ifaceIp()
-            if self.iface and ip and ip != self._boundIp:
-                self.log('address on', self.iface, 'changed', self._boundIp, '->', ip, ': rebuilding zyre node')
-                self._boundIp = ip
+            why = self._rebuildWhy
+            if (self.iface and ip and ip != self._boundIp) or why:
+                if why:
+                    self.log('rebuilding zyre node in place:', why)
+                    self._rebuildWhy = None
+                else:
+                    self.log('address on', self.iface, 'changed', self._boundIp, '->', ip, ': rebuilding zyre node')
+                self._boundIp = ip or self._boundIp
                 try:
                     self.node.stop()
                 except Exception as e:
