@@ -816,6 +816,81 @@ class ZyreInterface (BaseInterface):
             raise RuntimeError("zyre interface dependencies are unavailable")
         super().__init__(hplayer, "ZYRE")
         self.iface = netiface
+        # Handlers are registered HERE, on the main thread at construction, not in listen():
+        # registering listeners from the interface thread while the main thread is emitting
+        # (settings.load() at startup) mutates pymitter's listener tree under its own iteration
+        # — `RuntimeError: dictionary changed size during iteration`, HPlayer2 down at its first
+        # start and back on systemd's restart 20 s later (Tapuaki01 cold start, 2026-09-21).
+        # They resolve self.node at call time and do nothing while it is not up.
+        self._installHandlers()
+
+    def _installHandlers(self):
+        def node():
+            return getattr(self, 'node', None)
+
+        # Publish self status
+        @self.hplayer.on('*.playing')
+        @self.hplayer.on('*.paused')
+        @self.hplayer.on('*.stopped')
+        def st(ev, *args):
+            n = node()
+            if n:
+                n.publish('peer.status', self.hplayer.statusPlayers())
+
+        # Publish self settings
+        @self.hplayer.on('settings.updated')
+        def se(ev, settings):
+            n = node()
+            if n:
+                n.publish('peer.settings', settings)
+
+        # Publish when self do play seq
+        @self.hplayer.on('*.playingseq')
+        def seq(ev, *args):
+            n = node()
+            if n:
+                n.publish('peer.playingseq', args)
+
+        # Subscribe to peers
+        @self.hplayer.on('*.peers.subscribe')
+        def mon(ev, topics):
+            n = node()
+            if n:
+                n.subscribe(topics)
+
+        # Trig peers link status
+        @self.hplayer.on('*.peers.getlink')
+        def links(ev):
+            n = node()
+            if not n:
+                return
+            for peer in n.book.values():
+                self.emit('peer.link', {'name': peer.name, 'data': peer.link})
+
+        # Triggers event on peers
+        @self.hplayer.on('*.peers.triggers')
+        def trig(ev, *args):
+            n = node()
+            if not n:
+                self.log('peers.triggers while the node is not up: dropped')
+                return
+            delay = args[1] if len(args) > 1 else 0
+            at = int(time.time()*PRECISION + delay * PRECISION / 1000)
+            for ev in args[0]:
+                if not 'synchro' in ev:
+                    ev['synchro'] = False
+                data = None
+                if 'data' in ev:
+                    data = ev['data']
+                if 'peer' in ev:
+                    peer = n.peerByName(ev['peer'])
+                    if peer:
+                        self.log('whisper', ev['peer'], ev['event'], data, at if ev['synchro'] else 0)
+                        n.whisper( peer.uuid, ev['event'], data, 0, at if ev['synchro'] else 0)
+                    else:
+                        self.log('peer is missing', ev['peer'])
+                else:
+                    n.broadcast(ev['event'], data, 0, at if ev['synchro'] else 0)
 
     # A node started on an interface that has no address yet never beacons: on a fleet
     # power-on the slaves' HPlayer2 comes up before the master's DHCP has answered, zyre
@@ -855,58 +930,8 @@ class ZyreInterface (BaseInterface):
         self._rebuildWhy = None
         self._boundIp = self._waitIfaceIp()
         self.node = ZyreNode(self, self.iface)
+        # (the hplayer event handlers live in _installHandlers(), registered at construction)
 
-        # Publish self status
-        @self.hplayer.on('*.playing')
-        @self.hplayer.on('*.paused')
-        @self.hplayer.on('*.stopped')
-        def st(ev, *args):
-            # safe_print('peer.status', self.hplayer.statusPlayers())
-            self.node.publish('peer.status', self.hplayer.statusPlayers())
-
-        # Publish self settings
-        @self.hplayer.on('settings.updated')
-        def se(ev, settings):
-            self.node.publish('peer.settings', settings)
-            
-        # Publish when self do play seq
-        @self.hplayer.on('*.playingseq')
-        def se(ev, *args):
-            self.node.publish('peer.playingseq', args)
-
-        # Subscribe to peers
-        @self.hplayer.on('*.peers.subscribe')
-        def mon(ev, topics):
-            self.node.subscribe(topics)
-
-        # Trig peers link status
-        @self.hplayer.on('*.peers.getlink')
-        def links(ev):
-            for peer in self.node.book.values():
-                self.emit('peer.link', {'name': peer.name, 'data': peer.link})
-
-        # Triggers event on peers
-        @self.hplayer.on('*.peers.triggers')
-        def trig(ev, *args):
-            delay = args[1] if len(args) > 1 else 0
-            at = int(time.time()*PRECISION + delay * PRECISION / 1000)
-            for ev in args[0]:
-                if not 'synchro' in ev:
-                    ev['synchro'] = False
-                data = None
-                if 'data' in ev: 
-                    data = ev['data']
-                if 'peer' in ev:
-                    peer = self.node.peerByName(ev['peer'])
-                    if peer:
-                        self.log('whisper', ev['peer'], ev['event'], data, at if ev['synchro'] else 0)
-                        self.node.whisper( peer.uuid, ev['event'], data, 0, at if ev['synchro'] else 0)
-                    else:
-                        self.log('peer is missing', ev['peer'])
-                else:
-                    self.node.broadcast(ev['event'], data, 0, at if ev['synchro'] else 0)
-        
-        
         self.log( "interface ready")
 
         # Supervise the node: on a confirmed poller failure (RF churn /
