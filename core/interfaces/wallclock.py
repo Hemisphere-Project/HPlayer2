@@ -59,7 +59,7 @@ class WallclockInterface (BaseInterface):
     def __init__(self, hplayer, netiface=None, master=False, player=None,
                     port=3737, group='239.192.0.37', rate=20, unicast=False,
                     masterName=None, staleness=1.0, extrapolate=4.0,
-                    driftLog='/data/var/wallclock-drift.csv', durTolerance=1.0):
+                    driftLog='/tmp/wallclock-drift.csv', durTolerance=1.0):
 
         super().__init__(hplayer, "WALLCLOCK")
         self.logQuietEvents.extend(['drift'])
@@ -277,6 +277,15 @@ class WallclockInterface (BaseInterface):
                 self._csvFile.write('%d,%d,%.1f,%.2f,%d,%d,%d\n' % (
                     int(time.time() * 1000), res['seq'], res['diff'] * 1000,
                     res['speed'], res['locked'], res['jumped'], res['cs']))
+                # Cap: one line per clock tick is ~55 kB/min; on /data this grew to 580 MB on
+                # kouagou02 in 63 h (2026-09-21) — a permanent random-write load on the SD card.
+                # Now on the tmpfs, and rotated at 10 MB (one previous kept).
+                self._csvLines = getattr(self, '_csvLines', 0) + 1
+                if self._csvLines % 2000 == 0 and os.path.getsize(self.driftLog) > 10 * 1024 * 1024:
+                    self._csvFile.close()
+                    self._csvFile = None
+                    os.replace(self.driftLog, self.driftLog + '.1')
+                    self._openCsv()
             except (OSError, IOError):
                 self._csvFile = None
 
@@ -354,22 +363,50 @@ class WallclockInterface (BaseInterface):
         joined = [False]
         lastTry = [0.0]
         noted = [False]
+        lastErr = [None]
 
-        def join():
+        def fresh():
+            # A re-join after a driver reload lands on a NEW interface index; the socket keeps one
+            # dead membership per reload and the kernel refuses the 21st
+            # (net.ipv4.igmp_max_memberships = 20, ENOBUFS — not the EADDRINUSE the old code took
+            # for "already joined"). kouagou03 logged exactly 19 re-joins, then sat deaf for two
+            # days with the clock reaching its interface (2026-09-21). Re-join on a fresh socket.
+            nonlocal sock
+            try:
+                sock.close()
+            except OSError:
+                pass
+            sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+            sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+            sock.bind(('', self.port))
+            sock.settimeout(0.25)
+
+        def join(rebind=False):
+            if rebind:
+                try:
+                    fresh()
+                except OSError as e:
+                    self.log('multicast socket rebind failed (' + str(e) + ')')
             ip = network.get_ip(self.iface) if self.iface else network.get_ip()
             try:
                 bindIp = ip if ip and ip != '127.0.0.1' else '0.0.0.0'
                 mreq = socket.inet_aton(self.group) + socket.inet_aton(bindIp)
                 sock.setsockopt(socket.IPPROTO_IP, socket.IP_ADD_MEMBERSHIP, mreq)
                 joined[0] = True
-                if noted[0]:
+                if rebind:
+                    self.log('multicast group re-joined on ' + (ip or '0.0.0.0') + ' (fresh socket)')
+                elif noted[0]:
                     self.log('multicast group joined on ' + (ip or '0.0.0.0') + ' (late: interface was not up at start)')
+                lastErr[0] = None
             except OSError as e:
-                if getattr(e, 'errno', None) == 98:          # EADDRINUSE: membership already present
+                err = getattr(e, 'errno', None)
+                if err == 98:                                 # EADDRINUSE: membership already present
                     joined[0] = True
-                elif not noted[0]:
-                    noted[0] = True
-                    self.log('multicast join failed (' + str(e) + '): retrying every 2 s until the interface is up')
+                else:
+                    if not noted[0] or err != lastErr[0]:     # log the first failure and every change of errno
+                        noted[0] = True
+                        self.log('multicast join failed (' + str(e) + '): retrying every 2 s')
+                    lastErr[0] = err
             lastTry[0] = time.time()
 
         join()
@@ -383,7 +420,9 @@ class WallclockInterface (BaseInterface):
         while not self.stopped.is_set():
 
             if not joined[0] and time.time() - lastTry[0] > 2.0:
-                join()
+                # ENODEV/EADDRNOTAVAIL = the interface is not up yet: retry on the same socket;
+                # anything else (ENOBUFS: the membership list is full) needs a fresh one
+                join(rebind=lastErr[0] not in (None, 19, 99))
 
             # Staleness: master silent beyond the extrapolation budget ->
             # freewheel at speed 1.0, keep listening
@@ -409,7 +448,7 @@ class WallclockInterface (BaseInterface):
                 # Re-join every 5 s; an already-present membership answers EADDRINUSE, harmless.
                 if joined[0] and time.time() - lastTry[0] > 5.0 and time.time() - self._lastAccept > 5.0:
                     joined[0] = False
-                    join()
+                    join(rebind=True)
                 # Delivery gap: keep servoing on the extrapolated clock
                 # until the freewheel budget runs out.
                 if extraBase and self.drifter and not self._freewheeling \

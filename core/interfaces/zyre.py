@@ -379,7 +379,15 @@ class Peer():
         
         if self.link < 3:
             self.timerLink = Timer(PING_PEER*1.5/1000.0, self.linker, args=[l+1])
-            self.timerLink.start()
+            try:
+                self.timerLink.start()
+            except RuntimeError as e:
+                # `can't start new thread` (seen on kouagou02/03 during link-loss storms,
+                # 2026-09-18..21): without this the link state machine stalled below 3 for good.
+                # Step the link now instead of in PING_PEER*1.5 ms — a peer is still a peer.
+                self.timerLink = None
+                self.node.interface.log('peer', self.name, 'link timer unavailable (' + str(e) + '): linking now')
+                self.linker(l+1)
 
     def sync(self):
         if not self.active: return
