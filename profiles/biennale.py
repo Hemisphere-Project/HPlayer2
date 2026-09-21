@@ -43,6 +43,23 @@ hplayer = HPlayer2(mediaPath, '/data/hplayer2-biennale.cfg')
 
 # PLAYER
 player = hplayer.addPlayer('mpv', 'player')
+
+# Broadcast through the zyre node — or, while the node is not up yet, take the same path a received
+# broadcast takes, minus the network. An eth0 master waits up to 90 s for its address at boot and the
+# profile's app-run fires before that: `.node` did not exist, AttributeError, HPlayer2 exited and
+# systemd restarted it — six times in two minutes on the wall master, black all along (2026-09-21).
+# Emitting the event on the zyre interface runs the engine's own play/stop/loop handlers locally;
+# the slaves follow the wallclock and the next broadcast reaches them once the node is up.
+def zbroadcast(event, args=None, delay_ms=0):
+	z = hplayer.interface('zyre')
+	node = getattr(z, 'node', None) if z else None
+	if node:
+		return node.broadcast(event, args, delay_ms)
+	a = [] if args is None else (args if isinstance(args, list) else [args])
+	print('[zyre]     node not up yet: ' + event + ' handled locally')
+	if z:
+		z.emit(event, *a)
+
 player.imagetime(15)
 
 player.doLog['events'] = True
@@ -149,8 +166,8 @@ def doPlay(media, debounce=0):
 	# PLAY SYNC -> forward to peers
 	if SYNC:
 		if SYNC_MASTER:
-			hplayer.interface('zyre').node.broadcast('stop')
-			hplayer.interface('zyre').node.broadcast('play', media, SYNC_BUFFER)
+			zbroadcast('stop')
+			zbroadcast('play', media, SYNC_BUFFER)
 			print('doPlay: sync master.. broadcast')
 		else:
 			print('doPlay: sync slave.. do nothing')
@@ -186,7 +203,7 @@ def play0(ev, *args):
 		import threading
 		gap_cancel()
 		if SYNC_MASTER:
-			hplayer.interface('zyre').node.broadcast('stop')
+			zbroadcast('stop')
 		else:
 			player.stop()
 		print('loop-gap: end of set, black for %.1f s' % gap)
@@ -258,10 +275,10 @@ if SYNC:
 		ev = ev.replace('http2.', '')
 		gap_cancel()                          # a manual transport action ends a loop gap
 		if ev == 'play':
-			hplayer.interface('zyre').node.broadcast('stop')
-		hplayer.interface('zyre').node.broadcast(ev, args, SYNC_BUFFER)
+			zbroadcast('stop')
+		zbroadcast(ev, args, SYNC_BUFFER)
 		if ev == 'play':
-			hplayer.interface('zyre').node.broadcast('loop', [2 if (WALL and loop_gap() <= 0) else 0], SYNC_BUFFER)
+			zbroadcast('loop', [2 if (WALL and loop_gap() <= 0) else 0], SYNC_BUFFER)
 
 	if SYNC_MASTER:
 		@hplayer.on('http2.volume')
@@ -272,13 +289,13 @@ if SYNC:
 				return
 			mode = str(hplayer.settings.get('volume-link') or 'off')
 			if mode == 'absolute':
-				hplayer.interface('zyre').node.broadcast('volume', v, 0)          # reaches self too
+				zbroadcast('volume', v, 0)          # reaches self too
 			elif mode == 'relative':
 				try:
 					cur = int(hplayer.settings.get('volume') or 0)
 				except (TypeError, ValueError):
 					cur = v
-				hplayer.interface('zyre').node.broadcast('volume-delta', v - cur, 0)  # self too
+				zbroadcast('volume-delta', v - cur, 0)  # self too
 			else:
 				hplayer.settings.set('volume', v)                                  # local only
 
@@ -337,7 +354,7 @@ def schedule_close(ev, *args):
 	if nowde_slave():
 		return
 	if SYNC and SYNC_MASTER:
-		hplayer.interface('zyre').node.broadcast('stop')
+		zbroadcast('stop')
 	elif not SYNC:
 		player.stop()                        # go silent when the window closes
 
