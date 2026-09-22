@@ -817,7 +817,11 @@ class NowdeInterface(BaseInterface):
 
     def handle_linked_volume(self, value):
         """CC#7 from our node = the master's absolute level (2.0.4). Apply it to the player at once;
-        persist it to the cfg only after VOLUME_PERSIST_DELAY of quiet.
+        persist it to the cfg only after VOLUME_PERSIST_DELAY without a CHANGE.
+
+        The quiet period must ignore repeats: the node resends the level every second so a host that
+        just booted catches up, and counting those as activity kept the timer alive for ever — the
+        cfg was never written (W4, 2026-09-22: mpv at 50, cfg stuck at 55).
 
         The master repeats the level every second and sends it at 10 Hz while playing, and
         `settings.set` writes the cfg file on every change: persisting each value would mean tens of
@@ -828,18 +832,20 @@ class NowdeInterface(BaseInterface):
             v = max(0, min(100, int(value)))
         except (TypeError, ValueError):
             return
+        if v == self._volApplied:
+            return          # a repeat (the node resends every second so a fresh host catches up):
+                            # nothing to apply, and it must NOT restart the settle timer below
+        self._volApplied = v
         self._volPending = v
-        if v != self._volApplied:
-            self._volApplied = v
-            if self.player:
-                try:
-                    # respect a local mute exactly as hplayer's own do-volume handler does
-                    muted = bool(self.hplayer.settings.get('mute'))
-                    self.player._applyVolume(0 if muted else v)      # live, no cfg write
-                except Exception as e:
-                    self.log(colored(f"volume-link: cannot apply {v}: {e}", 'yellow'))
-            self.log(f"CC#7={v}: volume from the master")
-        self._volLastSeen = time.time()
+        self._volLastSeen = time.time()     # only a CHANGE counts as "still moving"
+        if self.player:
+            try:
+                # respect a local mute exactly as hplayer's own do-volume handler does
+                muted = bool(self.hplayer.settings.get('mute'))
+                self.player._applyVolume(0 if muted else v)      # live, no cfg write
+            except Exception as e:
+                self.log(colored(f"volume-link: cannot apply {v}: {e}", 'yellow'))
+        self.log(f"CC#7={v}: volume from the master")
 
     def _volume_persist_tick(self):
         """Called from the interface thread: commit a settled linked volume to the cfg."""
