@@ -54,6 +54,8 @@ CMD_SET_ROLE = 0x08
 CMD_SET_LOCAL_LAYER = 0x09
 CMD_SET_LOG = 0x0A
 CMD_MEDIA_SYNC = 0x10
+MEDIASYNC_FLAG_VOLUME = 0x01     # 2.0.4 MEDIA_SYNC tail: the volume byte is meaningful
+MEDIASYNC_FLAG_MUTE = 0x02       # reserved
 CMD_CHANGE_RECEIVER_LAYER = 0x11
 CMD_HELLO = 0x20
 CMD_CONFIG_STATE = 0x21
@@ -100,15 +102,24 @@ def decode7(enc):
     return out
 
 
-def build_media_sync(layer, index, position_ms, playing):
-    """MEDIA_SYNC payload (without F0/F7): 7D 10 layer(16) index(1) pos(5) state(1) = 25 bytes."""
+def build_media_sync(layer, index, position_ms, playing, volume=None):
+    """MEDIA_SYNC payload (without F0/F7): 7D 10 layer(16) index(1) pos(5) state(1) = 25 bytes,
+    plus the 2.0.4 tail volume(1) flags(1) when a volume is given (27 bytes).
+
+    The tail is APPENDED so a 2.0.3 node ignores it (it reads fixed offsets and accepts any frame
+    from 27 bytes on the wire); a 2.0.4 node reads it only when the frame is long enough. So the
+    node and the host can be updated in either order, and a fleet with the link off is byte-identical
+    to 2.0.3 traffic."""
     layer_bytes = (str(layer)[:16] + '\x00' * 16)[:16].encode('ascii', errors='replace')
     index = max(0, min(127, int(index)))
     position_ms = max(0, int(position_ms)) & 0xFFFFFFFF
     pos_raw = [(position_ms >> 24) & 0xFF, (position_ms >> 16) & 0xFF,
                (position_ms >> 8) & 0xFF, position_ms & 0xFF]
-    return ([SYSEX_MANUFACTURER_ID, CMD_MEDIA_SYNC] + list(layer_bytes) + [index]
-            + encode7(pos_raw) + [1 if playing else 0])
+    out = ([SYSEX_MANUFACTURER_ID, CMD_MEDIA_SYNC] + list(layer_bytes) + [index]
+           + encode7(pos_raw) + [1 if playing else 0])
+    if volume is not None:
+        out += [max(0, min(100, int(volume))), MEDIASYNC_FLAG_VOLUME]
+    return out
 
 
 def build_change_receiver_layer(mac, layer):
@@ -254,7 +265,14 @@ class NowdeInterface(BaseInterface):
         'nowde-jumpfix':       500,         # slave: seek-latency compensation ms (300 RockPro64, ~1000 laptop)
         'nowde-dance':         False,       # slave: Drifter smart-join instead of blind seeks
         'nowde-nodelog':       False,       # v2 node: stream its own log into ours (SET_LOG / LOG frames)
+        # 2.0.4 master-driven volume. MASTER: 'off' | 'absolute' -- absolute puts this player's
+        # `volume` in every MEDIA_SYNC, so the whole mesh runs at the master's level (a lost frame
+        # costs nothing: the next packet, 100 ms later, repeats it). SLAVE: obey the CC#7 that its
+        # node emits from that level. Both off by default: nothing changes until they are set.
+        'nowde-volume-link':   'off',
+        'nowde-volume-follow': False,
     }
+    VOLUME_PERSIST_DELAY = 2.0      # slave: apply live, write the cfg only after this much quiet
 
     def __init__(self, hplayer, player=None, port_name=None, max_retry=0, mode='auto'):
         if _MIDO_IMPORT_ERROR:
@@ -303,7 +321,10 @@ class NowdeInterface(BaseInterface):
         self._lastPoll = 0.0
         self._lastProbe = 0.0
         self._lastStatus = 0.0
-        self._lastSent = None           # (index, playing) of the last MEDIA_SYNC
+        self._lastSent = None           # (index, playing, volume) of the last MEDIA_SYNC
+        self._volApplied = None         # slave: level currently applied to the player (CC#7)
+        self._volPending = None         # slave: level waiting to be written to the cfg
+        self._volLastSeen = 0.0
         self._stopSince = None          # master: when the player last went not-playing
         self._assigned = set()          # macs we already re-layered
 
@@ -447,15 +468,22 @@ class NowdeInterface(BaseInterface):
                 index, playing = self._lastSent[0], True
         else:
             self._stopSince = None
+        volume = None
+        if str(self._cfg('nowde-volume-link')) == 'absolute':
+            try:
+                volume = max(0, min(100, int(self.hplayer.settings.get('volume'))))
+            except (TypeError, ValueError):
+                volume = None
         interval = self.SYNC_INTERVAL if playing else self.SYNC_IDLE_INTERVAL
-        changed = (index, playing) != self._lastSent
+        changed = (index, playing, volume) != self._lastSent
         if not (force or changed or now - self._lastSyncSend >= interval):
             return
-        if self._send(build_media_sync(self._cfg('nowde-layer'), index, position_ms, playing)):
+        if self._send(build_media_sync(self._cfg('nowde-layer'), index, position_ms, playing, volume)):
             self._lastSyncSend = now
             if changed:
-                self.log(f"MEDIA_SYNC layer={self._cfg('nowde-layer')} index={index} state={'playing' if playing else 'stopped'}")
-                self._lastSent = (index, playing)
+                self.log(f"MEDIA_SYNC layer={self._cfg('nowde-layer')} index={index} state={'playing' if playing else 'stopped'}"
+                         + (f" volume={volume}" if volume is not None else ""))
+                self._lastSent = (index, playing, volume)
 
     def _on_player_edge(self, ev, *args):
         if self.isMaster():
@@ -575,6 +603,7 @@ class NowdeInterface(BaseInterface):
                         if now - self._lastProbe >= self.PROBE_INTERVAL:
                             self._lastProbe = now
                             self._probe()
+                        self._volume_persist_tick()   # 2.0.4: commit a settled linked volume
                         if (self.mode == 'auto' and self.role is None
                                 and now - self._connected_at > self.PROBE_TIMEOUT):
                             self._set_role('slave', 'no HELLO, assuming v1 node')
@@ -613,6 +642,8 @@ class NowdeInterface(BaseInterface):
             elif message.type == 'control_change':
                 if message.control == 100 and not self.isMaster():
                     self.handle_media_selection(message.value)
+                elif message.control == 7 and not self.isMaster() and self._cfg('nowde-volume-follow'):
+                    self.handle_linked_volume(message.value)
             # 'start' / 'stop' real-time messages from v2 nodes: CC#100 already carries the
             # transition, nothing to do here.
 
@@ -763,6 +794,45 @@ class NowdeInterface(BaseInterface):
         return f"'{self.port_filter}'"
 
     # ------------------------------------------------------------------ slave leg
+
+    def handle_linked_volume(self, value):
+        """CC#7 from our node = the master's absolute level (2.0.4). Apply it to the player at once;
+        persist it to the cfg only after VOLUME_PERSIST_DELAY of quiet.
+
+        The master repeats the level every second and sends it at 10 Hz while playing, and
+        `settings.set` writes the cfg file on every change: persisting each value would mean tens of
+        card writes per second on every slave during a slider drag. So the live value goes straight
+        to the player and the file is written once the dragging stops (a slave that reboots then
+        comes up at the last level it saw, and the master corrects it within a second anyway)."""
+        try:
+            v = max(0, min(100, int(value)))
+        except (TypeError, ValueError):
+            return
+        self._volPending = v
+        if v != self._volApplied:
+            self._volApplied = v
+            if self.player:
+                try:
+                    # respect a local mute exactly as hplayer's own do-volume handler does
+                    muted = bool(self.hplayer.settings.get('mute'))
+                    self.player._applyVolume(0 if muted else v)      # live, no cfg write
+                except Exception as e:
+                    self.log(colored(f"volume-link: cannot apply {v}: {e}", 'yellow'))
+            self.log(f"CC#7={v}: volume from the master")
+        self._volLastSeen = time.time()
+
+    def _volume_persist_tick(self):
+        """Called from the interface thread: commit a settled linked volume to the cfg."""
+        if self._volPending is None:
+            return
+        if time.time() - self._volLastSeen < self.VOLUME_PERSIST_DELAY:
+            return
+        v, self._volPending = self._volPending, None
+        try:
+            if int(self.hplayer.settings.get('volume')) != v:
+                self.hplayer.settings.set('volume', v)   # one cfg write, once the drag is over
+        except (TypeError, ValueError):
+            self.hplayer.settings.set('volume', v)
 
     def handle_media_selection(self, cc_value):
         """Handle CC#100 for media selection"""

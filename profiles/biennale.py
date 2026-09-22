@@ -431,6 +431,29 @@ if nowde:
 		if nowde.role:
 			player._applyOneLoop(hplayer.playlist.size() <= 1)
 
+	# ── Master-driven volume over the Nowde mesh (2026-09-22, absolute only) ──────────────
+	# The garden has no Zyre: the existing `volume-link` select (off | absolute | relative) drives
+	# the MESH here. `absolute` = every MEDIA_SYNC carries the master's own level, each slave node
+	# hands it to its Pi as CC#7 and the Pi applies it. A lost frame costs nothing (the level is
+	# repeated, not a delta) — which is why `relative` is refused on a Nowde master.
+	@hplayer.on('http2.volume-link')
+	def nowde_volume_link(ev, *args):
+		mode = str(args[0] or 'off')
+		if mode == 'relative':
+			print('[biennale]  volume-link: `relative` needs Zyre; on a Nowde master use `absolute`')
+			mode = 'off'
+		hplayer.settings.set('nowde-volume-link', mode if nowde.isMaster() else 'off')
+
+	@hplayer.on('nowde.role')
+	def nowde_volume_role(ev, *args):
+		# a garden slave follows by construction: nothing to configure per player
+		if args[0] == 'slave':
+			hplayer.settings.set('nowde-volume-follow', True)
+			hplayer.settings.set('nowde-volume-link', 'off')
+		elif args[0] == 'master':
+			hplayer.settings.set('nowde-volume-follow', False)
+			hplayer.settings.set('nowde-volume-link', str(hplayer.settings.get('volume-link') or 'off').replace('relative', 'off'))
+
 	# persist nowde tunables edited from the http2 web UI (interface reads them live)
 	for _k in ('nowde-layer', 'nowde-index-default', 'nowde-jumpfix', 'nowde-dance', 'nowde-nodelog'):
 		hplayer.on('http2.' + _k)(lambda ev, *a, k=_k: hplayer.settings.set(k, a[0]))
