@@ -358,6 +358,10 @@ class VideonetPlayer(BasePlayer):
             self.log("skip", milli/1000)
 
 
+    # the numpy matrix pass above is the only place brightness/contrast are applied
+    def hasBrightness(self):
+        return True
+
     def _applyBrightness(self, brightness):
         self._brightness = brightness/100.0
         self.log("brightness", self._brightness)

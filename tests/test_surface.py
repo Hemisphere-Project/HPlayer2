@@ -28,9 +28,11 @@ def test_surface_card_follows_player_capability():
 
     class NoSurfacePlayer:
         def hasSurface(self): return False
+        def hasBrightness(self): return False
 
     class LedPlayer:
         def hasSurface(self): return True
+        def hasBrightness(self): return False
 
     iface = http2mod.Http2Interface.__new__(http2mod.Http2Interface)
     iface.hplayer = hplayer

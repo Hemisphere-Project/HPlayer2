@@ -218,9 +218,13 @@ class BasePlayer(Module):
     def _applyOneLoop(self, oneloop):
         self.log("one loop", oneloop)
 
+    def hasBrightness(self):
+        """does this backend apply brightness/contrast? (videonet only — the rest log and drop)"""
+        return False
+
     def _applyBrightness(self, brightness):
         self.log("brightness set to", brightness)
-        
+
     def _applyContrast(self, contrast):
         self.log("contrast set to", contrast)
 

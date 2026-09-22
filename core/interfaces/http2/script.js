@@ -231,10 +231,10 @@ $(document).ready(function() {
         }
     }
 
-    // brightness + contrast sliders: only the videonet backend drives them,
-    // every other player no-ops the two events — so they stay hidden unless
-    // the profile opts in: addInterface('http2', 80, {'brightness': True})
-    // (hplayer2#t-042). Hidden by style.css until then: no flash on load.
+    // brightness + contrast sliders: only the videonet backend drives them, every
+    // other player no-ops the two events — the server resolves the gate from the
+    // players' hasBrightness(), unless the profile forces {'brightness': bool}
+    // (hplayer2#t-042/049). Hidden by style.css until then: no flash on load.
     setElementBrightness = function(mode) {
         if (mode === true) {
             $('.brightness-element').show()
