@@ -72,10 +72,17 @@ REGIE_PATH1 = '/opt/RPi-Regie'
 REGIE_PATH2 = '/data/RPi-Regie'
 
 
-# HNdi input node (x86 minis): its local API lists the NDI sources seen on the LAN.
-# A Regie served from a mini offers them in the grid's media picker as `ndi:<name>`.
-NDI_API = 'http://127.0.0.1:8791'
-NDI_POLL_S = 5
+# HNdi input nodes (the x86 minis): each exposes the NDI sources it sees on http://<node>:8791
+# (hndi.conf api_bind = 0.0.0.0). The Regie asks the WHOLE fleet, not its own box: it is a control
+# surface and usually does not sit on a player, so a loopback-only poll listed nothing exactly
+# where the operator is. Nodes come from /boot/ndi-nodes.txt when that file exists (one
+# `host[:port]` per line, `#` comments skipped), else from this box plus every active Zyre peer.
+# The union goes to the grid's media picker as `ndi:<name>`.
+NDI_API_PORT = 8791
+NDI_NODES_FILE = '/boot/ndi-nodes.txt'
+NDI_POLL_S = 5              # period of the sweep
+NDI_NODE_S = 1.5            # per-node HTTP timeout (a Pi refuses in ~1 ms; a busy mini can crawl)
+NDI_SWEEP_S = 2.5           # whole-sweep budget: the walk is serial and runs in listen()'s thread
 
 
 class RegieInterface (BaseInterface):
@@ -92,8 +99,11 @@ class RegieInterface (BaseInterface):
         self._datapath = datapath
         self._server = None
         self._latency = latency
-        self._ndi_sources = []      # names seen by the local HNdi node ([] = no node here)
-        
+        self._ndi_sources = []      # union of the names the fleet's HNdi nodes see ([] = none)
+        self._ndi_seen = {}         # per-node last answer, so a truncated sweep keeps the rest
+        self._ndi_cursor = 0        # where the next sweep starts (a slow fleet is walked round-robin)
+        self._ndi_miss = False      # one empty sweep does not blank the picker
+
 
     # HTTP receiver THREAD
     def listen(self):
@@ -132,15 +142,56 @@ class RegieInterface (BaseInterface):
     def projectPath(self):
         return os.path.join(self._datapath, 'project.json')
 
-    def pollNdiSources(self):
-        """ask the local HNdi node which NDI sources it sees; push the list to the
-        Regie pages when it changes. No node on this box → nothing, silently."""
-        import urllib.request
+    def ndiNodes(self):
+        """base URLs of the HNdi APIs to ask: /boot/ndi-nodes.txt if present, else self + peers"""
+        hosts = []
         try:
-            with urllib.request.urlopen(NDI_API + '/sources', timeout=1.0) as r:
-                names = [x.get('name', '') for x in json.loads(r.read().decode()) if x.get('name')]
-        except Exception:  # noqa: BLE001 — refused, timeout, bad json: no node here
-            names = []
+            with open(NDI_NODES_FILE) as fd:
+                hosts = [l.strip() for l in fd if l.strip() and not l.strip().startswith('#')]
+        except OSError:                             # no file here: discover
+            pass
+        if not hosts:
+            hosts = ['127.0.0.1']                   # this box first, then the fleet
+            z = self.hplayer.interface('zyre')      # same walk as wallclock._peerIps()
+            if z and hasattr(z, 'node'):
+                for peer in list(z.node.book.values()):
+                    if peer.active and peer.ip and peer.ip not in hosts:
+                        hosts.append(peer.ip)
+        return ['http://' + (h if ':' in h else h + ':' + str(NDI_API_PORT)) for h in hosts]
+
+    def pollNdiSources(self):
+        """ask the fleet's HNdi nodes which NDI sources they see; push the union to the
+        Regie pages when it changes. A host with no node refuses or times out: skipped."""
+        import urllib.request
+        nodes = self.ndiNodes()
+        deadline = time.time() + NDI_SWEEP_S
+        walked = 0
+        for i in range(len(nodes)):
+            base = nodes[(self._ndi_cursor + i) % len(nodes)]
+            try:
+                with urllib.request.urlopen(base + '/sources', timeout=NDI_NODE_S) as r:
+                    self._ndi_seen[base] = [x.get('name', '') for x in json.loads(r.read().decode())
+                                            if isinstance(x, dict) and x.get('name')]
+            except Exception:  # noqa: BLE001 — refused, timeout, bad json: no node there
+                self._ndi_seen[base] = []
+            walked += 1
+            # this walk is serial, in the thread that watches self.stopped: never spend a whole
+            # period in it, and never make a stop wait for the hosts still to come
+            if self.stopped.is_set() or time.time() > deadline:
+                break
+        self._ndi_cursor = (self._ndi_cursor + walked) % len(nodes) if nodes else 0
+        self._ndi_seen = {b: v for b, v in self._ndi_seen.items() if b in nodes}
+        names = []
+        for base in nodes:                          # union, in node order, last answer per node
+            for n in self._ndi_seen.get(base, []):
+                if n not in names:
+                    names.append(n)
+        # one empty sweep (a node rebooting, a slow answer) must not blank the picker: publish an
+        # empty list only when two in a row agree — kmini-002's first boot flickered it (2026-09-13)
+        if not names and self._ndi_sources and not self._ndi_miss:
+            self._ndi_miss = True
+            return
+        self._ndi_miss = False
         if names != self._ndi_sources:
             self._ndi_sources = names
             self.log('NDI sources:', names)
