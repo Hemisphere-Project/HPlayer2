@@ -688,6 +688,24 @@ $(document).ready(function() {
         });
     })();
 
+    // --- Display panel (auto-refresh: HDMI mode follows the media frame rate) ---
+    // 0 = off, 1 = switch + replay, 2 = switch + restart the unit. The radar-panel shape:
+    // trigger the event, the engine persists and echoes the whole dict via settings.updated.
+    (function() {
+        var LABELS = { 0: 'fixed mode', 1: 'auto (replay)', 2: 'auto (restart)' };
+        socket.on('settings.updated', function(msg) {
+            if (msg['auto-refresh'] === undefined) return;
+            var rung = parseInt(msg['auto-refresh']) || 0;
+            var el = $('#display_auto_refresh');
+            if (!el.is(':focus')) el.val(String(rung));
+            $('#display_state').text(LABELS[rung] || LABELS[0])
+                .toggleClass('badge-success', rung > 0).toggleClass('badge-secondary', rung === 0);
+        });
+        $('#display_auto_refresh').on('change', function() {
+            trigger('auto-refresh', parseInt(this.value) || 0);
+        });
+    })();
+
     // --- Radar panel (biennale-2026-module-radar) ---
     // Tuning sliders + live presence feedback from the radar interface. A second
     // settings.updated handler (coexists with the one above) syncs the radar-* keys.

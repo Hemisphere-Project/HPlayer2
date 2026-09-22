@@ -138,6 +138,7 @@ class MpvPlayer(BasePlayer):
 
         self._audio_channels = 2    # current track layout (observed live)
         self._pan_current = None    # last mono/pan request, re-applied on layout change
+        self._container_fps = None  # media frame rate (observed live) -> 'fps' on change
 
 
     ############
@@ -295,6 +296,9 @@ class MpvPlayer(BasePlayer):
             # http2 next to the surface's target size and output mode
             self._mpv_send('{ "command": ["observe_property", 7, "osd-dimensions/w"] }')
             self._mpv_send('{ "command": ["observe_property", 8, "osd-dimensions/h"] }')
+            # the media's own frame rate, for auto-refresh (HDMI mode matching). Arrives
+            # when the file loads, on its own schedule — NOT ordered against 'playing'.
+            self._mpv_send('{ "command": ["observe_property", 9, "container-fps"] }')
             closeToTheEnd = False
             nearendEmitted = False
             
@@ -372,6 +376,20 @@ class MpvPlayer(BasePlayer):
                                 self._out_dim[mpvsays['name'][-1]] = int(d) if d else 0
                                 w, h = self._out_dim.get('w', 0), self._out_dim.get('h', 0)
                                 self.update('output', f'{w}x{h}' if w and h else None)
+
+                            elif mpvsays['name'] == 'container-fps':
+                                # emitted on CHANGE only, the id-6 shape: a media-derived
+                                # property that arrives late and drives a re-apply. The
+                                # auto-refresh switch hangs on THIS, never on 'playing' —
+                                # nothing orders the two, so a handler on 'playing' would
+                                # read an fps that is absent on the first file and stale
+                                # on every later one.
+                                d = mpvsays.get('data')
+                                fps = round(float(d), 3) if d else None
+                                if fps and fps != self._container_fps:
+                                    self._container_fps = fps
+                                    self.update('fps', fps)
+                                    self.emit('fps', fps)
 
                             elif mpvsays['name'] == 'audio-params/channel-count':
                                 if 'data' in mpvsays and mpvsays['data']:

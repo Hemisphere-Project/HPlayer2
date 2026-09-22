@@ -197,6 +197,34 @@
                 </div>
             </div>
 
+            <!-- Display / auto-refresh — match the HDMI output mode to the media's frame
+                 rate (legacy Pi stack: tvservice). Its own card rather than the sync one:
+                 this is a per-player property, ON for solo projection players and OFF on
+                 sync fleets — the opposite population to the sync master settings. -->
+            <div class="row mt-2" id="display-panel">
+                <div class="col-12">
+                    <div class="card-header text-white bg-dark d-flex align-items-center panel-toggle" data-body="#display_body">
+                        <i class="fas fa-chevron-right panel-chevron mr-2"></i>
+                        <span class="mr-auto">Display</span>
+                        <span id="display_state" class="badge badge-secondary">fixed mode</span>
+                    </div>
+                    <div id="display_body" class="collapse panel-body">
+                    <div class="card-body row pt-3">
+                        <div class="col-12">
+                            <div class="mb-2"><span class="badge badge-secondary mr-2">auto-refresh</span>
+                                <select id="display_auto_refresh">
+                                    <option value="0">off &mdash; keep the boot mode</option>
+                                    <option value="1">on &mdash; switch, then replay (~1-2 s black)</option>
+                                    <option value="2">on &mdash; switch, then restart the player (~5 s black)</option>
+                                </select>
+                                <span class="text-muted ml-2" style="font-size:.85em;">match the HDMI output mode to the file's frame rate</span></div>
+                            <div class="text-muted" style="font-size:.85em;">Stops 25 fps running 2-3-2-3 and 24 fps running 3:2 on a 60 Hz link &mdash; the &laquo;&nbsp;slight lag&nbsp;&raquo; a projector shows and a TV hides. Leave it <b>off</b> on a synced fleet: the set picks its mode once, and a mid-show switch would break the lock. Pick <b>replay</b> first; if the picture does not come back after a switch, use <b>restart</b>. Legacy Pi images only (no effect under KMS / on x86).</div>
+                        </div>
+                    </div>
+                    </div><!-- /display_body -->
+                </div>
+            </div>
+
             <!-- Radar (biennale-2026-module-radar) -->
             <div class="row mt-2" id="radar-panel">
                 <div class="col-12">

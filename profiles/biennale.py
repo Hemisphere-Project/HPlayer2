@@ -1,4 +1,5 @@
 from core.engine.hplayer import HPlayer2
+from core.engine import hdmi
 from core.engine import network
 from core.interfaces.nowde import media_index_of
 import os
@@ -216,6 +217,78 @@ def http2_logs(ev, *args):
 	if len(args) and args[0] == 'time': return
 	if ev.endswith('.drift'): return
 	hplayer.interface('http2').send('logs', [ev]+list(args))
+
+# ─── AUTO-REFRESH: match the HDMI output mode to the media's frame rate ──────
+# Legacy Pi stack only (tvservice + dispmanx); a no-op under KMS / on x86.
+# Default OFF, so a fleet that never touches it behaves exactly as before:
+#  - ON  for a SOLO projection player — one file, one rate, one switch per boot;
+#  - OFF on a sync fleet — the set chooses its mode once, and a mid-show mode
+#    switch would drop the link and break the lock.
+#
+# Three states, because recovering the picture after a live mode switch is the one
+# unproven half of this and no software can observe "the screen went black":
+#   0 = off · 1 = switch, then REPLAY the media (~1-2 s black)
+#   2 = switch, then RESTART the unit (~5 s black)
+# On 2026-09-10, across 22 players, the only recovery proven to bring a picture back
+# after a live `tvservice -e` was a unit restart — but that was without auto-refresh
+# replaying first. Rung 1 is the cheap bet; rung 2 is the known-good fallback, so the
+# projector session can settle it by changing a setting, not the code.
+#
+# Declared here, before run(): Settings.load() restores only keys already present in
+# _settings, so a key created by set() alone would silently reset at the next boot.
+# The persisted cfg still wins (the nowde-jumpfix idiom above).
+hplayer.settings._settings['auto-refresh'] = 0
+
+@hplayer.on('http2.auto-refresh')
+def http2_auto_refresh(ev, *args):
+	try:
+		mode = int(args[0]) if args else 0
+	except (TypeError, ValueError):
+		mode = 0
+	hplayer.settings.set('auto-refresh', mode if mode in (0, 1, 2) else 0)
+
+@hplayer.on('player.fps')
+def auto_refresh(ev, *args):
+	rung = hplayer.settings.get('auto-refresh')
+	if not rung: return
+	if not args: return
+	fps = args[0]
+
+	offered = hdmi.offered_modes()
+	if not offered:
+		hplayer.log('auto-refresh: no CEA mode list (tvservice absent?) — leaving the mode alone')
+		return
+
+	mode, why = hdmi.pick_mode(fps, offered)
+	drift = hdmi.drift_seconds(fps)
+	residual = '' if drift is None else ' — residual %.1f s/frame (NTSC film on an exact-Hz link)' % drift
+	if mode is None:
+		hplayer.log('auto-refresh: %s fps —' % fps, why)
+		return
+
+	current = hdmi.current_mode()
+	if current == mode:
+		hplayer.log('auto-refresh: %s fps — already on %s%s' % (fps, why, residual))
+		return
+
+	hplayer.log('auto-refresh: %s fps — switching %s -> %s%s'
+	            % (fps, current if current is not None else '?', why, residual))
+	if not hdmi.switch(mode):
+		hplayer.log('auto-refresh: tvservice refused CEA %d — mode unchanged' % mode)
+		return
+
+	# The link was just powered off and on under a running mpv, which on the legacy
+	# stack draws on dispmanx — a surface the fbset dance does not touch. Recover at
+	# the configured rung; ② reports which one the projector actually needed.
+	if rung >= 2:
+		hplayer.log('auto-refresh: restarting the unit to re-attach to the new link')
+		player.emit('hardreset')            # ~5 s: the 2026-09-10 field-proven recovery
+		return
+
+	media = player.status('media')
+	if media:
+		hplayer.log('auto-refresh: replaying', media)
+		hplayer.playlist.play(media)
 
 # ─── RADAR proximity + SCHEDULE window (biennale-2026-module-radar) ──────────
 # Both optional and self-activating:
