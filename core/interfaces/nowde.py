@@ -272,6 +272,7 @@ class NowdeInterface(BaseInterface):
         'nowde-volume-link':   'off',
         'nowde-volume-follow': False,
     }
+    VOLUME_SETTLE = 0.5             # master: carry a level only once it has held still this long
     VOLUME_PERSIST_DELAY = 2.0      # slave: apply live, write the cfg only after this much quiet
 
     def __init__(self, hplayer, player=None, port_name=None, max_retry=0, mode='auto'):
@@ -322,6 +323,9 @@ class NowdeInterface(BaseInterface):
         self._lastProbe = 0.0
         self._lastStatus = 0.0
         self._lastSent = None           # (index, playing, volume) of the last MEDIA_SYNC
+        self._volRaw = None             # master: the slider's current value (may still be moving)
+        self._volRawSince = 0.0         # master: since when it has held that value
+        self._volCarried = None         # master: the settled level actually put on the wire
         self._volApplied = None         # slave: level currently applied to the player (CC#7)
         self._volPending = None         # slave: level waiting to be written to the cfg
         self._volLastSeen = 0.0
@@ -471,9 +475,25 @@ class NowdeInterface(BaseInterface):
         volume = None
         if str(self._cfg('nowde-volume-link')) == 'absolute':
             try:
-                volume = max(0, min(100, int(self.hplayer.settings.get('volume'))))
+                raw = max(0, min(100, int(self.hplayer.settings.get('volume'))))
             except (TypeError, ValueError):
-                volume = None
+                raw = None
+            if raw is not None:
+                # Debounce the SOURCE, not just the slaves' cfg writes: dragging the master's
+                # slider walks through tens of values, and each distinct one would otherwise go out
+                # at once (it is part of `changed`) and be applied by five players. A level is put
+                # on the wire only once it has held still for VOLUME_SETTLE; until then the
+                # previous one keeps being carried, so the fleet hears one clean step ~0.5 s after
+                # the slider stops instead of the whole drag. The first level after the link is
+                # switched on (or after a restart) is carried immediately.
+                if raw != self._volRaw:
+                    self._volRaw = raw
+                    self._volRawSince = now
+                if self._volCarried is None:
+                    self._volCarried = raw
+                elif raw != self._volCarried and now - self._volRawSince >= self.VOLUME_SETTLE:
+                    self._volCarried = raw
+                volume = self._volCarried
         interval = self.SYNC_INTERVAL if playing else self.SYNC_IDLE_INTERVAL
         changed = (index, playing, volume) != self._lastSent
         if not (force or changed or now - self._lastSyncSend >= interval):
