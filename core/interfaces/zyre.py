@@ -65,13 +65,23 @@ PRECISION = 1000000
 SAMPLER_SIZE = 100
 KEEP_SAMPLE = [0.001, 0.3]
 
+# Wall-clock step detection (s). A hard step on either machine's
+# CLOCK_REALTIME shifts every measured peer clockshift by the step size, and
+# nothing notices until the 120s refresh fires - so the fleet chases a wrong
+# master position for up to two minutes. Kept well under the pi-tools
+# datesync deadband (3s) so a correction that IS applied out there is always
+# caught here, and far above any scheduling jitter between two reads taken
+# microseconds apart.
+CLOCK_STEP = 0.25
+
 #
 #  Round Trip REQ-REP Time sample
 #
 class TimeSample():
     def __init__(self, sock):
         self.sock = sock
-        self.LT1 = int(time.time()*PRECISION)
+        self.MT1 = time.monotonic()                    # local ELAPSED reference
+        self.LT1 = int(time.time()*PRECISION)          # wall instant, for the shift
         msg = Zmsg()
         msg.addstr( str(self.LT1).encode() )
         Zmsg.send( msg, self.sock)
@@ -79,10 +89,16 @@ class TimeSample():
     def recv(self):
         if not self.sock:
             return
-        self.LT2 = int(time.time()*PRECISION)
+        self.MT2 = time.monotonic()
         self.ST = int(Zmsg.recv(self.sock).popstr().decode())
         self.sock = None
-        self.RTT = self.LT2 - self.LT1
+        # RTT is a LOCAL elapsed measurement: monotonic. A wall step mid
+        # round-trip used to inflate it by the step size, which poisons the
+        # SELECTION too - compute() sorts and weights the sampler by RTT.
+        self.RTT = int((self.MT2 - self.MT1) * PRECISION)
+        # CS is by definition a WALL difference between the two machines:
+        # the local wall instant at send, plus half the (now clean) elapsed
+        # round trip, is when the peer read its own wall clock as ST.
         self.CS = self.ST - (self.RTT/2) - self.LT1
 
 
@@ -246,11 +262,11 @@ class Subscriber():
                 break
 
             # POLL
-            now = time.time()
+            now = time.monotonic()      # how long the poll BLOCKED: elapsed
             sock = poller.wait(500)
 
             if not sock:
-                if time.time() - now < 0.1:
+                if time.monotonic() - now < 0.1:
                     # Same EINTR-vs-broken ambiguity as the node poller —
                     # and killing the whole app for one peer's subscriber is
                     # scorched earth. Debounce, then let THIS subscriber die;
@@ -438,6 +454,11 @@ class ZyreNode ():
         }) 
         self.book[self.zyre.uuid()].subscribe(self.topics)
 
+        # (wall, monotonic) taken at the same instant - see _checkClockStep.
+        # BEFORE the Zactor below: it starts the poller thread, which calls
+        # _checkClockStep on its first pass.
+        self._clockPair = (time.time(), time.monotonic())
+
         # Start Poller
         self._actor_fn = zactor_fn(self.actor_fn) # ctypes function reference must live as long as the actor.
         if netiface:
@@ -445,6 +466,31 @@ class ZyreNode ():
         self.actor = Zactor(self._actor_fn, netiface)
         self.done = False
         self.broken = False    # set by actor_fn on confirmed poller failure
+
+
+    # Watch the wall clock against the monotonic clock: they advance together
+    # unless CLOCK_REALTIME is STEPPED (RTC read at boot, ntp/datesync
+    # correction, a manual date -s). On a step, every peer clockshift we hold
+    # is stale by the step size, so re-sample now instead of waiting out the
+    # 120s refresh. start() does the whole job: it stops the running actor,
+    # cancels the pending refresh Timer and re-arms a fresh sampling round.
+    # Called from the node poller loop, which ticks at >= 2Hz even when idle.
+    def _checkClockStep(self):
+        wall, mono = time.time(), time.monotonic()
+        pWall, pMono = self._clockPair
+        self._clockPair = (wall, mono)
+
+        step = (wall - pWall) - (mono - pMono)
+        if abs(step) < CLOCK_STEP:
+            return
+
+        self.interface.log('wall clock stepped by', round(step, 3),
+                            's: re-sampling peer clock shifts')
+        for peer in list(self.book.values()):
+            if peer.active and peer.timeclient:
+                # never from this thread: start() joins the running sampler
+                # actor (up to 1s per peer) and the poller must keep polling.
+                Timer(0, peer.timeclient.start).start()
 
 
     # ZYRE Zactor
@@ -469,12 +515,16 @@ class ZyreNode ():
                 self.interface.log('stopping node')
                 break
 
+            # A step on CLOCK_REALTIME invalidates every peer clockshift:
+            # catch it here, where the loop already ticks at >= 2Hz.
+            self._checkClockStep()
+
             # POLL
-            now = time.time()
+            now = time.monotonic()      # how long the poll BLOCKED: elapsed
             sock = poller.wait(500)
 
             if not sock:
-                if time.time() - now < 0.1:
+                if time.monotonic() - now < 0.1:
                     # Instant-empty return: an interrupted wait (EINTR-class)
                     # or a genuinely broken poller. One-shot detection used to
                     # kill the WHOLE APP on RF churn (wifi wall bench,
@@ -738,6 +788,12 @@ class ZyreNode ():
                 data['at'] -= self.peer(data['from']).clockshift()
             at = data['at'] / PRECISION
             delay =  at - time.time()
+            # 'at' is a WALL instant (the peer's, shifted into ours), and it
+            # is only meaningful at THIS read. Everything downstream - the
+            # Timer, the busy loop, the accuracy log - is elapsed time, so
+            # pin the deadline to the monotonic clock here, once. A step in
+            # between used to fire the event early or late by the step size.
+            atMono = time.monotonic() + delay
 
             if delay <= -10:
                 self.interface.log('WARNING event already passed by', delay, 's, its very late !! might be out of sync !')
@@ -759,21 +815,24 @@ class ZyreNode ():
                 
                 # event is programmed in the future
                 self.interface.log('programmed event in', delay, 's')
-                t = Timer( delay-0.03, self.preProcessor2, args=[data, at])
+                t = Timer( delay-0.03, self.preProcessor2, args=[data, atMono])
                 t.start()
                 self.interface.emit('planned', data)
 
         else:
             self.preProcessor2(data)
 
-    def preProcessor2(self, data, at=0):
-        
-        # busy loop until time is reached
-        while at > 0 and at-time.time() >= 0.0005:
+    def preProcessor2(self, data, atMono=None):
+
+        # busy loop until time is reached (monotonic deadline: see above)
+        while atMono is not None and atMono-time.monotonic() >= 0.0005:
             time.sleep(0.0005)
-            # self.interface.log('busy loop', at-time.time())
-        
-        self.interface.log('zyre processor sync accuracy', (time.time()-at)*1000, 'ms')
+            # self.interface.log('busy loop', atMono-time.monotonic())
+
+        # only the scheduled path has a deadline to be accurate against; the
+        # direct path used to log the epoch itself as an 'accuracy'
+        if atMono is not None:
+            self.interface.log('zyre processor sync accuracy', (time.monotonic()-atMono)*1000, 'ms')
         self.interface.emit('event', *[data])
         self.interface.emit(data['event'], *data['args'])
 
@@ -865,7 +924,7 @@ class ZyreInterface (BaseInterface):
                 break
             if not getattr(self.node, 'broken', False):
                 continue
-            now = time.time()
+            now = time.monotonic()      # a 10min WINDOW: elapsed
             recoveries = [t for t in recoveries if now - t < 600]
             recoveries.append(now)
             if len(recoveries) > 3:

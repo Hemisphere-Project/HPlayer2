@@ -101,7 +101,7 @@ class Drifter():
         # and profiles re-arm on that event — wiping the measurement here
         # would lose the seek-latency learning on every join. A genuinely
         # new play >2s later still discards the stale jump.
-        if self._pendingJump is not None and time.time() - self._pendingJump['t0'] > 2.0:
+        if self._pendingJump is not None and time.monotonic() - self._pendingJump['t0'] > 2.0:
             self._pendingJump = None
 
     # Freewheel: back to speed 1.0, clear servo state (clock lost / master gone)
@@ -128,7 +128,7 @@ class Drifter():
         target = clock + self._seekLatEst
         if duration and duration > 3:
             target = target % duration
-        self._pendingJump = {'t0': time.time()}
+        self._pendingJump = {'t0': time.monotonic()}    # a 2s freshness WINDOW: elapsed
         self._diffWindow.clear()
         if self.doLog:
             self.log("timedelay=" + colored(round(diff, 2), "red"),
