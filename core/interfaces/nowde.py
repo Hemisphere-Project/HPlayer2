@@ -714,9 +714,23 @@ class NowdeInterface(BaseInterface):
                         self._probe()
 
                 # Monitor connection health
+                enum_errors = 0
                 while not self.stopped.is_set() and self.port is not None:
-                    # Check if port still exists in available ports
-                    available_ports = mido.get_input_names()
+                    # Check if port still exists in available ports. The enumeration itself can
+                    # fail for a moment (`MidiInAlsa::getPortName: error looking for port name!`,
+                    # W6 2026-09-23 12:44) while the node is fine — a HELLO arrived in the same
+                    # second. That used to tear the link down; now only three failures in a
+                    # row count as a lost port.
+                    try:
+                        available_ports = mido.get_input_names()
+                        enum_errors = 0
+                    except Exception as err:
+                        enum_errors += 1
+                        self.log(colored(f"port enumeration failed ({enum_errors}/3): {err}", 'yellow'))
+                        if enum_errors >= 3:
+                            break
+                        self.stopped.wait(self.CONNECTION_CHECK_INTERVAL)
+                        continue
                     if target_port not in available_ports:
                         self.log(colored(f"WARNING: MIDI port '{target_port}' disconnected!", 'red'))
                         break
@@ -751,15 +765,32 @@ class NowdeInterface(BaseInterface):
         self._close_ports()
         self.log("listener stopped")
 
+    PORT_CLOSE_TIMEOUT = 3.0
+
     def _close_ports(self):
         for attr in ('port', 'out'):
             p = getattr(self, attr)
             if p is not None:
-                try:
-                    p.close()
-                except Exception as close_err:
-                    self.log(f"error closing {attr}: {close_err}")
                 setattr(self, attr, None)
+                # rtmidi's close() can block for good on a port whose device is going away:
+                # on W6 (2026-09-23 12:44 → power-off ~00:15) the listener never came back
+                # from here, so no relink was ever attempted and the slave freewheeled ~11 h
+                # while usbfix re-enumerated the node four times for nothing. Close off-thread
+                # with a deadline; past it, abandon the handle (a leaked thread beats a dead link).
+                def _do_close(p=p, attr=attr):
+                    try:
+                        p.close()
+                    except Exception as close_err:
+                        self.log(f"error closing {attr}: {close_err}")
+                t = threading.Thread(target=_do_close, name='nowde-close-' + attr, daemon=True)
+                try:
+                    t.start()
+                except RuntimeError as err:
+                    self.log(colored(f"cannot close {attr} off-thread ({err}): abandoning it", 'red'))
+                    continue
+                t.join(self.PORT_CLOSE_TIMEOUT)
+                if t.is_alive():
+                    self.log(colored(f"closing {attr} hung > {self.PORT_CLOSE_TIMEOUT:.0f} s: abandoned, relinking anyway", 'red'))
         self._resolved_port_name = None
         self.receivers = []
         self.mesh_synced = False
