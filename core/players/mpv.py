@@ -554,16 +554,28 @@ class MpvPlayer(BasePlayer):
     def _isNdi(self, path):
         return path.startswith('ndi://') or path.lower().endswith('.ndi')
 
+    @staticmethod
+    def _ndi_stream(name):
+        """NDI names read "MACHINE (stream)": keep the stream only, so a cue follows the
+        stream to whichever machine publishes it — a spare sender taking over with the same
+        stream names (IMA-Niort, 2026-09-23). HNdi matches "(stream)" as a suffix. A name
+        with no "MACHINE (…)" shape (ip:port, a bare stream) passes through."""
+        i = name.find(' (')
+        if i > 0 and name.endswith(')'):
+            return name[i + 2:-1].strip() or name
+        return name
+
     def _ndi_source(self, path):
-        """source name: the URL body, or the first non-comment line of the .ndi file"""
+        """source name: the URL body, or the first non-comment line of the .ndi file,
+        machine part dropped (see _ndi_stream)"""
         if path.startswith('ndi://'):
-            return path[6:].strip()
+            return self._ndi_stream(path[6:].strip())
         try:
             with open(path) as fd:
                 for line in fd:
                     line = line.strip()
                     if line and not line.startswith('#'):
-                        return line
+                        return self._ndi_stream(line)
         except OSError as e:
             self.log('ndi: cannot read', path, e)
         return ''
