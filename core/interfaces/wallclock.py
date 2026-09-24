@@ -118,6 +118,7 @@ class WallclockInterface (BaseInterface):
             self._candLast = 0
             self._csClient = None
             self._csReady = False
+            self._csStuckSince = None   # clock client missing or stalled since (re-arm after 30 s)
             self._lastQuiet = {}
             self._ring = []
             self._lastSummary = time.time()
@@ -134,6 +135,32 @@ class WallclockInterface (BaseInterface):
             self._cueStartedAt = 0.0    # when we last started a cue (a start is not a stall for 3 s)
             self._noPeerSince = None    # master clock heard but no zyre peer since (rebuild request)
             self._legacyStalled = None  # the profile's stall hook, restored when leaving cue mode
+
+    def _rearmClockSync(self, peer, tc, name):
+        # The TimeClient's own Timers are the only thing that ever starts a sampling round; when
+        # one cannot start (thread exhaustion) nothing ever would, and this slave waits for a
+        # clock sync forever (kouagou03, 60 h from 2026-09-21 23:28). This thread runs on every
+        # master packet anyway: after 30 s of a missing or stalled client, re-arm it from here.
+        stuck = tc is None or (hasattr(tc, 'stalled') and tc.stalled())
+        now = time.time()
+        if not stuck:
+            self._csStuckSince = None
+            return
+        if not self._csStuckSince:
+            self._csStuckSince = now
+            return
+        if now - self._csStuckSince < 30.0:
+            return
+        self._csStuckSince = now
+        try:
+            if tc is None:
+                self.log('no clock client for', name, 'for 30 s -> re-syncing the peer')
+                peer.sync()
+            else:
+                self.log('clock client for', name, 'stalled for 30 s -> re-arming it')
+                tc.start()
+        except Exception as e:
+            self.log('clock re-arm failed (' + str(e) + '): retrying in 30 s')
 
     #
     # MASTER side
@@ -246,6 +273,7 @@ class WallclockInterface (BaseInterface):
         self._candName = None
         self._csClient = None
         self._csReady = False
+        self._csStuckSince = None
         if self.drifter:
             self.drifter.arm()
         self.log('locked on wall clock master:', name)
@@ -534,6 +562,7 @@ class WallclockInterface (BaseInterface):
                 continue
             self._noPeerSince = None
             tc = getattr(peer, 'timeclient', None)
+            self._rearmClockSync(peer, tc, name)
             if tc is not self._csClient:
                 self._csClient = tc
                 self._csReady = False

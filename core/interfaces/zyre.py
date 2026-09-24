@@ -109,9 +109,27 @@ class TimeClient():
         self._terminated = False
         self.actor = Zactor(self._actor_fn, create_string_buffer(b"Sync request"))
         self.done = False
-        
-        self._refresh = Timer(120, self.start)
-        self._refresh.start()
+        self._arm(120)
+
+    def _arm(self, delay):
+        # Schedule the next round. A Timer that cannot start (`can't start new thread`) used to
+        # raise out of here — from __init__ (Peer.sync) that left the peer with no TimeClient
+        # while the actor just launched sampled for nobody: kouagou03 freewheeled ~60 h that way
+        # (2026-09-21 23:28, a link-loss rebuild storm). Never raise: an unarmed client reports
+        # stalled() and wallclock re-arms it.
+        if self._refresh:
+            self._refresh.cancel()
+        self._refresh = None
+        t = Timer(delay, self.start)
+        try:
+            t.start()
+            self._refresh = t
+        except RuntimeError as e:
+            safe_print("\t", "["+self.client_ip+"]", "refresh timer unavailable (" + str(e) + "): waiting for a re-arm")
+
+    def stalled(self):
+        # round over, not stopped, and nothing scheduled to start the next one
+        return self.done and not self._terminated and not (self._refresh and self._refresh.is_alive())
 
     def stop(self):
         self._terminated = True
@@ -173,10 +191,7 @@ class TimeClient():
         # trying again — a wall slave shows black that whole time (no clockshift, no chase, no
         # self-start). Retry a failed round after 10 s instead; a good round keeps the 120 s pace.
         if self.status != 1 and not self._terminated:
-            if self._refresh:
-                self._refresh.cancel()
-            self._refresh = Timer(10, self.start)
-            self._refresh.start()
+            self._arm(10)
 
 
     #  COMPUTE average Clock Shift
@@ -392,7 +407,13 @@ class Peer():
     def sync(self):
         if not self.active: return
         if not self.ts_port: return
-        self.timeclient = TimeClient(self.ip, self.ts_port)
+        if self.timeclient:
+            self.timeclient.stop()      # a second JOIN (or a wallclock re-sync) must not leave the old one sampling
+        try:
+            self.timeclient = TimeClient(self.ip, self.ts_port)
+        except RuntimeError as e:
+            self.timeclient = None
+            self.node.interface.log('peer', self.name, 'time client unavailable (' + str(e) + '): wallclock will retry')
 
     def clockshift(self):
         shift = 0
