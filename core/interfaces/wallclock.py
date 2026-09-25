@@ -62,6 +62,23 @@ class PacketClock():
         return max(b[1] for b in self.buckets) + self.latency
 
 
+def subnet_broadcast(iface, ip):
+    """The sync subnet's broadcast address. A hotspot configured without `brd` (Kouagou01-64:
+    `10.1.0.1/24`, 2026-09-25) reports its own address as broadcast: derive it from the netmask."""
+    if not ip or ip.startswith('127.'):
+        return None
+    try:
+        import netifaces, ipaddress
+        a = netifaces.ifaddresses(iface)[netifaces.AF_INET][0]
+        b = a.get('broadcast')
+        if b and b != ip and not b.startswith('127.'):
+            return b
+        mask = a.get('netmask') or '255.255.255.0'
+        return str(ipaddress.IPv4Network(ip + '/' + mask, strict=False).broadcast_address)
+    except Exception:
+        return ip.rsplit('.', 1)[0] + '.255'
+
+
 def media_index_of(path):
     """Numeric prefix of a media file name (01_xxx.mp4 -> 1), 0 when un-numbered.
     Same contract as the Nowde line (core/interfaces/nowde.py): the INDEX is the cue."""
@@ -296,8 +313,7 @@ class WallclockInterface (BaseInterface):
             ip = network.get_ip(self.iface) if self.iface else network.get_ip()
             lastPin[0] = time.time()
             if self.iface:
-                b = network.get_broadcast(self.iface)
-                bcast[0] = b if b and not b.startswith('127.') else None
+                bcast[0] = subnet_broadcast(self.iface, ip)
             if ip and ip != '127.0.0.1':
                 try:
                     sock.setsockopt(socket.IPPROTO_IP, socket.IP_MULTICAST_IF, socket.inet_aton(ip))
