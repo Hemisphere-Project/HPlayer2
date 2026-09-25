@@ -241,6 +241,73 @@ hmod._origStart = orig
 assert hmod._starved['count'] == before + 1
 print("   PASS")
 
+print("== T8: clock-rate learning, 20 min of synthetic packets at +40 ppm ==")
+pc = PacketClock()
+t0 = 2_000_000 * PRECISION
+random.seed(8)
+pkts = []
+for i in range(20 * 60 * 20):                        # 20 min at 20 Hz
+    local = t0 + i * 50000
+    master_t = t0 + TRUE_CS + int(i * 50000 * (1 + 40e-6))
+    pkts.append((local + random.uniform(1000, 3000) + (random.uniform(20000, 150000) if random.random() < 0.3 else 0), master_t))
+for recv, master_t in sorted(pkts):                  # the socket hands them over in ARRIVAL order
+    pc.add(master_t, recv)
+print("   rate = %+.1f ppm" % (pc.rate() * 1e6))
+assert abs(pc.rate() * 1e6 - 40) < 3, "rate not learned"
+print("   PASS")
+
+print("== T9: 60 s link outage, slave plays 0.5% FAST -> no seek, still locked after ==")
+wcmod.time = ThreadClock('time')
+m9Player = FakePlayer(60.0)
+m9Hp = FakeHPlayer(m9Player, FakeZyre(FakePeer('SLAVE')))
+master = WallclockInterface(m9Hp, None, True, player=m9Player, port=13739, rate=20, unicast=True, driftLog=None)
+master._myName = 'MASTER'
+link = {'up': True}
+master._peerIps = lambda: ['127.0.0.1'] if link['up'] else []
+s9Player = FakePlayer(60.0, rateError=1.005)
+s9Player._base = (m9Player._now() + 0.3) % 60.0
+s9Hp = FakeHPlayer(s9Player, FakeZyre(FakePeer('MASTER', tc=FakeTC(1, CS_US))))
+slave9 = WallclockInterface(s9Hp, None, False, player=s9Player, port=13739, masterName='MASTER', driftLog=None)
+slave9._myName = 'SLAVE'; slave9.drifter.doLog = False
+def feeder9():
+    while not stop9.is_set():
+        master._latch = (m9Player.position(), int((_realTime() + CS_US / PRECISION) * PRECISION))
+        stop9.wait(0.04)
+stop9 = threading.Event()
+for x in (master, slave9): x.recvThread.daemon = True; x.start()
+threading.Thread(target=feeder9, daemon=True).start()
+time.sleep(10)
+d0 = wrapdiff(m9Player._now(), s9Player._now(), 60.0); seeks0 = s9Player.seeks
+link['up'] = False
+worst = 0.0
+for i in range(60):
+    time.sleep(1)
+    worst = max(worst, wrapdiff(m9Player._now(), s9Player._now(), 60.0))
+link['up'] = True
+time.sleep(5)
+d1 = wrapdiff(m9Player._now(), s9Player._now(), 60.0)
+print("   before %.0f ms | worst during outage %.0f ms | after %.0f ms | seeks during+after %d" % (d0 * 1000, worst * 1000, d1 * 1000, s9Player.seeks - seeks0))
+print("   (the old code: speed 1.0 at 0.5% fast = +300 ms after 60 s)")
+assert s9Player.seeks == seeks0, "an outage must not cost a seek"
+assert worst < 0.1 and d1 < 0.08, "the model must hold the slave within 100 ms"
+print("   PASS")
+master.stopped.set(); slave9.stopped.set(); stop9.set()
+
+print("== T10: orphan slave (no master at all, player stopped) -> starts its own media ==")
+wcmod.time = time
+oPlayer = FakePlayer(60.0); oPlayer.playing = False
+oHp = FakeHPlayer(oPlayer, FakeZyre(None))
+orphan = WallclockInterface(oHp, None, False, player=oPlayer, port=13740, masterName='MASTER', driftLog=None)
+orphan.ORPHAN_AFTER = 2.0
+started = []
+orphan.onOrphan = lambda: (started.append(time.time()), oPlayer.play())
+orphan.recvThread.daemon = True; orphan.start()
+time.sleep(4)
+print("   orphan starts: %d" % len(started))
+assert len(started) == 1 and oPlayer.playing
+print("   PASS")
+orphan.stopped.set()
+
 print("\nALL SELF-HEAL TESTS PASSED")
 sys.stdout.flush()
 os._exit(0)

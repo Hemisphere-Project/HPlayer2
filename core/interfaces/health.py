@@ -22,8 +22,8 @@ import os
 #    zyre: no peer at all for 10 min                         -> rebuild the node (every 10 min)
 #    slave: master heard playing, not locked for 3 min       -> rebuild zyre + reset the clock
 #                                        ... for 10 min      -> restart at the loop boundary
-#    slave: master silent 10 min while its zyre peer lives   -> rebuild zyre
-#                                        ... 20 min          -> restart at the loop boundary
+#    slave: master silent 10 min while its zyre peer lives   -> rebuild zyre (never a restart:
+#                                        the slave chases its model of the master meanwhile)
 #    master: player view frozen while mpv plays for 30 s     -> restart at the loop boundary
 #  Restart budget: 3 per rolling hour, 10 per day, kept in /run (survives our own restart).
 #
@@ -79,7 +79,6 @@ class HealthInterface (BaseInterface):
     UNLOCKED_REPAIR = 180.0
     UNLOCKED_RESTART = 600.0
     SILENT_REPAIR = 600.0
-    SILENT_RESTART = 1200.0
     FROZEN_RESTART = 30.0
     SUMMARY_EVERY = 600.0
     RESTARTS_PER_HOUR = 3
@@ -232,14 +231,14 @@ class HealthInterface (BaseInterface):
                 elif not wantLock or unlocked < 60:
                     self._unlockRepaired = False
 
+                # Master unheard: repair the cheap parts, NEVER restart — the slave is chasing its
+                # model of the master through the outage, and a restarted slave has no model.
                 silent = now - max(wc.hLastAccept, self.startedAt)
                 masterPeer = wc._lockedName and node and node.peerByName(wc._lockedName)
                 if masterPeer and silent > self.SILENT_REPAIR:
                     if not self._silentRepaired:
                         self._silentRepaired = True
                         self._rebuildZyre('master %s alive on zyre, its clock unheard for %d min' % (wc._lockedName, silent // 60))
-                    if silent > self.SILENT_RESTART:
-                        self.requestRestart('master clock unheard for %d min while its zyre peer lives' % (silent // 60))
                 elif silent < 60:
                     self._silentRepaired = False
 

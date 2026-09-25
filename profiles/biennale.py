@@ -261,6 +261,16 @@ if WALL:
 			hplayer.playlist.play(PLAY_PATTERN)
 		hplayer.interface('wallclock').drifter.onStalled = wall_selfstart
 
+		# Orphan: no master clock for 20 s and nothing playing (a slave restarted during a link
+		# outage, or booted before its master): play our own media unsynced rather than black;
+		# the first clock packet locks it. Never outside the schedule window.
+		def wall_orphan():
+			if not schedule_open_now():
+				return
+			print('wallclock: no master heard, starting', PLAY_PATTERN, 'unsynced')
+			hplayer.playlist.play(PLAY_PATTERN)
+		hplayer.interface('wallclock').onOrphan = wall_orphan
+
 
 if SYNC:
 	# HTTP2 Ctrl unbind — the MASTER's volume slider too (its link mode decides what it does);

@@ -27,22 +27,55 @@ class PacketClock():
         self.minBuckets = minBuckets
         self.latency = latency_us
         self.buckets = deque()      # [second, max(tx - recv)]
+        self.minutes = deque(maxlen=90)     # [minute, max(tx - recv)]: the clock-RATE series
 
     def add(self, tx_us, recv_us):
         v = tx_us - recv_us
         if self.buckets and abs(v - max(b[1] for b in self.buckets)) > PRECISION:
             self.buckets.clear()    # the master's clock jumped (reboot, clock set): start over
+            self.minutes.clear()
         sec = int(recv_us // PRECISION)
-        if self.buckets and self.buckets[-1][0] == sec:
-            if v > self.buckets[-1][1]:
-                self.buckets[-1][1] = v
-        else:
-            self.buckets.append([sec, v])
+        self._fold(self.minutes, sec // 60, v)
+        self._fold(self.buckets, sec, v)
         while self.buckets and self.buckets[0][0] <= sec - self.window:
             self.buckets.popleft()
 
+    @staticmethod
+    def _fold(series, key, v):
+        # max per key; a key older than the newest (an out-of-order stamp) folds into its own slot
+        if series and series[-1][0] == key:
+            if v > series[-1][1]:
+                series[-1][1] = v
+        elif not series or key > series[-1][0]:
+            series.append([key, v])
+        else:
+            for slot in reversed(series):
+                if slot[0] == key:
+                    if v > slot[1]:
+                        slot[1] = v
+                    break
+
     def reset(self):
         self.buckets.clear()
+        self.minutes.clear()
+
+    def rate(self):
+        """Master clock rate relative to ours (master s per local s, minus 1), from the slope of
+        the per-minute offset over up to 90 min. Two Pi crystals differ by 10-50 ppm: 0.04-0.2 s
+        per hour of link outage if ignored. 0 until 10 min of history."""
+        pts = list(self.minutes)[:-1]      # the current minute is still filling
+        if len(pts) < 10:
+            return 0.0
+        n = len(pts)
+        xs = [p[0] * 60.0 for p in pts]
+        ys = [p[1] / PRECISION for p in pts]
+        mx = sum(xs) / n
+        my = sum(ys) / n
+        sxx = sum((x - mx) ** 2 for x in xs)
+        if sxx <= 0:
+            return 0.0
+        slope = sum((x - mx) * (y - my) for x, y in zip(xs, ys)) / sxx
+        return max(-200e-6, min(200e-6, slope))
 
     def ready(self):
         return len(self.buckets) >= self.minBuckets
@@ -143,7 +176,7 @@ class WallclockInterface (BaseInterface):
 
     def __init__(self, hplayer, netiface=None, master=False, player=None,
                     port=3737, group='239.192.0.37', rate=20, unicast=False,
-                    masterName=None, staleness=1.0, extrapolate=4.0,
+                    masterName=None, staleness=1.0, extrapolate=4.0, modelMax=6 * 3600,
                     driftLog='/tmp/wallclock-drift.csv', durTolerance=1.0):
 
         super().__init__(hplayer, "WALLCLOCK")
@@ -163,6 +196,13 @@ class WallclockInterface (BaseInterface):
         # blind; freewheel only when the gap outlives this budget. Master
         # crystal drift over 4s is microseconds — the estimate stays exact.
         self.extrapolate = max(extrapolate, staleness)
+        # Link outage (2026-09-25, Thomas: "a bad link must be invisible"): past the extrapolate
+        # budget a slave used to release its servo and play at speed 1.0 — it drifted at once (two
+        # Pis never play at the same rate: kouagou03 needed 0.993) and hard-seeked when the clock
+        # came back. It now keeps chasing its MODEL of the master (last packet + elapsed x learned
+        # clock rate, wrapped at the loop) for up to modelMax, and rejoins with a speed trim.
+        self.modelMax = modelMax
+        self.onOrphan = None            # profile hook: no master heard for a while, player stopped
         self.driftLog = driftLog
         # A different file of the SAME duration (± s) is a legitimate timeline to chase:
         # one content per screen, all cut to one length (the LEA fleet, 2026-09-10).
@@ -261,6 +301,40 @@ class WallclockInterface (BaseInterface):
                 tc.start()
         except Exception as e:
             self.log('clock re-arm failed (' + str(e) + '): retrying in 30 s')
+
+    def _modelClock(self, base):
+        """The master's position now, from the last chase-eligible packet: elapsed local time
+        scaled by the learned master/local clock rate, wrapped at the media length."""
+        bpos, batLocal, bdur, bseq, bcs, bwrap = base
+        elapsed = (time.time() * PRECISION - batLocal) / PRECISION
+        clock = bpos + elapsed * (1.0 + self._pkt.rate())
+        if bdur > 3:
+            clock = clock % bdur
+        return clock
+
+    ORPHAN_AFTER = 20.0
+
+    def _orphanCheck(self):
+        """No master heard for ORPHAN_AFTER s and our player is stopped: a black screen is the
+        one failure a viewer always sees. A slave restarted during a link outage used to stay
+        black until the link came back (play0 never starts a slave). Start our own media
+        (profile hook), unsynced; the first clock packet locks it. Not while a master said
+        'stopped' in the last minute (its heartbeat), nor more than once per 30 s."""
+        if not self.onOrphan or not self.player or self.player.isPlaying():
+            return
+        now = time.time()
+        if now - max(self._lastAccept, self._startedAt) < self.ORPHAN_AFTER:
+            return
+        if now - getattr(self, '_masterStoppedAt', 0) < 60:
+            return
+        if now - getattr(self, '_orphanAt', 0) < 30:
+            return
+        self._orphanAt = now
+        self.log(colored('no master clock for %d s and nothing playing: starting our own media unsynced' % (now - max(self._lastAccept, self._startedAt)), 'yellow'))
+        try:
+            self.onOrphan()
+        except Exception as e:
+            self.log('orphan start failed:', e)
 
     MEMO_TOLERANCE_US = 50000   # a remembered zyre shift must agree with the packets within 50 ms
 
@@ -524,12 +598,14 @@ class WallclockInterface (BaseInterface):
             p95 = diffs[min(n - 1, int(n * 0.95))]
             locked = 100 * sum(1 for r in self._ring if r['locked']) / n
             jumps = sum(1 for r in self._ring if r['jumped'])
+            model = 100 * sum(1 for r in self._ring if r.get('model')) / n
             self.log('drift 60s:',
                         'p50=' + str(round(p50, 1)) + 'ms',
                         'p95=' + str(round(p95, 1)) + 'ms',
                         'max=' + str(round(diffs[-1], 1)) + 'ms',
                         'locked=' + str(round(locked)) + '%',
-                        'jumps=' + str(jumps))
+                        'jumps=' + str(jumps),
+                        'model=' + str(round(model)) + '%')
             self._ring = []
 
     #
@@ -642,6 +718,7 @@ class WallclockInterface (BaseInterface):
         sock.settimeout(0.25)
 
         self._openCsv()
+        self._startedAt = time.time()
         self.log('slave: chasing wall clock on port', self.port)
 
         extraBase = None    # (pos, atLocal, dur, seq, cs) of the last chase-eligible packet
@@ -657,12 +734,24 @@ class WallclockInterface (BaseInterface):
             # freewheel at speed 1.0, keep listening
             now = time.time()
             if self._lockedName and now - self._lastAccept > self.extrapolate:
+                onModel = extraBase is not None and now - self._lastAccept < self.modelMax
                 if not self._freewheeling:
                     self._freewheeling = True
+                    self._silentSince = self._lastAccept
+                    if onModel:
+                        self._modelCheck = extraBase
+                        self.log(colored('master clock silent (' + self._lockedName + ') : chasing its model (clock rate %+.1f ppm)' % (self._pkt.rate() * 1e6), 'yellow'))
+                    else:
+                        extraBase = None
+                        if self.drifter:
+                            self.drifter.release()
+                        self.log(colored('master clock silent (' + self._lockedName + ') : freewheeling', 'yellow'))
+                elif extraBase is not None and not onModel:
                     extraBase = None
+                    self._modelCheck = None
                     if self.drifter:
                         self.drifter.release()
-                    self.log(colored('master clock silent (' + self._lockedName + ') : freewheeling', 'yellow'))
+                    self.log(colored('master silent for %d h: model retired, freewheeling' % (self.modelMax // 3600), 'yellow'))
                 # another master heard consistently while ours is silent -> switch
                 if self._candName and now - self._candSince > 1.0 and now - self._candLast < self.staleness:
                     self.log(colored('switching wall clock master: ' + self._lockedName + ' -> ' + self._candName, 'red'))
@@ -680,10 +769,9 @@ class WallclockInterface (BaseInterface):
                     join(rebind=True)
                 # Delivery gap: keep servoing on the extrapolated clock
                 # until the freewheel budget runs out.
-                if extraBase and self.drifter and not self._freewheeling \
-                        and time.time() - self._lastAccept > 0.2:
+                if extraBase and self.drifter and time.time() - self._lastAccept > 0.2:
                     bpos, batLocal, bdur, bseq, bcs, bwrap = extraBase
-                    clock = bpos + (time.time() * PRECISION - batLocal) / PRECISION
+                    clock = self._modelClock(extraBase)
                     if bdur > 3:
                         clock = clock % bdur
                     if self._followIdx and not self._sameDur and self._myDur > 3 and clock >= self._myDur - 0.05:
@@ -692,8 +780,11 @@ class WallclockInterface (BaseInterface):
                     if res:
                         res['seq'] = bseq
                         res['cs'] = bcs
+                        res['model'] = self._freewheeling
                         self._telemetry(res)
                         self.emit('drift', res)
+                elif not extraBase:
+                    self._orphanCheck()
                 continue
             except OSError:
                 continue
@@ -741,7 +832,9 @@ class WallclockInterface (BaseInterface):
             extraBase = None    # re-set below only if this packet is chase-eligible
             if self._freewheeling:
                 self._freewheeling = False
-                self.log('master clock is back:', name)
+                self._backAfter = time.time() - getattr(self, '_silentSince', time.time())
+                if not getattr(self, '_modelCheck', None):
+                    self.log('master clock is back:', name, 'after %.0f s' % self._backAfter)
             self._candName = None
 
             if not self.drifter:
@@ -798,6 +891,7 @@ class WallclockInterface (BaseInterface):
 
             # Master not playing
             if not pkt.get('p', False):
+                self._masterStoppedAt = time.time()
                 self.drifter.release()
                 continue
 
@@ -818,6 +912,14 @@ class WallclockInterface (BaseInterface):
             clock = pkt.get('pos', 0.0) + (time.time() * PRECISION - atLocal) / PRECISION
             if mdur > 3:
                 clock = clock % mdur
+            if getattr(self, '_modelCheck', None):
+                # how far the model had drifted over the outage: the number that says "invisible"
+                mc = self._modelClock(self._modelCheck)
+                err = clock - mc
+                if mdur > 3:
+                    err = ((err + mdur / 2) % mdur) - mdur / 2
+                self.log('master clock is back:', name, 'after %.0f s, model was off by %+.0f ms' % (getattr(self, '_backAfter', 0), err * 1000))
+                self._modelCheck = None
 
             if midx and self.player:
                 # ── Cue mode: the master plays NN_ -> we play OUR NN_ file and chase its
