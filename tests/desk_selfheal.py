@@ -259,6 +259,38 @@ assert worst < 0.1 and d1 < 0.08, "the model must hold the slave within 100 ms"
 print("   PASS")
 master.stopped.set(); slave9.stopped.set(); stop9.set()
 
+print("== T12: master: mpv plays, player view frozen, no clock sent -> restart at MPV's loop point ==")
+import socket as _sock, json as _json
+mpvPath = os.path.join(tempfile.mkdtemp(), 'mpv.sock')
+mpvT0 = time.time(); MPV_DUR = 20.0
+def fake_mpv():
+    srv = _sock.socket(_sock.AF_UNIX); srv.bind(mpvPath); srv.listen(8)
+    while True:
+        c, _ = srv.accept()
+        def serve(c=c):
+            f = c.makefile('rb')
+            for line in f:
+                q = _json.loads(line); prop = q['command'][1]
+                val = {'time-pos': round((time.time() - mpvT0 + 15.0) % MPV_DUR, 2), 'duration': MPV_DUR, 'core-idle': False}.get(prop)
+                c.sendall((_json.dumps({'request_id': q['request_id'], 'data': val, 'error': 'success'}) + '\n').encode())
+        threading.Thread(target=serve, daemon=True).start()
+threading.Thread(target=fake_mpv, daemon=True).start(); time.sleep(0.2)
+hmod.STATE = os.path.join(tempfile.mkdtemp(), 'health.json')
+fPlayer = FakePlayer(20.0); fPlayer.playing = False; fPlayer._mpv_socketpath = mpvPath   # frozen view: "stopped"
+fHp = FakeHPlayer(fPlayer, None)
+fHp.ifaces['wallclock'] = types.SimpleNamespace(master=True, hLastClockSend=time.time() - 120, hLastSend=time.time())
+h2 = hmod.HealthInterface(fHp); h2.startedAt -= 120; h2.MPV_CHECK_EVERY = 0.5; h2._starvedSeen = hmod._starved['count']
+h2._check(); time.sleep(0.6); h2._check()
+print("   pending:", h2._pending and h2._pending[0])
+assert h2._pending and 'no clock' in h2._pending[0]
+t0 = time.time()
+while not h2._atBoundary() and time.time() - t0 < 25:
+    time.sleep(0.1)
+mpos = (time.time() - mpvT0 + 15.0) % MPV_DUR
+print("   boundary found at mpv pos %.2f / %.0f after %.1f s (player view said stopped)" % (mpos, MPV_DUR, time.time() - t0))
+assert mpos >= MPV_DUR - 0.7 or mpos < 0.3
+print("   PASS")
+
 print("\nALL SELF-HEAL TESTS PASSED")
 sys.stdout.flush()
 os._exit(0)

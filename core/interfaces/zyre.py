@@ -565,7 +565,7 @@ class ZyreNode ():
         self.book[self.zyre.uuid()].subscribe(self.topics)
 
         # Start Poller
-        self._actor_fn = zactor_fn(self.actor_fn) # ctypes function reference must live as long as the actor.
+        self._actor_fn = zactor_fn(self.actor_fn_guarded) # ctypes function reference must live as long as the actor.
         if netiface:
             netiface = create_string_buffer(str.encode(netiface))
         self.actor = Zactor(self._actor_fn, netiface)
@@ -613,6 +613,19 @@ class ZyreNode ():
             self.interface.log('time server stopped:', e)
         self._tsDone = True
 
+
+    # An exception escaping the actor used to end it silently ("Exception ignored while calling
+    # ctypes callback"): Kouagou01-64 ran 12 h with a dead node after one `can't start new thread`
+    # (2026-09-25 23:54) — no zyre events, no time server, peers expired — and nothing noticed,
+    # because the supervisor only watched for a broken poller. Now the node is flagged broken and
+    # the supervisor rebuilds it in place.
+    def actor_fn_guarded(self, pipe, netiface):
+        try:
+            self.actor_fn(pipe, netiface)
+        except BaseException as e:
+            self.interface.log('node actor died (' + type(e).__name__ + ': ' + str(e) + ').. flagging node for rebuild')
+            self.broken = True
+            self.done = True
 
     # ZYRE Zactor
     def actor_fn(self, pipe, netiface):

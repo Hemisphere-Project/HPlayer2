@@ -21,6 +21,8 @@ import os
 #    thread count over budget                               -> restart at the loop boundary
 #    zyre: no peer at all for 10 min                         -> rebuild the node (every 10 min)
 #    slave: master heard playing, not locked for 10 min      -> restart at the loop boundary
+#    master: mpv plays, no clock sent for 60 s                -> restart at mpv's loop point
+#    zyre node actor died                                     -> rebuilt in place by zyre itself
 #    slave: master silent 10 min while its zyre peer lives   -> rebuild zyre (never a restart:
 #                                        the slave chases its model of the master meanwhile)
 #  Restart budget: 3 per rolling hour, 10 per day, kept in /run (survives our own restart).
@@ -45,6 +47,35 @@ def _guardedStart(self, *a, **k):
 
 if getattr(threading.Thread.start, '__name__', '') != '_guardedStart':
     threading.Thread.start = _guardedStart
+
+
+def mpv_get(path, props, timeout=0.5):
+    """Read mpv properties on a FRESH IPC connection — independent of the player's own view of
+    mpv, which is what froze on Kouagou01-64 (2026-09-25 01:26: HPlayer2 logged `stopped` at a
+    loop point, mpv kept playing, the clock stopped)."""
+    out = {}
+    if not path:
+        return out
+    s = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+    s.settimeout(timeout)
+    try:
+        s.connect(path)
+        f = s.makefile('rb')
+        for i, prop in enumerate(props):
+            s.sendall(json.dumps({"command": ["get_property", prop], "request_id": 3700 + i}).encode() + b"\n")
+            while True:
+                o = json.loads(f.readline())
+                if o.get('request_id') == 3700 + i:
+                    out[prop] = o.get('data') if o.get('error') == 'success' else None
+                    break
+    except (OSError, ValueError):
+        pass
+    finally:
+        try:
+            s.close()
+        except OSError:
+            pass
+    return out
 
 
 def thread_count():
@@ -75,6 +106,8 @@ class HealthInterface (BaseInterface):
     THREAD_MAX = 120                # 27 on a healthy biennale player
     NOPEER_REBUILD = 600.0
     UNLOCKED_RESTART = 600.0
+    CLOCK_SILENT_RESTART = 60.0
+    MPV_CHECK_EVERY = 30.0
     SILENT_REPAIR = 600.0
     SUMMARY_EVERY = 600.0
     RESTARTS_PER_HOUR = 3
@@ -93,6 +126,7 @@ class HealthInterface (BaseInterface):
         self._lastSummary = time.time()
         self._flapMark = (0, time.time())
         self._budgetNoted = 0.0
+        self._mpvLast = None            # (time-pos, when) of the previous master check
 
     # ── helpers ────────────────────────────────────────────────────────────────────────
     def _player(self):
@@ -139,6 +173,13 @@ class HealthInterface (BaseInterface):
 
     def _atBoundary(self):
         p = self._player()
+        # mpv's own position first: the player's view may be the frozen part
+        m = mpv_get(getattr(p, '_mpv_socketpath', None), ('time-pos', 'duration', 'core-idle')) if p else {}
+        if m.get('time-pos') is not None and m.get('duration'):
+            if m.get('core-idle'):
+                return True
+            pos, dur = float(m['time-pos']), float(m['duration'])
+            return dur <= 3 or pos >= dur - 0.6
         if not p or not p.isPlaying():
             return True
         try:
@@ -203,7 +244,17 @@ class HealthInterface (BaseInterface):
         # 3. wallclock
         wc = self.hplayer.interface('wallclock')
         if wc and up > 60:
-            if not getattr(wc, 'master', False):
+            if getattr(wc, 'master', False):
+                # mpv plays but no clock left for 60 s: the player's view of mpv is stuck
+                if now - wc.hLastClockSend > self.CLOCK_SILENT_RESTART and \
+                        (self._mpvLast is None or now - self._mpvLast[1] >= self.MPV_CHECK_EVERY):
+                    m = mpv_get(getattr(self._player(), '_mpv_socketpath', None), ('time-pos', 'core-idle'))
+                    pos = m.get('time-pos')
+                    last = self._mpvLast
+                    self._mpvLast = (pos, now)
+                    if pos is not None and not m.get('core-idle') and last and last[0] is not None and pos != last[0]:
+                        self.requestRestart('mpv plays but no clock sent for %d s' % (now - wc.hLastClockSend))
+            else:
                 heard = now - wc.hLastAccept < 10
                 wantLock = heard and wc.hMasterPlaying and not getattr(wc, '_noMedia', 0) \
                     and not getattr(wc, '_holdEnd', False) and now - getattr(wc, 'hMismatch', 0) > 30
