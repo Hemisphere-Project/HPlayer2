@@ -27,15 +27,12 @@ class PacketClock():
         self.minBuckets = minBuckets
         self.latency = latency_us
         self.buckets = deque()      # [second, max(tx - recv)]
-        self.minutes = deque(maxlen=90)     # [minute, max(tx - recv)]: the clock-RATE series
 
     def add(self, tx_us, recv_us):
         v = tx_us - recv_us
         if self.buckets and abs(v - max(b[1] for b in self.buckets)) > PRECISION:
             self.buckets.clear()    # the master's clock jumped (reboot, clock set): start over
-            self.minutes.clear()
         sec = int(recv_us // PRECISION)
-        self._fold(self.minutes, sec // 60, v)
         self._fold(self.buckets, sec, v)
         while self.buckets and self.buckets[0][0] <= sec - self.window:
             self.buckets.popleft()
@@ -57,67 +54,12 @@ class PacketClock():
 
     def reset(self):
         self.buckets.clear()
-        self.minutes.clear()
-
-    def rate(self):
-        """Master clock rate relative to ours (master s per local s, minus 1), from the slope of
-        the per-minute offset over up to 90 min. Two Pi crystals differ by 10-50 ppm: 0.04-0.2 s
-        per hour of link outage if ignored. 0 until 10 min of history."""
-        pts = list(self.minutes)[:-1]      # the current minute is still filling
-        if len(pts) < 10:
-            return 0.0
-        n = len(pts)
-        xs = [p[0] * 60.0 for p in pts]
-        ys = [p[1] / PRECISION for p in pts]
-        mx = sum(xs) / n
-        my = sum(ys) / n
-        sxx = sum((x - mx) ** 2 for x in xs)
-        if sxx <= 0:
-            return 0.0
-        slope = sum((x - mx) * (y - my) for x, y in zip(xs, ys)) / sxx
-        return max(-200e-6, min(200e-6, slope))
 
     def ready(self):
         return len(self.buckets) >= self.minBuckets
 
     def shift(self):
         return max(b[1] for b in self.buckets) + self.latency
-
-
-def mpv_time_pos(path, timeout=0.3):
-    """Ask mpv for its position on a FRESH IPC connection, independent of the player's own
-    IPC thread: the master's clock must keep flowing even when HPlayer2's view of mpv froze."""
-    if not path:
-        return None
-    s = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
-    s.settimeout(timeout)
-    try:
-        s.connect(path)
-        s.sendall(b'{"command": ["get_property", "time-pos"], "request_id": 3737}\n')
-        buf = b''
-        deadline = time.time() + timeout
-        while time.time() < deadline:
-            data = s.recv(4096)
-            if not data:
-                break
-            buf += data
-            while b'\n' in buf:
-                line, buf = buf.split(b'\n', 1)
-                try:
-                    obj = json.loads(line)
-                except ValueError:
-                    continue
-                if obj.get('request_id') == 3737:
-                    d = obj.get('data')
-                    return float(d) if obj.get('error') == 'success' and d is not None else None
-    except (OSError, ValueError):
-        return None
-    finally:
-        try:
-            s.close()
-        except OSError:
-            pass
-    return None
 
 
 def media_index_of(path):
@@ -169,8 +111,8 @@ def index_pattern(idx):
 #  Transport (2026-09-25): the master sends every packet to the multicast group AND to the
 #  sync subnet's broadcast address. Broadcast needs no membership, so no lost-IGMP-state,
 #  20-membership cap or re-join loop can deafen a slave; multicast stays for older slaves.
-#  Slaves drop the duplicate by seq. A stopped master still sends a 1 Hz heartbeat (p=0),
-#  so a slave can tell "master stopped" from "I hear nothing".
+#  Slaves drop the duplicate by seq. A STOPPED master sends a 1 Hz heartbeat (p=0): its slaves
+#  stop chasing. Silence means "link or master trouble": slaves chase their model of it.
 #
 class WallclockInterface (BaseInterface):
 
@@ -199,8 +141,8 @@ class WallclockInterface (BaseInterface):
         # Link outage (2026-09-25, Thomas: "a bad link must be invisible"): past the extrapolate
         # budget a slave used to release its servo and play at speed 1.0 — it drifted at once (two
         # Pis never play at the same rate: kouagou03 needed 0.993) and hard-seeked when the clock
-        # came back. It now keeps chasing its MODEL of the master (last packet + elapsed x learned
-        # clock rate, wrapped at the loop) for up to modelMax, and rejoins with a speed trim.
+        # came back. It now keeps chasing its MODEL of the master (last packet + elapsed, wrapped
+        # at the loop) for up to modelMax, and rejoins with a speed trim.
         self.modelMax = modelMax
         self.onOrphan = None            # profile hook: no master heard for a while, player stopped
         self.driftLog = driftLog
@@ -224,13 +166,10 @@ class WallclockInterface (BaseInterface):
         # Health view (read by the health interface): plain attributes, written by this thread
         self.hLastSend = 0.0            # master: last packet sent (clock or heartbeat)
         self.hLastClockSend = 0.0       # master: last packet carrying a live position
-        self.hLatchStaleSince = None    # master: player status silent while mpv was asked to play
-        self.hProbing = False           # master: the clock comes from mpv directly (player view frozen)
-        self.hLastPos = None            # master: last position sent (loop-boundary scheduling)
         self.hLastAccept = 0.0          # slave: last packet accepted from our master
         self.hMasterPlaying = False     # slave: last packet said the master plays
         self.hLastLocked = 0.0          # slave: last servo tick inside the lock window
-        self.hCsSource = None           # slave: 'zyre' | 'zyre-memo' | 'packets'
+        self.hCsSource = None           # slave: 'zyre' | 'packets'
         self.hMismatch = 0.0            # slave: last time the master's media was not ours to chase
 
         if self.master:
@@ -303,11 +242,11 @@ class WallclockInterface (BaseInterface):
             self.log('clock re-arm failed (' + str(e) + '): retrying in 30 s')
 
     def _modelClock(self, base):
-        """The master's position now, from the last chase-eligible packet: elapsed local time
-        scaled by the learned master/local clock rate, wrapped at the media length."""
+        """The master's position now, from the last chase-eligible packet, wrapped at the media
+        length. (Two Pi crystals drift ~0.1 s per hour of outage: the rejoin trims it away.)"""
         bpos, batLocal, bdur, bseq, bcs, bwrap = base
         elapsed = (time.time() * PRECISION - batLocal) / PRECISION
-        clock = bpos + elapsed * (1.0 + self._pkt.rate())
+        clock = bpos + elapsed
         if bdur > 3:
             clock = clock % bdur
         return clock
@@ -336,26 +275,14 @@ class WallclockInterface (BaseInterface):
         except Exception as e:
             self.log('orphan start failed:', e)
 
-    MEMO_TOLERANCE_US = 50000   # a remembered zyre shift must agree with the packets within 50 ms
-
     def _pickShift(self, peer):
-        """TimeClient first (Thomas, 2026-09-25), the packets as fallback.
-        - a TimeClient with a measured shift: use it;
-        - the last good shift for this master (the client was rebuilt, or its rounds fail on a
-          lossy link): use it once the packet estimate CONFIRMS it — a master that rebooted has
-          another fake clock, and its old shift is then hours wrong (one seek on it is one too
-          many; packets exist whenever there is something to chase, so waiting costs ~3 s);
-        - otherwise the packet-derived offset, as soon as 3 s of packets are in."""
-        pk = self._pkt.shift() if self._pkt.ready() else None
+        """TimeClient first (Thomas, 2026-09-25), the packets as fallback: a missing zyre peer or
+        a TimeClient that cannot finish a round (lossy link) no longer stops the chase."""
         tc = getattr(peer, 'timeclient', None) if peer else None
         if tc and getattr(tc, 'status', 0) == 1:
             return tc.clockshift, 'zyre'
-        if peer and hasattr(peer, 'clockReady') and peer.clockReady():
-            memo = peer.clockshift()
-            if pk is not None and abs(memo - pk) < self.MEMO_TOLERANCE_US:
-                return memo, 'zyre-memo'
-        if pk is not None:
-            return pk, 'packets'
+        if self._pkt.ready():
+            return self._pkt.shift(), 'packets'
         return None, None
 
     #
@@ -415,8 +342,6 @@ class WallclockInterface (BaseInterface):
         interval = 1.0 / self.rate
         seq = 0
         lastBeat = 0.0
-        probePath = getattr(self.player, '_mpv_socketpath', None)
-        probeLast = None        # (pos, when) of the previous direct read
 
         def send(pkt):
             nonlocal seq
@@ -472,44 +397,16 @@ class WallclockInterface (BaseInterface):
             fresh = latch is not None and (now * PRECISION - latch[1]) <= PRECISION
 
             if fresh:
-                if self.hLatchStaleSince:
-                    self.log('player status flowing again: clock from the player')
-                self.hLatchStaleSince = None
-                self.hProbing = False
-                probeLast = None
                 pos, at = latch
                 pkt = dict(base, at=at, pos=pos, p=bool(self.player.isPlaying()))
                 if send(pkt):
                     self.hLastClockSend = now
-                    self.hLastPos = pos
                 continue
 
-            # Player status silent. Stopped for real, or HPlayer2 lost its view of a mpv that
-            # still plays (Kouagou01-64, 2026-09-25 ~07:20: a `stopped` with no `playing` after,
-            # the film kept looping, the clock went silent and both slaves freewheeled for hours).
-            # Ask mpv directly, a few times a second; a position that advances IS the clock.
-            if not self.hLatchStaleSince:
-                self.hLatchStaleSince = now
-            if probePath and (probeLast is None or now - probeLast[1] >= 0.2):
-                ppos = mpv_time_pos(probePath)
-                advancing = ppos is not None and probeLast is not None and probeLast[0] is not None \
-                    and 0 < abs(ppos - probeLast[0]) < 5.0 and ppos != probeLast[0]
-                probeLast = (ppos, now)
-                if advancing:
-                    if not self.hProbing:
-                        self.hProbing = True
-                        self.log(colored('player status silent while mpv plays: clock read from mpv directly', 'yellow'))
-                    pkt = dict(base, at=int(now * PRECISION), pos=ppos, p=True)
-                    if send(pkt):
-                        self.hLastClockSend = now
-                        self.hLastPos = ppos
-                    continue
-                elif self.hProbing:
-                    self.hProbing = False
-                    self.log('mpv stopped advancing too: master clock paused')
-
-            # Heartbeat: stopped (or unknown) master, 1 Hz, p=0
-            if now - lastBeat >= 1.0:
+            # Player status silent. A player that says it is stopped announces it (1 Hz, p=0): the
+            # slaves stop chasing. One that says it plays but went quiet sends nothing: the slaves
+            # keep chasing their model of it, which is what a viewer should see.
+            if not self.player.isPlaying() and now - lastBeat >= 1.0:
                 lastBeat = now
                 pos = latch[0] if latch else 0.0
                 send(dict(base, at=int(now * PRECISION), pos=pos, p=False))
@@ -740,7 +637,7 @@ class WallclockInterface (BaseInterface):
                     self._silentSince = self._lastAccept
                     if onModel:
                         self._modelCheck = extraBase
-                        self.log(colored('master clock silent (' + self._lockedName + ') : chasing its model (clock rate %+.1f ppm)' % (self._pkt.rate() * 1e6), 'yellow'))
+                        self.log(colored('master clock silent (' + self._lockedName + ') : chasing its model', 'yellow'))
                     else:
                         extraBase = None
                         if self.drifter:
@@ -769,7 +666,10 @@ class WallclockInterface (BaseInterface):
                     join(rebind=True)
                 # Delivery gap: keep servoing on the extrapolated clock
                 # until the freewheel budget runs out.
-                if extraBase and self.drifter and time.time() - self._lastAccept > 0.2:
+                # (only for a player that plays: a slave stopped by the master's zyre 'stop' must not
+                # be restarted by its own model)
+                if extraBase and self.drifter and time.time() - self._lastAccept > 0.2 \
+                        and self.player.isPlaying():
                     bpos, batLocal, bdur, bseq, bcs, bwrap = extraBase
                     clock = self._modelClock(extraBase)
                     if bdur > 3:

@@ -478,8 +478,8 @@ class Peer():
         tc = self.timeclient
         now = time.time()
         # A JOIN storm (link flapping) used to build a new TimeClient — a Zactor thread and a
-        # Timer thread — on every JOIN, and threw the measured shift away each time. A healthy
-        # client stays; a new one at most every 30 s unless the caller insists.
+        # Timer thread — on every JOIN. A healthy client stays; a new one at most every 30 s
+        # unless the caller insists.
         if tc and not force and not tc.stalled() and now - getattr(self, '_syncAt', 0) < self.SYNC_MIN_INTERVAL:
             return
         if tc and not force and tc.status == 1 and not tc.stalled():
@@ -493,23 +493,9 @@ class Peer():
             self.timeclient = None
             self.node.interface.log('peer', self.name, 'time client unavailable (' + str(e) + '): wallclock will retry')
 
-    def clockReady(self):
-        """A usable clockshift exists: this client measured one, or this peer NAME had one
-        within the hour (a flap rebuilt the Peer / the client; the clocks did not move)."""
-        tc = self.timeclient
-        if tc and tc.status == 1:
-            return True
-        memo = self.node.shiftMemo.get(self.name)
-        return bool(memo and time.time() - memo[1] < 3600)
-
     def clockshift(self):
-        tc = self.timeclient
-        if tc and tc.status == 1:
-            self.node.shiftMemo[self.name] = (tc.clockshift, time.time())
-            return tc.clockshift
-        memo = self.node.shiftMemo.get(self.name)
-        if memo and time.time() - memo[1] < 3600:
-            return memo[0]
+        if self.timeclient:
+            return self.timeclient.clockshift
         return 0
 
     def subscribe(self, topics):
@@ -530,15 +516,12 @@ class Peer():
 #  NODE zyre peers discovery, sync and communication
 #
 class ZyreNode ():
-    _shiftMemo = {}
-
     def  __init__(self, interface, netiface=None):
         self.interface = interface
 
         # Peers book
         self.book = {}
         self.topics = []
-        self.shiftMemo = ZyreNode._shiftMemo     # name -> (clockshift us, when): outlives peers AND node rebuilds
         self.enters = 0        # ENTER/EXIT counters: the health monitor reads the flap rate
         self.exits = 0
         self.startedAt = time.time()

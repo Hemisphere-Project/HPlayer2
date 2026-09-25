@@ -20,11 +20,9 @@ import os
 #    thread starvation (`can't start new thread` anywhere)  -> restart at the loop boundary
 #    thread count over budget                               -> restart at the loop boundary
 #    zyre: no peer at all for 10 min                         -> rebuild the node (every 10 min)
-#    slave: master heard playing, not locked for 3 min       -> rebuild zyre + reset the clock
-#                                        ... for 10 min      -> restart at the loop boundary
+#    slave: master heard playing, not locked for 10 min      -> restart at the loop boundary
 #    slave: master silent 10 min while its zyre peer lives   -> rebuild zyre (never a restart:
 #                                        the slave chases its model of the master meanwhile)
-#    master: player view frozen while mpv plays for 30 s     -> restart at the loop boundary
 #  Restart budget: 3 per rolling hour, 10 per day, kept in /run (survives our own restart).
 #
 
@@ -76,10 +74,8 @@ class HealthInterface (BaseInterface):
     TICK = 5.0
     THREAD_MAX = 120                # 27 on a healthy biennale player
     NOPEER_REBUILD = 600.0
-    UNLOCKED_REPAIR = 180.0
     UNLOCKED_RESTART = 600.0
     SILENT_REPAIR = 600.0
-    FROZEN_RESTART = 30.0
     SUMMARY_EVERY = 600.0
     RESTARTS_PER_HOUR = 3
     RESTARTS_PER_DAY = 10
@@ -93,7 +89,6 @@ class HealthInterface (BaseInterface):
         self._starvedSeen = 0
         self._noPeerSince = None
         self._lastNodeRebuild = 0.0
-        self._unlockRepaired = False
         self._silentRepaired = False
         self._lastSummary = time.time()
         self._flapMark = (0, time.time())
@@ -146,15 +141,10 @@ class HealthInterface (BaseInterface):
         p = self._player()
         if not p or not p.isPlaying():
             return True
-        wc = self.hplayer.interface('wallclock')
-        pos = None
-        if wc and getattr(wc, 'master', False) and getattr(wc, 'hProbing', False):
-            pos = wc.hLastPos           # the player's own view is the frozen part
-        if pos is None:
-            try:
-                pos = float(p.position() or 0)
-            except (TypeError, ValueError):
-                pos = 0.0
+        try:
+            pos = float(p.position() or 0)
+        except (TypeError, ValueError):
+            pos = 0.0
         try:
             dur = float(p.status('duration') or 0)
         except (TypeError, ValueError):
@@ -213,23 +203,13 @@ class HealthInterface (BaseInterface):
         # 3. wallclock
         wc = self.hplayer.interface('wallclock')
         if wc and up > 60:
-            if getattr(wc, 'master', False):
-                if wc.hLatchStaleSince and wc.hProbing and now - wc.hLatchStaleSince > self.FROZEN_RESTART:
-                    self.requestRestart('player view frozen while mpv plays (clock carried by direct reads)')
-            else:
+            if not getattr(wc, 'master', False):
                 heard = now - wc.hLastAccept < 10
                 wantLock = heard and wc.hMasterPlaying and not getattr(wc, '_noMedia', 0) \
                     and not getattr(wc, '_holdEnd', False) and now - getattr(wc, 'hMismatch', 0) > 30
                 unlocked = now - max(wc.hLastLocked, self.startedAt)
-                if wantLock and unlocked > self.UNLOCKED_REPAIR:
-                    if not self._unlockRepaired:
-                        self._unlockRepaired = True
-                        wc._pkt.reset()
-                        self._rebuildZyre('master heard playing, not locked for %d s' % unlocked)
-                    if unlocked > self.UNLOCKED_RESTART:
-                        self.requestRestart('master heard playing, not locked for %d min' % (unlocked // 60))
-                elif not wantLock or unlocked < 60:
-                    self._unlockRepaired = False
+                if wantLock and unlocked > self.UNLOCKED_RESTART:
+                    self.requestRestart('master heard playing, not locked for %d min' % (unlocked // 60))
 
                 # Master unheard: repair the cheap parts, NEVER restart — the slave is chasing its
                 # model of the master through the outage, and a restarted slave has no model.
@@ -254,7 +234,7 @@ class HealthInterface (BaseInterface):
             w = ''
             if wc:
                 if getattr(wc, 'master', False):
-                    w = ' clock-sent=%ds-ago%s' % (now - wc.hLastSend, ' PROBING' if wc.hProbing else '')
+                    w = ' clock-sent=%ds-ago' % (now - wc.hLastSend)
                 else:
                     w = ' heard=%ds-ago locked=%ds-ago cs=%s' % (now - wc.hLastAccept, now - wc.hLastLocked, wc.hCsSource)
             self.log('summary: threads=%d peers=%d starved=%d%s%s' % (tc, len(peers), _starved['count'], fl, w))

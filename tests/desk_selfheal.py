@@ -143,7 +143,7 @@ stopFeed = threading.Event(); feeding = threading.Event(); feeding.set()
 # slave: zyre peer WITHOUT a usable clockshift, and a stale memo 10 s wrong
 sPlayer = FakePlayer(60.0, rateError=1.002)
 sPlayer._base = (mPlayer._now() + 1.5) % 60.0
-sPeer = FakePeer('MASTER', tc=FakeTC(0, 0), memo=CS_US + 10 * PRECISION)
+sPeer = FakePeer('MASTER', tc=FakeTC(0, 0))
 sZ = FakeZyre(sPeer)
 sHp = FakeHPlayer(sPlayer, sZ)
 slave = WallclockInterface(sHp, None, False, player=sPlayer, port=13738, masterName='MASTER', driftLog=None)
@@ -156,7 +156,7 @@ slave.recvThread.daemon = True; master.recvThread.daemon = True
 slave.start(); master.start()
 threading.Thread(target=feeder, daemon=True).start()
 
-print("== T2: no zyre shift, a stale memo 10 s wrong -> the slave locks on the PACKETS ==")
+print("== T2: no zyre shift (TimeClient rounds failing) -> the slave locks on the PACKETS ==")
 time.sleep(14)
 d = wrapdiff(mPlayer._now(), sPlayer._now(), 60.0)
 print("   source=%s |master-slave|=%.0f ms seeks=%d" % (slave.hCsSource, d * 1000, sPlayer.seeks))
@@ -174,27 +174,8 @@ print("   ticks=%d duplicated=%d" % (len(seqs), dupl))
 assert dupl == 0, "duplicate packets reached the servo"
 print("   PASS")
 
-print("== T4: master player view FREEZES while mpv plays -> clock read from mpv directly ==")
-mPlayer._mpv_socketpath = '/nonexistent'
-wcmod.mpv_time_pos = lambda path, timeout=0.3: mPlayer.position()
-master.player = mPlayer
-# rebuild the probe path the running loop captured: restart the master interface
-master.stopped.set(); time.sleep(0.3)
-master2 = WallclockInterface(mHp, None, True, player=mPlayer, port=13738, rate=20, unicast=True, driftLog=None)
-master2._myName = 'MASTER'; master2._peerIps = lambda: ['127.0.0.1']
-master = master2
-master.recvThread.daemon = True
-feeding.clear()                                    # player status goes silent
-master.start()
-time.sleep(8)
-d = wrapdiff(mPlayer._now(), sPlayer._now(), 60.0)
-print("   probing=%s heard %.1fs ago |master-slave|=%.0f ms" % (master.hProbing, _realTime() - slave.hLastAccept, d * 1000))
-assert master.hProbing, "master should carry the clock from mpv"
-assert _realTime() - slave.hLastAccept < 1 and d < 0.08
-print("   PASS")
-
 print("== T5: master STOPPED -> 1 Hz heartbeat, slave still hears it (no deaf re-join loop) ==")
-wcmod.mpv_time_pos = lambda path, timeout=0.3: None
+feeding.clear(); mPlayer.playing = False
 time.sleep(4)
 age = _realTime() - slave.hLastAccept
 print("   heard %.1fs ago, masterPlaying=%s rejoins=%d" % (age, slave.hMasterPlaying, slave._rejoins))
@@ -239,21 +220,6 @@ except RuntimeError:
     pass
 hmod._origStart = orig
 assert hmod._starved['count'] == before + 1
-print("   PASS")
-
-print("== T8: clock-rate learning, 20 min of synthetic packets at +40 ppm ==")
-pc = PacketClock()
-t0 = 2_000_000 * PRECISION
-random.seed(8)
-pkts = []
-for i in range(20 * 60 * 20):                        # 20 min at 20 Hz
-    local = t0 + i * 50000
-    master_t = t0 + TRUE_CS + int(i * 50000 * (1 + 40e-6))
-    pkts.append((local + random.uniform(1000, 3000) + (random.uniform(20000, 150000) if random.random() < 0.3 else 0), master_t))
-for recv, master_t in sorted(pkts):                  # the socket hands them over in ARRIVAL order
-    pc.add(master_t, recv)
-print("   rate = %+.1f ppm" % (pc.rate() * 1e6))
-assert abs(pc.rate() * 1e6 - 40) < 3, "rate not learned"
 print("   PASS")
 
 print("== T9: 60 s link outage, slave plays 0.5% FAST -> no seek, still locked after ==")
