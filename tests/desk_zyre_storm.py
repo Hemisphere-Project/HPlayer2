@@ -107,7 +107,7 @@ if __name__ == '__main__':
     f = subprocess.Popen([sys.executable, __file__, 'flapper', iface, str(rebuilds)], stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True)
     fo, _ = f.communicate()
     mo, _ = m.communicate()
-    keep = lambda o: [l for l in o.splitlines() if l.startswith(('MASTER', 'FLAPPER', 'Traceback', 'RuntimeError', 'AttributeError', 'Exception'))]
+    keep = lambda o: [l for l in o.splitlines() if l.startswith(('MASTER', 'FLAPPER', 'Traceback', 'RuntimeError', 'AttributeError', 'Exception', '  File', '    '))]
     for l in keep(mo) + keep(fo):
         print(l)
     sys.exit(f.returncode)

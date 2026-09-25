@@ -798,7 +798,7 @@ class ZyreNode ():
 
     def stop(self):
         self.interface.log('stopping peers')
-        for peer in list(self.book.values()) + [p for p, _ in self.gone.values()]:
+        for peer in list(self.book.values()) + [p for p, _ in list(self.gone.values())]:
             peer.stop()
         self.gone = {}
 
@@ -832,7 +832,7 @@ class ZyreNode ():
             return self.book[uuid]
 
     def peerByName(self, name):
-        for peer in self.book.values():
+        for peer in list(self.book.values()):     # snapshot: the actor thread adds/removes peers
             if peer.active and peer.name == name:
                 return peer
 
@@ -843,7 +843,7 @@ class ZyreNode ():
     def subscribe(self, topics):
         if not isinstance(topics, list): topics = [topics]
         self.topics = list(set(self.topics) | set(topics))    # merge lists and remove duplicates
-        for peer in self.book.values():
+        for peer in list(self.book.values()):     # snapshot (see peerByName)
             peer.subscribe(self.topics)
 
     def publish(self, topic, args=None):
@@ -1032,7 +1032,7 @@ class ZyreInterface (BaseInterface):
             n = node()
             if not n:
                 return
-            for peer in n.book.values():
+            for peer in list(n.book.values()):
                 self.emit('peer.link', {'name': peer.name, 'data': peer.link})
 
         # Triggers event on peers
