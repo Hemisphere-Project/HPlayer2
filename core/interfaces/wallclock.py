@@ -7,8 +7,84 @@ import json
 import time
 import os
 import re
+from collections import deque
 
 PRECISION = 1000000     # us - same clock base as the zyre TimeClient
+
+
+class PacketClock():
+    """Master-minus-local clock offset measured from the clock packets alone — the fallback
+    when zyre has no usable clockshift (no peer, a TimeClient that cannot finish a round on a
+    lossy link: kouagou03 chased nothing for 1.5 h on 2026-09-25 while hearing every packet).
+
+    Each packet gives tx - recv = offset - delivery delay. The packet that crossed fastest in a
+    sliding window carries the least delay, so the window's MAX of (tx - recv) estimates the
+    offset minus the minimum one-way latency (~1-3 ms on the sync LAN; wifi power-save buffering
+    only ever ADDS delay, the max filter drops it). One max per 1 s bucket, 30 buckets."""
+
+    def __init__(self, window=30, minBuckets=3, latency_us=1500):
+        self.window = window
+        self.minBuckets = minBuckets
+        self.latency = latency_us
+        self.buckets = deque()      # [second, max(tx - recv)]
+
+    def add(self, tx_us, recv_us):
+        v = tx_us - recv_us
+        if self.buckets and abs(v - max(b[1] for b in self.buckets)) > PRECISION:
+            self.buckets.clear()    # the master's clock jumped (reboot, clock set): start over
+        sec = int(recv_us // PRECISION)
+        if self.buckets and self.buckets[-1][0] == sec:
+            if v > self.buckets[-1][1]:
+                self.buckets[-1][1] = v
+        else:
+            self.buckets.append([sec, v])
+        while self.buckets and self.buckets[0][0] <= sec - self.window:
+            self.buckets.popleft()
+
+    def reset(self):
+        self.buckets.clear()
+
+    def ready(self):
+        return len(self.buckets) >= self.minBuckets
+
+    def shift(self):
+        return max(b[1] for b in self.buckets) + self.latency
+
+
+def mpv_time_pos(path, timeout=0.3):
+    """Ask mpv for its position on a FRESH IPC connection, independent of the player's own
+    IPC thread: the master's clock must keep flowing even when HPlayer2's view of mpv froze."""
+    if not path:
+        return None
+    s = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+    s.settimeout(timeout)
+    try:
+        s.connect(path)
+        s.sendall(b'{"command": ["get_property", "time-pos"], "request_id": 3737}\n')
+        buf = b''
+        deadline = time.time() + timeout
+        while time.time() < deadline:
+            data = s.recv(4096)
+            if not data:
+                break
+            buf += data
+            while b'\n' in buf:
+                line, buf = buf.split(b'\n', 1)
+                try:
+                    obj = json.loads(line)
+                except ValueError:
+                    continue
+                if obj.get('request_id') == 3737:
+                    d = obj.get('data')
+                    return float(d) if obj.get('error') == 'success' and d is not None else None
+    except (OSError, ValueError):
+        return None
+    finally:
+        try:
+            s.close()
+        except OSError:
+            pass
+    return None
 
 
 def media_index_of(path):
@@ -53,6 +129,15 @@ def index_pattern(idx):
 #    dur  media duration (s), 0 if unknown
 #    m    master media basename (mismatch guard)
 #    p    master isPlaying
+#    l    master loops seamlessly (1) or through its playlist (0)
+#    tx   us epoch (master clock) when the packet was SENT — the packet-derived clock offset
+#         (PacketClock) reads it; absent from masters before 2026-09-25
+#
+#  Transport (2026-09-25): the master sends every packet to the multicast group AND to the
+#  sync subnet's broadcast address. Broadcast needs no membership, so no lost-IGMP-state,
+#  20-membership cap or re-join loop can deafen a slave; multicast stays for older slaves.
+#  Slaves drop the duplicate by seq. A stopped master still sends a 1 Hz heartbeat (p=0),
+#  so a slave can tell "master stopped" from "I hear nothing".
 #
 class WallclockInterface (BaseInterface):
 
@@ -96,6 +181,18 @@ class WallclockInterface (BaseInterface):
         self.seamless = True            # master: set by the profile; slave: last value heard
         self._masterSeamless = True
 
+        # Health view (read by the health interface): plain attributes, written by this thread
+        self.hLastSend = 0.0            # master: last packet sent (clock or heartbeat)
+        self.hLastClockSend = 0.0       # master: last packet carrying a live position
+        self.hLatchStaleSince = None    # master: player status silent while mpv was asked to play
+        self.hProbing = False           # master: the clock comes from mpv directly (player view frozen)
+        self.hLastPos = None            # master: last position sent (loop-boundary scheduling)
+        self.hLastAccept = 0.0          # slave: last packet accepted from our master
+        self.hMasterPlaying = False     # slave: last packet said the master plays
+        self.hLastLocked = 0.0          # slave: last servo tick inside the lock window
+        self.hCsSource = None           # slave: 'zyre' | 'zyre-memo' | 'packets'
+        self.hMismatch = 0.0            # slave: last time the master's media was not ours to chase
+
         if self.master:
             self.drifter = None
             # Latch (pos, at) pairs from the player status events; the send
@@ -134,6 +231,9 @@ class WallclockInterface (BaseInterface):
             self._loopApplied = None    # last loop mode we pushed to the player (None = profile's choice)
             self._cueStartedAt = 0.0    # when we last started a cue (a start is not a stall for 3 s)
             self._noPeerSince = None    # master clock heard but no zyre peer since (rebuild request)
+            self._pkt = PacketClock()   # fallback clock offset, from the packets themselves
+            self._rejoins = 0           # silent-socket re-joins (log throttle)
+            self._rejoinLogAt = 0.0
             self._legacyStalled = None  # the profile's stall hook, restored when leaving cue mode
 
     def _rearmClockSync(self, peer, tc, name):
@@ -162,6 +262,28 @@ class WallclockInterface (BaseInterface):
         except Exception as e:
             self.log('clock re-arm failed (' + str(e) + '): retrying in 30 s')
 
+    MEMO_TOLERANCE_US = 50000   # a remembered zyre shift must agree with the packets within 50 ms
+
+    def _pickShift(self, peer):
+        """TimeClient first (Thomas, 2026-09-25), the packets as fallback.
+        - a TimeClient with a measured shift: use it;
+        - the last good shift for this master (the client was rebuilt, or its rounds fail on a
+          lossy link): use it once the packet estimate CONFIRMS it — a master that rebooted has
+          another fake clock, and its old shift is then hours wrong (one seek on it is one too
+          many; packets exist whenever there is something to chase, so waiting costs ~3 s);
+        - otherwise the packet-derived offset, as soon as 3 s of packets are in."""
+        pk = self._pkt.shift() if self._pkt.ready() else None
+        tc = getattr(peer, 'timeclient', None) if peer else None
+        if tc and getattr(tc, 'status', 0) == 1:
+            return tc.clockshift, 'zyre'
+        if peer and hasattr(peer, 'clockReady') and peer.clockReady():
+            memo = peer.clockshift()
+            if pk is not None and abs(memo - pk) < self.MEMO_TOLERANCE_US:
+                return memo, 'zyre-memo'
+        if pk is not None:
+            return pk, 'packets'
+        return None, None
+
     #
     # MASTER side
     #
@@ -185,15 +307,21 @@ class WallclockInterface (BaseInterface):
         sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
         sock.setsockopt(socket.IPPROTO_IP, socket.IP_MULTICAST_TTL, 1)
         sock.setsockopt(socket.IPPROTO_IP, socket.IP_MULTICAST_LOOP, 0)
+        sock.setsockopt(socket.SOL_SOCKET, socket.SO_BROADCAST, 1)
         # Pin the multicast egress to the sync interface — and keep trying if that
         # interface has no address yet (same boot race as the slave join below): an
         # unpinned socket sends the clock down the default route, i.e. nowhere useful.
+        # The broadcast address is re-read with it (a new lease may bring another subnet).
         pinned = [False]
         lastPin = [0.0]
+        bcast = [None]
 
         def pin():
             ip = network.get_ip(self.iface) if self.iface else network.get_ip()
             lastPin[0] = time.time()
+            if self.iface:
+                b = network.get_broadcast(self.iface)
+                bcast[0] = b if b and not b.startswith('127.') else None
             if ip and ip != '127.0.0.1':
                 try:
                     sock.setsockopt(socket.IPPROTO_IP, socket.IP_MULTICAST_IF, socket.inet_aton(ip))
@@ -207,52 +335,118 @@ class WallclockInterface (BaseInterface):
 
         pin()
 
-        dest = 'unicast to zyre peers' if self.unicast else self.group
+        dest = 'unicast to zyre peers' if self.unicast else (self.group + (' + broadcast ' + bcast[0] if bcast[0] else ''))
         self.log('master clock: emitting on', dest, 'port', self.port, 'at', self.rate, 'Hz')
 
         interval = 1.0 / self.rate
         seq = 0
+        lastBeat = 0.0
+        probePath = getattr(self.player, '_mpv_socketpath', None)
+        probeLast = None        # (pos, when) of the previous direct read
 
-        while not self.stopped.is_set():
-            self.stopped.wait(interval)
-
-            if not pinned[0] and not self.unicast and time.time() - lastPin[0] > 2.0:
-                pin()
-                if pinned[0]:
-                    self.log('multicast egress pinned to', self.iface, '(late: interface was not up at start)')
-
-            latch = self._latch
-            # player silent (stopped / paused): latch goes stale, stop emitting
-            if latch is None or (time.time() * PRECISION - latch[1]) > PRECISION:
-                continue
-            pos, at = latch
-
-            media = self.player.status('media')
-            dur = self.player.status('duration')
-            pkt = {
-                'v': 1,
-                'n': self._myName,
-                's': seq,
-                'at': at,
-                'pos': pos,
-                'dur': round(float(dur), 2) if dur else 0,
-                'm': os.path.basename(media) if media else '',
-                'p': bool(self.player.isPlaying()),
-                'l': 1 if self.seamless else 0
-            }
+        def send(pkt):
+            nonlocal seq
+            pkt['s'] = seq
+            pkt['tx'] = int(time.time() * PRECISION)
             data = json.dumps(pkt).encode()
-
+            ok = False
             try:
                 if self.unicast:
                     for pip in self._peerIps():
                         sock.sendto(data, (pip, self.port))
+                        ok = True
                 else:
-                    sock.sendto(data, (self.group, self.port))
-                seq = (seq + 1) & 0xffffffff
+                    try:
+                        sock.sendto(data, (self.group, self.port))
+                        ok = True
+                    except OSError as e:
+                        self._sendErr('multicast', e)
+                    if bcast[0]:
+                        try:
+                            sock.sendto(data, (bcast[0], self.port))
+                            ok = True
+                        except OSError as e:
+                            self._sendErr('broadcast', e)
             except OSError as e:
-                self.log('send error:', e)
+                self._sendErr('unicast', e)
+            if ok:
+                seq = (seq + 1) & 0xffffffff
+                self.hLastSend = time.time()
+            return ok
+
+        while not self.stopped.is_set():
+            self.stopped.wait(interval)
+
+            if time.time() - lastPin[0] > (2.0 if not pinned[0] else 30.0):
+                was = pinned[0]
+                pin()
+                if pinned[0] and not was:
+                    self.log('multicast egress pinned to', self.iface, '(late: interface was not up at start)')
+
+            media = self.player.status('media')
+            dur = self.player.status('duration')
+            base = {
+                'v': 1,
+                'n': self._myName,
+                'dur': round(float(dur), 2) if dur else 0,
+                'm': os.path.basename(media) if media else '',
+                'l': 1 if self.seamless else 0
+            }
+
+            latch = self._latch
+            now = time.time()
+            fresh = latch is not None and (now * PRECISION - latch[1]) <= PRECISION
+
+            if fresh:
+                if self.hLatchStaleSince:
+                    self.log('player status flowing again: clock from the player')
+                self.hLatchStaleSince = None
+                self.hProbing = False
+                probeLast = None
+                pos, at = latch
+                pkt = dict(base, at=at, pos=pos, p=bool(self.player.isPlaying()))
+                if send(pkt):
+                    self.hLastClockSend = now
+                    self.hLastPos = pos
+                continue
+
+            # Player status silent. Stopped for real, or HPlayer2 lost its view of a mpv that
+            # still plays (Kouagou01-64, 2026-09-25 ~07:20: a `stopped` with no `playing` after,
+            # the film kept looping, the clock went silent and both slaves freewheeled for hours).
+            # Ask mpv directly, a few times a second; a position that advances IS the clock.
+            if not self.hLatchStaleSince:
+                self.hLatchStaleSince = now
+            if probePath and (probeLast is None or now - probeLast[1] >= 0.2):
+                ppos = mpv_time_pos(probePath)
+                advancing = ppos is not None and probeLast is not None and probeLast[0] is not None \
+                    and 0 < abs(ppos - probeLast[0]) < 5.0 and ppos != probeLast[0]
+                probeLast = (ppos, now)
+                if advancing:
+                    if not self.hProbing:
+                        self.hProbing = True
+                        self.log(colored('player status silent while mpv plays: clock read from mpv directly', 'yellow'))
+                    pkt = dict(base, at=int(now * PRECISION), pos=ppos, p=True)
+                    if send(pkt):
+                        self.hLastClockSend = now
+                        self.hLastPos = ppos
+                    continue
+                elif self.hProbing:
+                    self.hProbing = False
+                    self.log('mpv stopped advancing too: master clock paused')
+
+            # Heartbeat: stopped (or unknown) master, 1 Hz, p=0
+            if now - lastBeat >= 1.0:
+                lastBeat = now
+                pos = latch[0] if latch else 0.0
+                send(dict(base, at=int(now * PRECISION), pos=pos, p=False))
 
         sock.close()
+
+    def _sendErr(self, what, e):
+        k = '_sendErrAt_' + what
+        if time.time() - getattr(self, k, 0) > 60:
+            setattr(self, k, time.time())
+            self.log(what, 'send error:', e)
 
     #
     # SLAVE side
@@ -274,6 +468,7 @@ class WallclockInterface (BaseInterface):
         self._csClient = None
         self._csReady = False
         self._csStuckSince = None
+        self._pkt.reset()
         if self.drifter:
             self.drifter.arm()
         self.log('locked on wall clock master:', name)
@@ -299,6 +494,8 @@ class WallclockInterface (BaseInterface):
 
     def _telemetry(self, res):
         self._ring.append(res)
+        if res.get('locked'):
+            self.hLastLocked = time.time()
 
         if self._csvFile:
             try:
@@ -422,7 +619,11 @@ class WallclockInterface (BaseInterface):
                 sock.setsockopt(socket.IPPROTO_IP, socket.IP_ADD_MEMBERSHIP, mreq)
                 joined[0] = True
                 if rebind:
-                    self.log('multicast group re-joined on ' + (ip or '0.0.0.0') + ' (fresh socket)')
+                    # every 5 s while the master is silent: log the first few, then once a minute
+                    self._rejoins += 1
+                    if self._rejoins <= 3 or time.time() - self._rejoinLogAt > 60:
+                        self._rejoinLogAt = time.time()
+                        self.log('multicast group re-joined on ' + (ip or '0.0.0.0') + ' (fresh socket, #%d)' % self._rejoins)
                 elif noted[0]:
                     self.log('multicast group joined on ' + (ip or '0.0.0.0') + ' (late: interface was not up at start)')
                 lastErr[0] = None
@@ -521,15 +722,22 @@ class WallclockInterface (BaseInterface):
                 self._quietLog('ignoring second wall clock master: ' + name)
                 continue
 
-            # Seq: drop reordered/stale packets (wrap window accepts a restarted master)
+            # Seq: drop reordered/stale packets (wrap window accepts a restarted master) and the
+            # duplicate of a packet heard on both multicast and broadcast
             s = pkt.get('s', 0)
             if self._lastSeq is not None:
                 behind = (self._lastSeq - s) & 0xffffffff
-                if 0 < behind < 1000:
+                # (a master silent for 2 s and back with a low seq restarted: take it at once
+                # instead of dropping it until its seq passes ours again)
+                if behind < 1000 and time.time() - self._lastAccept < 2.0:
                     continue
             self._lastSeq = s
 
             self._lastAccept = time.time()
+            self.hLastAccept = self._lastAccept
+            self.hMasterPlaying = bool(pkt.get('p', False))
+            self._rejoins = 0
+            self._pkt.add(pkt.get('tx', pkt.get('at', 0)), int(self._lastAccept * PRECISION))
             extraBase = None    # re-set below only if this packet is chase-eligible
             if self._freewheeling:
                 self._freewheeling = False
@@ -546,7 +754,6 @@ class WallclockInterface (BaseInterface):
             peer = self._zyrePeer(name)
             if not peer:
                 self._quietLog('waiting for zyre discovery of ' + name)
-                self.drifter.release()
                 # The master's clock is heard, so the link is up — only discovery is missing. A master
                 # rebooted or swapped under running slaves leaves it that way for good (LACROIX,
                 # 2026-09-15): after a minute ask zyre to rebuild its node, and again every minute.
@@ -559,21 +766,21 @@ class WallclockInterface (BaseInterface):
                     if z and hasattr(z, 'requestRebuild'):
                         self.log('master clock heard for 60 s without a zyre peer -> asking zyre to rebuild its node')
                         z.requestRebuild('wallclock: ' + name + ' heard for 60 s, no peer')
+                # no peer: the packets alone carry a clock (below) — a missing zyre peer no
+                # longer means a slave that stops chasing
+            else:
+                self._noPeerSince = None
+                self._rearmClockSync(peer, getattr(peer, 'timeclient', None), name)
+
+            cs, src = self._pickShift(peer)
+            if src != self.hCsSource:
+                if src:
+                    self.log('clock shift from', src, 'for', name, '(' + str(cs) + 'us)')
+                self.hCsSource = src
+            if cs is None:
+                self._quietLog('waiting for clock sync with ' + name)
+                self.drifter.release()
                 continue
-            self._noPeerSince = None
-            tc = getattr(peer, 'timeclient', None)
-            self._rearmClockSync(peer, tc, name)
-            if tc is not self._csClient:
-                self._csClient = tc
-                self._csReady = False
-            if not self._csReady:
-                if tc and getattr(tc, 'status', 0) == 1:
-                    self._csReady = True
-                    self.log('clock sync ready with', name, '( shift ' + str(peer.clockshift()) + 'us )')
-                else:
-                    self._quietLog('waiting for clock sync with ' + name)
-                    self.drifter.release()
-                    continue
 
             # Loop ownership announced by the master: mirror it live, so a master that hands
             # its loop to the playlist (several cues, loop gap) never leaves a slave wrapping
@@ -607,7 +814,6 @@ class WallclockInterface (BaseInterface):
             # Estimate master position at local now:
             # packet timestamp -> local clock (zyre clockshift), then extrapolate.
             # Delivery delay/jitter cancels out by construction.
-            cs = peer.clockshift()
             atLocal = pkt.get('at', 0) - cs
             clock = pkt.get('pos', 0.0) + (time.time() * PRECISION - atLocal) / PRECISION
             if mdur > 3:
@@ -680,6 +886,7 @@ class WallclockInterface (BaseInterface):
                             self._diffNoted.add((m, mine))
                             self.log('media differs (' + m + ' / ' + mine + ') but same duration -> chasing')
                     else:
+                        self.hMismatch = time.time()
                         self._quietLog('media mismatch: master plays ' + m + ' / self plays ' + mine + ' -> not chasing')
                         self.drifter.release()
                         continue

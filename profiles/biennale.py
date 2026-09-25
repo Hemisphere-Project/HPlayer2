@@ -111,6 +111,10 @@ if WALL: print("WALL mode: continuous sync")
 hplayer.addInterface('http2', 80, {'playlist': False, 'loop': False, 'mute': True})
 
 if SYNC and SYNC_IFACE:
+	# Health: watch process / zyre / wallclock and heal by itself — repairs first, a restart at
+	# the loop point last (2026-09-25, after KOUAGOU's desyncs). Added first: its thread-starvation
+	# guard must be in place before the other interfaces start their threads.
+	hplayer.addInterface('health')
 	# Zyre: peer discovery, clockshift measurement, synchronized start
 	hplayer.addInterface('zyre', SYNC_IFACE)
 
