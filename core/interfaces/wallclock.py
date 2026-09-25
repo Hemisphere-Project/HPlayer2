@@ -144,7 +144,6 @@ class WallclockInterface (BaseInterface):
         # came back. It now keeps chasing its MODEL of the master (last packet + elapsed, wrapped
         # at the loop) for up to modelMax, and rejoins with a speed trim.
         self.modelMax = modelMax
-        self.onOrphan = None            # profile hook: no master heard for a while, player stopped
         self.driftLog = driftLog
         # A different file of the SAME duration (± s) is a legitimate timeline to chase:
         # one content per screen, all cut to one length (the LEA fleet, 2026-09-10).
@@ -250,30 +249,6 @@ class WallclockInterface (BaseInterface):
         if bdur > 3:
             clock = clock % bdur
         return clock
-
-    ORPHAN_AFTER = 20.0
-
-    def _orphanCheck(self):
-        """No master heard for ORPHAN_AFTER s and our player is stopped: a black screen is the
-        one failure a viewer always sees. A slave restarted during a link outage used to stay
-        black until the link came back (play0 never starts a slave). Start our own media
-        (profile hook), unsynced; the first clock packet locks it. Not while a master said
-        'stopped' in the last minute (its heartbeat), nor more than once per 30 s."""
-        if not self.onOrphan or not self.player or self.player.isPlaying():
-            return
-        now = time.time()
-        if now - max(self._lastAccept, self._startedAt) < self.ORPHAN_AFTER:
-            return
-        if now - getattr(self, '_masterStoppedAt', 0) < 60:
-            return
-        if now - getattr(self, '_orphanAt', 0) < 30:
-            return
-        self._orphanAt = now
-        self.log(colored('no master clock for %d s and nothing playing: starting our own media unsynced' % (now - max(self._lastAccept, self._startedAt)), 'yellow'))
-        try:
-            self.onOrphan()
-        except Exception as e:
-            self.log('orphan start failed:', e)
 
     def _pickShift(self, peer):
         """TimeClient first (Thomas, 2026-09-25), the packets as fallback: a missing zyre peer or
@@ -615,7 +590,6 @@ class WallclockInterface (BaseInterface):
         sock.settimeout(0.25)
 
         self._openCsv()
-        self._startedAt = time.time()
         self.log('slave: chasing wall clock on port', self.port)
 
         extraBase = None    # (pos, atLocal, dur, seq, cs) of the last chase-eligible packet
@@ -683,8 +657,6 @@ class WallclockInterface (BaseInterface):
                         res['model'] = self._freewheeling
                         self._telemetry(res)
                         self.emit('drift', res)
-                elif not extraBase:
-                    self._orphanCheck()
                 continue
             except OSError:
                 continue
@@ -791,7 +763,6 @@ class WallclockInterface (BaseInterface):
 
             # Master not playing
             if not pkt.get('p', False):
-                self._masterStoppedAt = time.time()
                 self.drifter.release()
                 continue
 

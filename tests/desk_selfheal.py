@@ -259,21 +259,6 @@ assert worst < 0.1 and d1 < 0.08, "the model must hold the slave within 100 ms"
 print("   PASS")
 master.stopped.set(); slave9.stopped.set(); stop9.set()
 
-print("== T10: orphan slave (no master at all, player stopped) -> starts its own media ==")
-wcmod.time = time
-oPlayer = FakePlayer(60.0); oPlayer.playing = False
-oHp = FakeHPlayer(oPlayer, FakeZyre(None))
-orphan = WallclockInterface(oHp, None, False, player=oPlayer, port=13740, masterName='MASTER', driftLog=None)
-orphan.ORPHAN_AFTER = 2.0
-started = []
-orphan.onOrphan = lambda: (started.append(time.time()), oPlayer.play())
-orphan.recvThread.daemon = True; orphan.start()
-time.sleep(4)
-print("   orphan starts: %d" % len(started))
-assert len(started) == 1 and oPlayer.playing
-print("   PASS")
-orphan.stopped.set()
-
 print("\nALL SELF-HEAL TESTS PASSED")
 sys.stdout.flush()
 os._exit(0)
