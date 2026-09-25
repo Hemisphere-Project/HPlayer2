@@ -37,7 +37,19 @@ def threads():
     return len(os.listdir('/proc/self/task'))
 
 
+def isolate():
+    """Beacon on a private UDP port (15670): safe to run on a live player, whose own node beacons
+    on 5670 — the test's nodes never meet it. ZyreNode calls set_interval before start()."""
+    import core.interfaces.zyre as zm
+    orig = zm.Zyre.set_interval
+    def set_interval(self, i):
+        self.set_port(15670)
+        return orig(self, i)
+    zm.Zyre.set_interval = set_interval
+
+
 def run_master(iface, seconds):
+    isolate()
     from core.interfaces.zyre import ZyreNode
     fi = FakeIface('MASTER')
     node = ZyreNode(fi, iface)
@@ -55,6 +67,7 @@ def run_master(iface, seconds):
 
 
 def run_flapper(iface, rebuilds):
+    isolate()
     from core.interfaces.zyre import ZyreNode
     fi = FakeIface('FLAPPER')
     time.sleep(2)
