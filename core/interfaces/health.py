@@ -35,13 +35,60 @@ _starved = {'count': 0, 'last': 0.0}
 _origStart = threading.Thread.start
 
 
+def _starvationSnapshot():
+    """State at the failing thread start. On KOUAGOU (2026-09-26) pthread_create failed at 35-39
+    threads with a 2 GB address-space hole, 540 MB available and 54/1803 cgroup tasks when looked
+    at afterwards — the cause is only visible at the instant, so take it there."""
+    out = []
+    try:
+        st = dict(l.split(':', 1) for l in open('/proc/self/status'))
+        out.append('VmSize=%s' % st.get('VmSize', '?').strip())
+        names = {}
+        for t in os.listdir('/proc/self/task'):
+            try:
+                n = open('/proc/self/task/%s/comm' % t).read().strip()
+            except OSError:
+                continue
+            n = n.split(' (')[0].rstrip('0123456789-')
+            names[n] = names.get(n, 0) + 1
+        out.append('threads=%d %s' % (sum(names.values()), sorted(names.items(), key=lambda x: -x[1])[:6]))
+        spans = []
+        for l in open('/proc/self/maps'):
+            a, b = [int(x, 16) for x in l.split()[0].split('-')]
+            spans.append((a, b))
+        spans.sort()
+        hole = max([spans[i + 1][0] - spans[i][1] for i in range(len(spans) - 1)] or [0])
+        out.append('maps=%d largest-hole=%dMB' % (len(spans), hole >> 20))
+        mi = dict(l.split(':', 1) for l in open('/proc/meminfo'))
+        out.append('MemAvailable=%s Committed_AS=%s' % (mi['MemAvailable'].strip(), mi['Committed_AS'].strip()))
+        tasks = 0
+        for p in os.listdir('/proc'):
+            if p.isdigit():
+                try:
+                    tasks += len(os.listdir('/proc/%s/task' % p))
+                except OSError:
+                    pass
+        out.append('system-tasks=%d' % tasks)
+        for cg in ('/sys/fs/cgroup/pids/system.slice/system-hplayer2.slice',):
+            for d in os.listdir(cg):
+                if d.endswith('.service'):
+                    out.append('cgroup %s=%s/%s' % (d, open('%s/%s/pids.current' % (cg, d)).read().strip(),
+                                                    open('%s/%s/pids.max' % (cg, d)).read().strip()))
+    except Exception as e:
+        out.append('snapshot error: %s' % e)
+    return ' | '.join(out)
+
+
 def _guardedStart(self, *a, **k):
     try:
         return _origStart(self, *a, **k)
     except RuntimeError as e:
         if "can't start new thread" in str(e):
             _starved['count'] += 1
-            _starved['last'] = time.time()
+            now = time.time()
+            if now - _starved['last'] > 30:
+                _starved['diag'] = _starvationSnapshot()
+            _starved['last'] = now
         raise
 
 
@@ -76,6 +123,23 @@ def mpv_get(path, props, timeout=0.5):
         except OSError:
             pass
     return out
+
+
+def address_space():
+    """(VmSize MB, 8 MB anonymous mappings = thread stacks, live or orphaned). A 32-bit player
+    has ~3 GB of address space: orphaned 8 MB stacks piling up would make thread starts fail at a
+    normal thread count (the KOUAGOU starvations, 2026-09-26: 31 threads, 47 stacks)."""
+    vm = st = 0
+    try:
+        for l in open('/proc/self/maps'):
+            f = l.split()
+            a, b = [int(x, 16) for x in f[0].split('-')]
+            vm += b - a
+            if len(f) < 6 and (8 << 20) <= b - a <= (8 << 20) + 8192:
+                st += 1
+    except (OSError, ValueError):
+        pass
+    return vm >> 20, st
 
 
 def thread_count():
@@ -220,6 +284,8 @@ class HealthInterface (BaseInterface):
             n = _starved['count'] - self._starvedSeen
             self._starvedSeen = _starved['count']
             self.log(colored("thread starvation: %d `can't start new thread` (threads now %d)" % (n, thread_count()), 'red'))
+            if _starved.get('diag'):
+                self.log(colored('starvation snapshot: ' + _starved.pop('diag'), 'red'))
             self.requestRestart('thread starvation')
         tc = thread_count()
         if tc > self.THREAD_MAX:
@@ -288,7 +354,8 @@ class HealthInterface (BaseInterface):
                     w = ' clock-sent=%ds-ago' % (now - wc.hLastSend)
                 else:
                     w = ' heard=%ds-ago locked=%ds-ago cs=%s' % (now - wc.hLastAccept, now - wc.hLastLocked, wc.hCsSource)
-            self.log('summary: threads=%d peers=%d starved=%d%s%s' % (tc, len(peers), _starved['count'], fl, w))
+            vm, st = address_space()
+            self.log('summary: threads=%d stacks8M=%d vm=%dMB peers=%d starved=%d%s%s' % (tc, st, vm, len(peers), _starved['count'], fl, w))
 
     # ── loop ───────────────────────────────────────────────────────────────────────────
     def listen(self):
