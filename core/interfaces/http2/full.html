@@ -96,9 +96,10 @@
                     </div>
                 </div>
 
-                <!-- brightness/contrast are profile-gated, hidden by default (hplayer2#t-042):
-                     only the videonet backend drives them, every other player no-ops.
-                     hplayer.addInterface('http2', 80, {'brightness': True}) shows both. -->
+                <!-- brightness/contrast follow the players (hplayer2#t-042/049): only the
+                     videonet backend drives them, every other player no-ops, so the server
+                     shows them where hasBrightness() is true.
+                     hplayer.addInterface('http2', 80, {'brightness': False}) forces them off. -->
                 <div class="col-lg-3 col-md-4 col-12 brightness-element">
                     <div class="">
                         <span class="badge badge-secondary mr-2 bright-main">brightness</span><span id="brightnessMain"></span>
