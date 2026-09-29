@@ -93,6 +93,7 @@ class Http2Interface (BaseInterface):
             'loop'      : True,
             'mute'      : True,
             'surface'   : None,       # LED/output transform card: None = follow the players (hasSurface)
+            'brightness': None,       # brightness/contrast sliders: None = follow the players (hasBrightness)
             'page'      : 'full'
         }
         self.conf.update(confe)
@@ -132,11 +133,14 @@ class Http2Interface (BaseInterface):
 
     # Effective config for a page: a None gate resolves against the players' capabilities
     # (the Surface card exists only where a backend applies the transform — mpv on x86;
-    # a Pi's MMAL output has no GLSL, so its page never shows the card)
+    # a Pi's MMAL output has no GLSL, so its page never shows the card. Same for the
+    # brightness/contrast sliders: only videonet applies them, every other backend no-ops)
     def config(self):
         conf = dict(self.conf)
         if conf.get('surface') is None:
             conf['surface'] = any(p.hasSurface() for p in self.hplayer.players())
+        if conf.get('brightness') is None:
+            conf['brightness'] = any(p.hasBrightness() for p in self.hplayer.players())
         return conf
 
     # SEND socketio message to clients

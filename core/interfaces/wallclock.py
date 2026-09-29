@@ -66,10 +66,15 @@ class WallclockInterface (BaseInterface):
 
         if self.master:
             self.drifter = None
-            # Latch (pos, at) pairs from the player status events; the send
-            # loop reads the latch at its own rate. No extrapolation here:
-            # raw samples out, slaves extrapolate. Single-reference tuple:
-            # written by the event thread, read by the send loop.
+            # Latch (pos, at, mono) triples from the player status events; the
+            # send loop reads the latch at its own rate. No extrapolation here:
+            # raw samples out, slaves extrapolate. 'at' is the WALL instant
+            # that goes on the wire; 'mono' is the same instant on the
+            # monotonic clock, and only exists so the send loop can measure
+            # how STALE the latch is without a clock step making a live latch
+            # look silent. Single-reference tuple: written by the event
+            # thread, read by the send loop - which is why the pair lives
+            # inside it and not beside it.
             self._latch = None
             if self.player:
                 self.hplayer.on(self.player.name + '.status')(self._onPlayerStatus)
@@ -88,7 +93,7 @@ class WallclockInterface (BaseInterface):
             self._csReady = False
             self._lastQuiet = {}
             self._ring = []
-            self._lastSummary = time.time()
+            self._lastSummary = time.monotonic()
             self._csvFile = None
 
     #
@@ -99,7 +104,7 @@ class WallclockInterface (BaseInterface):
         if len(args) < 2:
             return
         if args[0] == 'time' and args[1] is not None:
-            self._latch = (float(args[1]), int(time.time() * PRECISION))
+            self._latch = (float(args[1]), int(time.time() * PRECISION), time.monotonic())
 
     def _peerIps(self):
         ips = []
@@ -131,10 +136,13 @@ class WallclockInterface (BaseInterface):
             self.stopped.wait(interval)
 
             latch = self._latch
-            # player silent (stopped / paused): latch goes stale, stop emitting
-            if latch is None or (time.time() * PRECISION - latch[1]) > PRECISION:
+            # player silent (stopped / paused): latch goes stale, stop emitting.
+            # Staleness is an ELAPSED measurement -> monotonic: a forward step
+            # used to make a perfectly live latch look a step-size old and cut
+            # the master's emission until the next status event.
+            if latch is None or (time.monotonic() - latch[2]) > 1.0:
                 continue
-            pos, at = latch
+            pos, at, _ = latch
 
             media = self.player.status('media')
             dur = self.player.status('duration')
@@ -168,7 +176,7 @@ class WallclockInterface (BaseInterface):
 
     # rate-limited log (once per 5s per message)
     def _quietLog(self, msg):
-        now = time.time()
+        now = time.monotonic()      # rate-limit WINDOW: elapsed
         if self._lastQuiet.get(msg, 0) + 5 < now:
             self._lastQuiet[msg] = now
             self.log(msg)
@@ -176,7 +184,7 @@ class WallclockInterface (BaseInterface):
     def _lockOn(self, name):
         self._lockedName = name
         self._lastSeq = None
-        self._lastAccept = time.time()
+        self._lastAccept = time.monotonic()
         self._freewheeling = False
         self._candName = None
         self._csClient = None
@@ -216,7 +224,7 @@ class WallclockInterface (BaseInterface):
                 self._csvFile = None
 
         # 60s summary: p50/p95/max |diff|, lock ratio, jumps
-        now = time.time()
+        now = time.monotonic()      # a 60s WINDOW: elapsed
         if now - self._lastSummary >= 60 and len(self._ring) > 0:
             self._lastSummary = now
             diffs = sorted([abs(r['diff']) * 1000 for r in self._ring])
@@ -249,13 +257,18 @@ class WallclockInterface (BaseInterface):
         self._openCsv()
         self.log('slave: chasing wall clock on port', self.port)
 
-        extraBase = None    # (pos, atLocal, dur, seq, cs) of the last chase-eligible packet
+        # (pos, age, recvMono, dur, seq, cs) of the last chase-eligible packet.
+        # 'age' is how old that packet was ON ARRIVAL (wall vs wall, the only
+        # instant at which the two machines' clocks are comparable); recvMono
+        # stamps that same instant on OUR monotonic clock, so everything after
+        # arrival is elapsed time and a clock step cannot enter the estimate.
+        extraBase = None
 
         while not self.stopped.is_set():
 
             # Staleness: master silent beyond the extrapolation budget ->
             # freewheel at speed 1.0, keep listening
-            now = time.time()
+            now = time.monotonic()      # all the budgets below are ELAPSED
             if self._lockedName and now - self._lastAccept > self.extrapolate:
                 if not self._freewheeling:
                     self._freewheeling = True
@@ -274,9 +287,9 @@ class WallclockInterface (BaseInterface):
                 # Delivery gap: keep servoing on the extrapolated clock
                 # until the freewheel budget runs out.
                 if extraBase and self.drifter and not self._freewheeling \
-                        and time.time() - self._lastAccept > 0.2:
-                    bpos, batLocal, bdur, bseq, bcs = extraBase
-                    clock = bpos + (time.time() * PRECISION - batLocal) / PRECISION
+                        and time.monotonic() - self._lastAccept > 0.2:
+                    bpos, bage, brecvMono, bdur, bseq, bcs = extraBase
+                    clock = bpos + (bage + (time.monotonic() * PRECISION - brecvMono)) / PRECISION
                     if bdur > 3:
                         clock = clock % bdur
                     res = self.drifter.tick(clock, bdur)
@@ -308,8 +321,8 @@ class WallclockInterface (BaseInterface):
             elif name != self._lockedName:
                 if self._candName != name:
                     self._candName = name
-                    self._candSince = time.time()
-                self._candLast = time.time()
+                    self._candSince = time.monotonic()
+                self._candLast = time.monotonic()
                 self._quietLog('ignoring second wall clock master: ' + name)
                 continue
 
@@ -321,7 +334,13 @@ class WallclockInterface (BaseInterface):
                     continue
             self._lastSeq = s
 
-            self._lastAccept = time.time()
+            # Arrival instant, on BOTH clocks and as close to the recvfrom as
+            # the accept path allows: the wall read is the last one that can
+            # legitimately be compared with the master's 'at', the monotonic
+            # one carries the estimate from here to the next packet.
+            self._lastAccept = time.monotonic()
+            recvWall = time.time() * PRECISION
+            recvMono = self._lastAccept * PRECISION
             extraBase = None    # re-set below only if this packet is chase-eligible
             if self._freewheeling:
                 self._freewheeling = False
@@ -369,16 +388,22 @@ class WallclockInterface (BaseInterface):
                     continue
 
             # Estimate master position at local now:
-            # packet timestamp -> local clock (zyre clockshift), then extrapolate.
-            # Delivery delay/jitter cancels out by construction.
+            # packet timestamp -> local clock (zyre clockshift), aged against
+            # OUR wall clock once, at arrival, then extrapolated on the
+            # monotonic clock. Delivery delay/jitter cancels out by
+            # construction; a wall step after arrival no longer enters it at
+            # all, and one landing between 'at' and arrival costs a single
+            # packet instead of every packet until the 120s clockshift
+            # refresh (zyre CLOCK_STEP now re-samples that immediately).
             cs = peer.clockshift()
             atLocal = pkt.get('at', 0) - cs
-            clock = pkt.get('pos', 0.0) + (time.time() * PRECISION - atLocal) / PRECISION
+            age = recvWall - atLocal
+            clock = pkt.get('pos', 0.0) + (age + (time.monotonic() * PRECISION - recvMono)) / PRECISION
             dur = pkt.get('dur', 0) or 0
             if dur > 3:
                 clock = clock % dur
 
-            extraBase = (pkt.get('pos', 0.0), atLocal, dur, s, cs)
+            extraBase = (pkt.get('pos', 0.0), age, recvMono, dur, s, cs)
 
             res = self.drifter.tick(clock, dur)
             if res:

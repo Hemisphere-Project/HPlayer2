@@ -138,6 +138,7 @@ class MpvPlayer(BasePlayer):
 
         self._audio_channels = 2    # current track layout (observed live)
         self._pan_current = None    # last mono/pan request, re-applied on layout change
+        self._container_fps = None  # media frame rate (observed live) -> 'fps' on change
 
 
     ############
@@ -295,6 +296,9 @@ class MpvPlayer(BasePlayer):
             # http2 next to the surface's target size and output mode
             self._mpv_send('{ "command": ["observe_property", 7, "osd-dimensions/w"] }')
             self._mpv_send('{ "command": ["observe_property", 8, "osd-dimensions/h"] }')
+            # the media's own frame rate, for auto-refresh (HDMI mode matching). Arrives
+            # when the file loads, on its own schedule — NOT ordered against 'playing'.
+            self._mpv_send('{ "command": ["observe_property", 9, "container-fps"] }')
             closeToTheEnd = False
             nearendEmitted = False
             
@@ -372,6 +376,20 @@ class MpvPlayer(BasePlayer):
                                 self._out_dim[mpvsays['name'][-1]] = int(d) if d else 0
                                 w, h = self._out_dim.get('w', 0), self._out_dim.get('h', 0)
                                 self.update('output', f'{w}x{h}' if w and h else None)
+
+                            elif mpvsays['name'] == 'container-fps':
+                                # emitted on CHANGE only, the id-6 shape: a media-derived
+                                # property that arrives late and drives a re-apply. The
+                                # auto-refresh switch hangs on THIS, never on 'playing' —
+                                # nothing orders the two, so a handler on 'playing' would
+                                # read an fps that is absent on the first file and stale
+                                # on every later one.
+                                d = mpvsays.get('data')
+                                fps = round(float(d), 3) if d else None
+                                if fps and fps != self._container_fps:
+                                    self._container_fps = fps
+                                    self.update('fps', fps)
+                                    self.emit('fps', fps)
 
                             elif mpvsays['name'] == 'audio-params/channel-count':
                                 if 'data' in mpvsays and mpvsays['data']:
@@ -554,16 +572,28 @@ class MpvPlayer(BasePlayer):
     def _isNdi(self, path):
         return path.startswith('ndi://') or path.lower().endswith('.ndi')
 
+    @staticmethod
+    def _ndi_stream(name):
+        """NDI names read "MACHINE (stream)": keep the stream only, so a cue follows the
+        stream to whichever machine publishes it — a spare sender taking over with the same
+        stream names (IMA-Niort, 2026-09-23). HNdi matches "(stream)" as a suffix. A name
+        with no "MACHINE (…)" shape (ip:port, a bare stream) passes through."""
+        i = name.find(' (')
+        if i > 0 and name.endswith(')'):
+            return name[i + 2:-1].strip() or name
+        return name
+
     def _ndi_source(self, path):
-        """source name: the URL body, or the first non-comment line of the .ndi file"""
+        """source name: the URL body, or the first non-comment line of the .ndi file,
+        machine part dropped (see _ndi_stream)"""
         if path.startswith('ndi://'):
-            return path[6:].strip()
+            return self._ndi_stream(path[6:].strip())
         try:
             with open(path) as fd:
                 for line in fd:
                     line = line.strip()
                     if line and not line.startswith('#'):
-                        return line
+                        return self._ndi_stream(line)
         except OSError as e:
             self.log('ndi: cannot read', path, e)
         return ''

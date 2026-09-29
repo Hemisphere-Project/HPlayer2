@@ -231,10 +231,10 @@ $(document).ready(function() {
         }
     }
 
-    // brightness + contrast sliders: only the videonet backend drives them,
-    // every other player no-ops the two events — so they stay hidden unless
-    // the profile opts in: addInterface('http2', 80, {'brightness': True})
-    // (hplayer2#t-042). Hidden by style.css until then: no flash on load.
+    // brightness + contrast sliders: only the videonet backend drives them, every
+    // other player no-ops the two events — the server resolves the gate from the
+    // players' hasBrightness(), unless the profile forces {'brightness': bool}
+    // (hplayer2#t-042/049). Hidden by style.css until then: no flash on load.
     setElementBrightness = function(mode) {
         if (mode === true) {
             $('.brightness-element').show()
@@ -685,6 +685,24 @@ $(document).ready(function() {
         $('#surface_output_mode').on('change', function() { patch({ output_mode: this.value }); });
         numKeys.forEach(function(k) {
             $('#surface_' + k).on('change', function() { var o = {}; o[k] = Number(this.value) || 0; patch(o); });
+        });
+    })();
+
+    // --- Display panel (auto-refresh: HDMI mode follows the media frame rate) ---
+    // 0 = off, 1 = switch + replay, 2 = switch + restart the unit. The radar-panel shape:
+    // trigger the event, the engine persists and echoes the whole dict via settings.updated.
+    (function() {
+        var LABELS = { 0: 'fixed mode', 1: 'auto (replay)', 2: 'auto (restart)' };
+        socket.on('settings.updated', function(msg) {
+            if (msg['auto-refresh'] === undefined) return;
+            var rung = parseInt(msg['auto-refresh']) || 0;
+            var el = $('#display_auto_refresh');
+            if (!el.is(':focus')) el.val(String(rung));
+            $('#display_state').text(LABELS[rung] || LABELS[0])
+                .toggleClass('badge-success', rung > 0).toggleClass('badge-secondary', rung === 0);
+        });
+        $('#display_auto_refresh').on('change', function() {
+            trigger('auto-refresh', parseInt(this.value) || 0);
         });
     })();
 
