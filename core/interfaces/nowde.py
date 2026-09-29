@@ -360,6 +360,7 @@ class NowdeInterface(BaseInterface):
         self._silentSince = None        # slave: since when we should play but the node hears nothing
         self._tableEmptySince = None    # master: since when RUNNING_STATE lists no receiver
         self._lastNodeReset = 0.0       # both: last soft reset we asked the node for
+        self._wasSlave = (mode == 'slave')   # the role survives a link loss for the guard's purpose
 
         # Slave sync state (the chase-lock servo lives in the shared Drifter)
         self.jumpFix = 500       # seek-latency compensation (300ms RockPro64 on loop, 1000ms laptop)
@@ -413,6 +414,7 @@ class NowdeInterface(BaseInterface):
         if self.role == role:
             return
         self.role = role
+        self._wasSlave = (role == 'slave')
         self.log(colored(f"role: {role.upper()} ({source})", 'cyan'))
         self.emit('role', role)
         if role == 'master' and self.out:
@@ -660,6 +662,11 @@ class NowdeInterface(BaseInterface):
                                 and now - self._connected_at > self.PROBE_TIMEOUT):
                             self._set_role('slave', 'no HELLO, assuming v1 node')
                     self._push_status()
+                else:
+                    # Link down (node re-enumerating, or gone for good): the guard must still run —
+                    # a slave whose node vanished while it played would otherwise play on forever,
+                    # unsynced, with nothing left to say stop (fuzz F3, 2026-09-29).
+                    self._slave_watch(time.time())
             except Exception as err:
                 self.log(colored(f"emitter error: {err}", 'red'))
             self.stopped.wait(0.02)
@@ -1018,11 +1025,15 @@ class NowdeInterface(BaseInterface):
         if now - self._lastWatch < 1.0:
             return
         self._lastWatch = now
-        if not self.isSlave() or not self.player:
+        # While the link is down `_close_ports` has reset the role (mode auto): a slave that lost its
+        # node is still a slave for this purpose.
+        slave = self.isSlave() or (self.role is None and self._wasSlave)
+        if not slave or not self.player:
             return
+        linked = self.out is not None
         sq = self.node.get('sync_quality')
         hello_age = (now - self._lastHelloAt) if (self._lastHelloAt and self.node.get('version')) else None
-        node_silent = (sq == 0) or (hello_age is not None and hello_age > self.HELLO_SILENCE)
+        node_silent = (not linked) or (sq == 0) or (hello_age is not None and hello_age > self.HELLO_SILENCE)
         playing = bool(self.player.isPlaying()) and not self.isStopped
 
         grace = self._cfg_seconds('nowde-silence-stop')
@@ -1030,7 +1041,8 @@ class NowdeInterface(BaseInterface):
             if self._sqZeroSince is None:
                 self._sqZeroSince = now
             elif now - self._sqZeroSince >= grace:
-                why = (f"node reports no sync for {int(now - self._sqZeroSince)} s" if sq == 0
+                why = (f"node link down for {int(now - self._sqZeroSince)} s" if not linked
+                       else f"node reports no sync for {int(now - self._sqZeroSince)} s" if sq == 0
                        else f"no HELLO from the node for {int(hello_age)} s")
                 self.log(colored(f"SILENCE GUARD: {why} while playing -> stopping (the master's CC#100 resumes us)", 'red'))
                 self.player.stop()
@@ -1046,7 +1058,7 @@ class NowdeInterface(BaseInterface):
             self._sqZeroSince = None
 
         reset_after = self._cfg_seconds('nowde-node-reset')
-        if reset_after <= 0 or playing:
+        if reset_after <= 0 or playing or not linked:     # no link = nothing to reset (usbfix's job)
             self._silentSince = None
             return
         expected = self._guardStopped or self._schedule_open_on_sane_clock()
