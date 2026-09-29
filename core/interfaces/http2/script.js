@@ -805,6 +805,7 @@ $(document).ready(function() {
             if (msg['schedule-enable'] !== undefined) $('#schedule_enable').prop('checked', !!msg['schedule-enable']);
             if (msg['schedule-open'] !== undefined) $('#schedule_open').val(msg['schedule-open']);
             if (msg['schedule-close'] !== undefined) $('#schedule_close').val(msg['schedule-close']);
+            if (msg['schedule-reboot'] !== undefined) $('#schedule_reboot').prop('checked', !!msg['schedule-reboot']);
             if (msg['schedule-days'] !== undefined) {
                 var m = String(msg['schedule-days'] || '1111111');
                 if (m.length !== 7) m = '1111111';
@@ -835,10 +836,12 @@ $(document).ready(function() {
                 var why = st['open'] ? 'window OPEN — playing'
                         : (st['dayOpen'] === false ? 'closed TODAY (day off) — silent'
                                                    : 'window CLOSED — silent');
+                if (st['reboot']) why += ' · clean-slate reboot ' + (st['rebootSlots'] || 'inactive today');
                 status.text(why).removeClass('rtc-warn').addClass('rtc-ok');
             }
         });
         $('#schedule_enable').on('change', function() { trigger('schedule-enable', this.checked); });
+        $('#schedule_reboot').on('change', function() { trigger('schedule-reboot', this.checked); });
         $('#schedule_open').on('change', function() { trigger('schedule-open', this.value); });
         $('#schedule_close').on('change', function() { trigger('schedule-close', this.value); });
         $('.schedule-day').on('change', function() {

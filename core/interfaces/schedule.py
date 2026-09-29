@@ -32,7 +32,19 @@ class ScheduleInterface(BaseInterface):
         # that day, '0' = closed all day. Default = every day, so adding this changes nothing
         # for an existing config. A museum closed on Mondays is "0111111".
         'schedule-days':   '1111111',
+        # 2026-09-29 (MBA garden, Thomas): a clean slate around the window — reboot the player
+        # REBOOT_BEFORE_OPEN min before the window opens and REBOOT_AFTER_CLOSE min after it
+        # closes, on open days only, and only when the schedule is enabled, an RTC is present, the
+        # clock is sane and the player has been up > REBOOT_MIN_UPTIME s (so a slow boot into the
+        # slot can never loop). Not gated on playback: a player playing outside its window is the
+        # dirty state this clears. A power cut is a dirty stop; this is a clean one: /data
+        # unmounts, mpv/HPlayer2/tmpfs start fresh every day.
+        'schedule-reboot': False,
     }
+    REBOOT_BEFORE_OPEN = 10     # minutes
+    REBOOT_AFTER_CLOSE = 5      # minutes
+    REBOOT_SLOT_MINUTES = 3     # the decision window (the tick is 30 s)
+    REBOOT_MIN_UPTIME = 900     # seconds
     DAYS_ALL = '1111111'
 
     def __init__(self, hplayer, tick=30, requireRtc=False):
@@ -44,6 +56,7 @@ class ScheduleInterface(BaseInterface):
         self.rtcPresent = False
         self._warnedClock = False
         self._lastOpen = None
+        self._rebootSlotDone = None     # "<date>-<label>" of the last slot acted on (or skipped)
 
     #
     # public
@@ -96,6 +109,61 @@ class ScheduleInterface(BaseInterface):
             self._lastOpen = openNow
             self.emit('open' if openNow else 'close')
         self._pushStatus(openNow)
+        try:
+            self._rebootTick()
+        except Exception as e:
+            self.log("schedule-reboot error:", e)
+
+    #
+    # clean-slate reboot around the window (schedule-reboot)
+    #
+
+    def _rebootSlots(self):
+        """[(label, minute-of-day)] for today, or [] when the option cannot act: disabled, no RTC,
+        insane clock, closed day, malformed or midnight-crossing window (not handled: a window that
+        belongs to the previous day has no clean 'before open' on this one)."""
+        if not (self._cfgBool('schedule-reboot') and self._cfgBool('schedule-enable')):
+            return []
+        if not self.rtcPresent or not self._clockSane():
+            return []
+        o = self._parseHM(self.hplayer.settings.get('schedule-open'))
+        c = self._parseHM(self.hplayer.settings.get('schedule-close'))
+        if o is None or c is None or not (o < c):
+            return []
+        if not self._dayOpen(datetime.now().weekday()):
+            return []
+        slots = [('before open', o - self.REBOOT_BEFORE_OPEN), ('after close', c + self.REBOOT_AFTER_CLOSE)]
+        return [(l, m) for l, m in slots if 0 <= m < 1440]
+
+    @staticmethod
+    def _uptime():
+        try:
+            with open('/proc/uptime') as f:
+                return float(f.read().split()[0])
+        except Exception:
+            return 0.0
+
+    def _rebootTick(self):
+        now = datetime.now()
+        mins = now.hour * 60 + now.minute
+        for label, slot in self._rebootSlots():
+            if not (slot <= mins < slot + self.REBOOT_SLOT_MINUTES):
+                continue
+            key = "%s-%s" % (now.date(), label)
+            if self._rebootSlotDone == key:
+                return
+            self._rebootSlotDone = key          # one decision per slot, whatever it is
+            up = self._uptime()
+            if up < self.REBOOT_MIN_UPTIME:
+                self.log("schedule-reboot (%s): skipped, up only %d s" % (label, up))
+                return
+            # Deliberately NOT gated on "not playing": both slots sit outside the window, so a
+            # player found playing there is either a manual test or exactly the stuck state this
+            # option exists to clear (Thomas, 2026-09-29). The clean slate wins.
+            self.log("schedule-reboot (%s): RTC ok, up %d min -> rebooting now" % (label, up // 60))
+            self.emit('reboot', label)
+            subprocess.Popen(['systemctl', 'reboot'])
+            return
 
     #
     # internals
@@ -138,6 +206,8 @@ class ScheduleInterface(BaseInterface):
                 'open': openNow,
                 'days': self._cfgDays(),
                 'dayOpen': self._dayOpen(datetime.now().weekday()),
+                'reboot': self._cfgBool('schedule-reboot'),
+                'rebootSlots': ' / '.join('%02d:%02d %s' % (m // 60, m % 60, l) for l, m in self._rebootSlots()),
             })
 
     def _cfgDays(self):
