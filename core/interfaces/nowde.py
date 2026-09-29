@@ -53,6 +53,10 @@ CMD_QUERY_RUNNING_STATE = 0x03
 CMD_SET_ROLE = 0x08
 CMD_SET_LOCAL_LAYER = 0x09
 CMD_SET_LOG = 0x0A
+CMD_SET_LR = 0x0B          # 2.0.3+: long-range PHY switch. Sent with the node's CURRENT value it is
+                           # the only host-initiated node reboot (esp_restart 300 ms later): the
+                           # radio re-inits, the USB re-enumerates, we relink. NEVER send a value
+                           # the mesh does not already carry (an LR-only master becomes invisible).
 CMD_MEDIA_SYNC = 0x10
 MEDIASYNC_FLAG_VOLUME = 0x01     # 2.0.4 MEDIA_SYNC tail: the volume byte is meaningful
 MEDIASYNC_FLAG_MUTE = 0x02       # reserved
@@ -271,9 +275,26 @@ class NowdeInterface(BaseInterface):
         # node emits from that level. Both off by default: nothing changes until they are set.
         'nowde-volume-link':   'off',
         'nowde-volume-follow': False,
+        # 2026-09-29 (MBA garden, W1-W6 after two master-radio deaths): a slave in doubt goes SILENT,
+        # then resets its node and tries to catch back; a master hearing nobody resets its node.
+        # SLAVE `nowde-silence-stop`: playing while the node reports sync_quality 0 (link lost, or
+        #   the master stopped and we missed the CC#100=0 edge) or answers no HELLO, for this many
+        #   seconds -> stop. The master's CC#100 (repeated every second while it plays) resumes us.
+        #   The measured data: every sq=0 episode while playing was final until a reboot; the
+        #   node's own link-lost threshold is 10 s; so 180 s is generous, not tight. 0 = off.
+        # BOTH `nowde-node-reset`: seconds after which the node is soft-reset (SET_LR, same value)
+        #   -- master: RUNNING_STATE has listed no receiver that long (W3 24/09 16:54 and 28/09
+        #   15:14: ESP-NOW TX wedged, every send NO_MEM, cured by exactly this reset on 29/09);
+        #   slave: it should be playing (the silence guard stopped it, or its own schedule is open
+        #   on a SANE RTC) yet the node hears nothing that long. At most one reset per 15 min.
+        #   0 = off.
+        'nowde-silence-stop':  180,
+        'nowde-node-reset':    300,
     }
     VOLUME_SETTLE = 0.5             # master: carry a level only once it has held still this long
     VOLUME_PERSIST_DELAY = 2.0      # slave: apply live, write the cfg only after this much quiet
+    NODE_RESET_MIN_GAP = 900.0      # never two soft resets of the node closer than this
+    HELLO_SILENCE = 30.0            # slave: no HELLO for this long = the node is not answering (probe is 2 s)
 
     def __init__(self, hplayer, player=None, port_name=None, max_retry=0, mode='auto'):
         if _MIDO_IMPORT_ERROR:
@@ -331,6 +352,14 @@ class NowdeInterface(BaseInterface):
         self._volLastSeen = 0.0
         self._stopSince = None          # master: when the player last went not-playing
         self._assigned = set()          # macs we already re-layered
+        # silence guard / node reset (see DEFAULTS)
+        self._lastHelloAt = 0.0         # last HELLO on this link
+        self._lastWatch = 0.0
+        self._sqZeroSince = None        # slave: since when the node reports no sync while we play
+        self._guardStopped = False      # slave: we stopped by ourselves; no CC#100 has spoken since
+        self._silentSince = None        # slave: since when we should play but the node hears nothing
+        self._tableEmptySince = None    # master: since when RUNNING_STATE lists no receiver
+        self._lastNodeReset = 0.0       # both: last soft reset we asked the node for
 
         # Slave sync state (the chase-lock servo lives in the shared Drifter)
         self.jumpFix = 500       # seek-latency compensation (300ms RockPro64 on loop, 1000ms laptop)
@@ -531,6 +560,7 @@ class NowdeInterface(BaseInterface):
             if not info:
                 return
             self.node.update(info)
+            self._lastHelloAt = time.time()
             self.log(f"HELLO v{info['version']} up={info['uptime']}ms boot={info['boot_reason']}"
                      + (f" role={info['role']} board={info['board']}" if 'role' in info else " (v1 node)"))
             self.emit('hello', info)
@@ -619,11 +649,13 @@ class NowdeInterface(BaseInterface):
                         if now - self._lastPoll >= self.POLL_INTERVAL:
                             self._lastPoll = now
                             self._probe()
+                        self._master_watch(now)
                     else:
                         if now - self._lastProbe >= self.PROBE_INTERVAL:
                             self._lastProbe = now
                             self._probe()
                         self._volume_persist_tick()   # 2.0.4: commit a settled linked volume
+                        self._slave_watch(now)
                         if (self.mode == 'auto' and self.role is None
                                 and now - self._connected_at > self.PROBE_TIMEOUT):
                             self._set_role('slave', 'no HELLO, assuming v1 node')
@@ -796,6 +828,10 @@ class NowdeInterface(BaseInterface):
         self.mesh_synced = False
         self.lastCC = None          # the next node's first CC#100 must act, even if it repeats ours
         self.isStopped = False
+        self._lastHelloAt = 0.0     # a new link starts its own silence clocks (`_guardStopped` survives:
+        self._sqZeroSince = None    # a relink does not mean the master spoke)
+        self._silentSince = None
+        self._tableEmptySince = None
         if self.mode == 'auto':
             self.role = None        # the next node may be another role
 
@@ -898,6 +934,8 @@ class NowdeInterface(BaseInterface):
             return
 
         self.lastCC = cc_value
+        self._guardStopped = False      # the master spoke: whatever it says, we are no longer in doubt
+        self._silentSince = None
 
         if cc_value == 0:
             # Stop playback
@@ -941,6 +979,110 @@ class NowdeInterface(BaseInterface):
                 self.isStopped = True
                 self.lastPattern = None
 
+    # ------------------------------------------------------------------ silence guard / node reset
+
+    def _cfg_seconds(self, key):
+        try:
+            return max(0.0, float(self._cfg(key) or 0))
+        except (TypeError, ValueError):
+            return 0.0
+
+    def _node_soft_reset(self, reason, now=None):
+        """Reboot the node from here: SET_LR with the value it already carries (2.0.3+ restarts on
+        any SET_LR). The radio re-inits, USB re-enumerates (~3 s), the listener relinks by itself.
+        Refused when the node's LR flag is unknown: guessing it could split the mesh."""
+        lr = self.node.get('lr')
+        if lr is None or not self.out:
+            self.log(colored(f"node reset wanted ({reason}) but the node's LR flag is unknown: not sent", 'yellow'))
+            return False
+        self._lastNodeReset = now if now is not None else time.time()
+        self.log(colored(f"NODE SOFT RESET: {reason} -> SET_LR {1 if lr else 0} (unchanged value; the node restarts)", 'red'))
+        self.emit('node-reset', reason)
+        return bool(self._send(build_simple(CMD_SET_LR, 1 if lr else 0)))
+
+    def _schedule_open_on_sane_clock(self):
+        """True only when this player's own schedule is enabled, an RTC is present, the clock is
+        sane and the window is open -- the slave's window is a plausibility check, never a trigger
+        (the schedule interface fails OPEN on a missing/insane clock, so each guard is re-asserted)."""
+        s = self.hplayer.interface('schedule')
+        if not s:
+            return False
+        try:
+            return bool(s._cfgBool('schedule-enable') and s.rtcPresent and s._clockSane() and s.isOpen())
+        except Exception:
+            return False
+
+    def _slave_watch(self, now):
+        """Once a second on a slave: (1) the silence guard -- playing with no sync for too long ->
+        stop; (2) the reset rule -- we should be playing but the node hears nothing -> reset it."""
+        if now - self._lastWatch < 1.0:
+            return
+        self._lastWatch = now
+        if not self.isSlave() or not self.player:
+            return
+        sq = self.node.get('sync_quality')
+        hello_age = (now - self._lastHelloAt) if (self._lastHelloAt and self.node.get('version')) else None
+        node_silent = (sq == 0) or (hello_age is not None and hello_age > self.HELLO_SILENCE)
+        playing = bool(self.player.isPlaying()) and not self.isStopped
+
+        grace = self._cfg_seconds('nowde-silence-stop')
+        if grace > 0 and playing and node_silent:
+            if self._sqZeroSince is None:
+                self._sqZeroSince = now
+            elif now - self._sqZeroSince >= grace:
+                why = (f"node reports no sync for {int(now - self._sqZeroSince)} s" if sq == 0
+                       else f"no HELLO from the node for {int(hello_age)} s")
+                self.log(colored(f"SILENCE GUARD: {why} while playing -> stopping (the master's CC#100 resumes us)", 'red'))
+                self.player.stop()
+                self.isStopped = True
+                self.lastCC = 0
+                self.lastPattern = None
+                self._guardStopped = True
+                self._sqZeroSince = None
+                self._silentSince = now
+                self.emit('silence-stop', why)
+                return
+        else:
+            self._sqZeroSince = None
+
+        reset_after = self._cfg_seconds('nowde-node-reset')
+        if reset_after <= 0 or playing:
+            self._silentSince = None
+            return
+        expected = self._guardStopped or self._schedule_open_on_sane_clock()
+        if expected and node_silent:
+            if self._silentSince is None:
+                self._silentSince = now
+            elif (now - self._silentSince >= reset_after
+                    and now - self._lastNodeReset >= self.NODE_RESET_MIN_GAP):
+                why = ('stopped by the silence guard' if self._guardStopped else 'own schedule open on a sane clock')
+                if self._node_soft_reset(f"slave should be playing ({why}) but the node hears no master for {int(now - self._silentSince)} s", now):
+                    self._silentSince = now
+        else:
+            self._silentSince = None
+
+    def _master_watch(self, now):
+        """Once a second on a master: RUNNING_STATE listing no receiver for `nowde-node-reset` s ->
+        soft-reset the node. At any hour the powered slaves beacon every second, so an empty table
+        is abnormal by itself; the one benign case (every slave unpowered) costs an idle node reboot
+        per 15 min. The 24/09 and 28/09 deaths were both this shape (TX wedged, NO_MEM on every send)."""
+        if now - self._lastWatch < 1.0:
+            return
+        self._lastWatch = now
+        reset_after = self._cfg_seconds('nowde-node-reset')
+        if reset_after <= 0:
+            return
+        if self.receivers:
+            self._tableEmptySince = None
+            return
+        if self._tableEmptySince is None:
+            self._tableEmptySince = now
+            return
+        if (now - self._tableEmptySince >= reset_after
+                and now - self._lastNodeReset >= self.NODE_RESET_MIN_GAP):
+            if self._node_soft_reset(f"receiver table empty for {int(now - self._tableEmptySince)} s", now):
+                self._tableEmptySince = now
+
     def handle_timecode(self, ev, *args):
         """Feed the external MTC/OSC clock to the shared chase-lock servo."""
         if self.player is None or self.drifter is None:
@@ -959,7 +1101,18 @@ class NowdeInterface(BaseInterface):
         else:
             clock = round(float(args[0]), 2)  # osc.time -> seconds
 
-        self.drifter.tick(clock)
+        # The node knows nothing about the media: a slave node that lost its master free-runs its
+        # clock past the loop point (601, 707 ... 37 146 s seen on W2/W4, 25-29/09). The Drifter
+        # already wraps a diff and a seek target onto the loop when it knows the duration -- the
+        # Nowde path just never passed it. Without it every tick was a seek past EOF: a stop /
+        # play / seek storm at 1 Hz that filled /tmp and took HPlayer2 down. With it, a freewheel
+        # is a coherent progression, and the silence guard decides when it ends.
+        duration = 0.0
+        try:
+            duration = float(self.player.status().get('duration') or 0)
+        except Exception:
+            duration = 0.0
+        self.drifter.tick(clock, duration)
 
     def _restart_on_loop(self):
         """Drifter stall hook: the local video ended while the master clock

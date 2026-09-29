@@ -68,13 +68,18 @@ class MpvPlayer(BasePlayer):
         '--no-terminal',
         '--no-config',
         '--profile=low-latency',
-        '--log-file=/tmp/mpv.log',
+        # no --log-file by default: mpv writes that file at DEBUG level whatever -v says, and on a
+        # 102 MB tmpfs it ate 70 MB in a day of seek storm (W1/W2, 2026-09-29) — HPlayer2 then
+        # could not even start (`No space left on device` in color.sh). Opt in for a debug session
+        # with HPLAYER2_MPV_LOG=/run/mpv.log in the environment.
     ]
 
     def __init__(self, hplayer, name):
         super().__init__(hplayer, name)
 
         self._mpv_command = self._BASE_ARGS.copy()
+        if os.environ.get('HPLAYER2_MPV_LOG'):
+            self._mpv_command.append('--log-file=' + os.environ['HPLAYER2_MPV_LOG'])
         if sys.platform.startswith('linux'):
             self._mpv_command.append('--ao=alsa')
             # dedicated player platform (Pi-tools audiohub contract):
