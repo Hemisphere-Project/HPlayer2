@@ -6,6 +6,7 @@ import socket
 import json
 import time
 import os
+import gc
 
 #
 #  HEALTH: watch a synced player's process, zyre and wallclock, and heal it by itself
@@ -356,6 +357,19 @@ class HealthInterface (BaseInterface):
         # 4. summary (one line per 10 min: what an audit greps first)
         if now - self._lastSummary >= self.SUMMARY_EVERY:
             self._lastSummary = now
+            # 4a. a full collection first. CPython 3.14's incremental collector never reached the old
+            # generation on a quiet player: every reaped Peer/TimeClient sat in its own cycle for hours
+            # (Peer <-> linker Timer, TimeClient <-> refresh Timer and its ctypes actor thunk) — 24 of
+            # them after 3 h on kouagou02, each pinning a finished Timer's 8 MB stack and ~2 fds (the
+            # 1024-fd limit in ~45 h). One gc.collect() there freed 1871 objects, 43 stacks and 52 fds in
+            # 0.32 s (2026-09-29, hplayer2#t-075). Ten minutes of garbage is a handful of objects.
+            t0 = time.time()
+            try:
+                gcn = gc.collect()
+            except Exception as e:
+                gcn = -1
+                self.log('gc.collect() failed: %s' % e)
+            gcs = ' gc=%d/%dms' % (gcn, (time.time() - t0) * 1000)
             fl = ''
             if node:
                 ev = node.enters + node.exits
@@ -373,7 +387,7 @@ class HealthInterface (BaseInterface):
             rp = ' reaped=%d' % sum(rt.values())
             if rt:
                 rp += ' [' + ', '.join('%s:%d' % (k, n) for k, n in rt.most_common(3)) + ']'
-            self.log('summary: threads=%d stacks8M=%d vm=%dMB peers=%d starved=%d%s%s%s' % (tc, st, vm, len(peers), _starved['count'], rp, fl, w))
+            self.log('summary: threads=%d stacks8M=%d vm=%dMB peers=%d starved=%d%s%s%s%s' % (tc, st, vm, len(peers), _starved['count'], rp, gcs, fl, w))
 
     # ── loop ───────────────────────────────────────────────────────────────────────────
     def listen(self):
