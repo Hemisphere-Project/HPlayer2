@@ -182,8 +182,9 @@ class TimeClient():
             while not self.done and retry < 10:
                 sleep(0.1)
                 retry += 1
-        if self._refresh:
-            self._refresh.cancel()
+        t, self._refresh = self._refresh, None      # a stopped client holds no finished Timer (3.13+: 8 MB each)
+        if t:
+            t.cancel()
 
 
     # CLIENT TimeSync REQ Zactor
@@ -435,11 +436,12 @@ class Peer():
         # safe_print('stopping peer')
         self.active = False
 
-        if self.timerLink:
+        t, self.timerLink = self.timerLink, None
+        if t:
             # safe_print(' - cancel timelink')
-            self.timerLink.cancel()
+            t.cancel()
 
-        if self.timeclient: 
+        if self.timeclient:
             # safe_print(' - stop timeclient')
             self.timeclient.stop()
 
@@ -449,15 +451,17 @@ class Peer():
             
 
     def linker(self, l):
+        # The Timer that called us is self.timerLink: once its work is done, drop it — on CPython
+        # 3.13+ a finished Timer kept in an attribute keeps its 8 MB stack (hplayer2#t-075).
+        t, self.timerLink = self.timerLink, None
+        if t:
+            t.cancel()
         if not self.active: return
 
-        if self.timerLink:
-            self.timerLink.cancel()
-        
         if l != self.link:
             self.link = l
             self.node.interface.emit('peer.link', {'name': self.name, 'data': self.link})
-        
+
         if self.link < 3:
             self.timerLink = Timer(PING_PEER*1.5/1000.0, self.linker, args=[l+1])
             try:

@@ -1,4 +1,5 @@
 from .base import BaseInterface
+from ..engine import threadreap
 from termcolor import colored
 import threading
 import socket
@@ -80,9 +81,14 @@ def _starvationSnapshot():
 
 
 def _guardedStart(self, *a, **k):
+    # CPython 3.13+: a finished thread keeps its 8 MB stack while its Thread object lives.
+    # Remember every thread (before start: a short target is gone from the object right after);
+    # _check() joins the finished ones (core/engine/threadreap.py).
+    threadreap.track(self)
     try:
         return _origStart(self, *a, **k)
     except RuntimeError as e:
+        threadreap.untrack(self)
         if "can't start new thread" in str(e):
             _starved['count'] += 1
             now = time.time()
@@ -191,6 +197,7 @@ class HealthInterface (BaseInterface):
         self._flapMark = (0, time.time())
         self._budgetNoted = 0.0
         self._mpvLast = None            # (time-pos, when) of the previous master check
+        self._reapSeen = set()          # thread labels already reported once
 
     # ── helpers ────────────────────────────────────────────────────────────────────────
     def _player(self):
@@ -291,6 +298,13 @@ class HealthInterface (BaseInterface):
         if tc > self.THREAD_MAX:
             self.requestRestart('%d threads (budget %d)' % (tc, self.THREAD_MAX))
 
+        # 1b. finished threads something still references: join them (frees the 8 MB stack each
+        # one keeps on CPython 3.13+), and name each kind once — that name is the holder to fix.
+        for lbl, n in threadreap.reap().items():
+            if lbl not in self._reapSeen:
+                self._reapSeen.add(lbl)
+                self.log('reaped a finished thread that was still referenced: %s (x%d; stack freed)' % (lbl, n))
+
         # 2. zyre isolation
         node = self._node()
         peers = []
@@ -355,7 +369,11 @@ class HealthInterface (BaseInterface):
                 else:
                     w = ' heard=%ds-ago locked=%ds-ago cs=%s' % (now - wc.hLastAccept, now - wc.hLastLocked, wc.hCsSource)
             vm, st = address_space()
-            self.log('summary: threads=%d stacks8M=%d vm=%dMB peers=%d starved=%d%s%s' % (tc, st, vm, len(peers), _starved['count'], fl, w))
+            rt = threadreap.totals()
+            rp = ' reaped=%d' % sum(rt.values())
+            if rt:
+                rp += ' [' + ', '.join('%s:%d' % (k, n) for k, n in rt.most_common(3)) + ']'
+            self.log('summary: threads=%d stacks8M=%d vm=%dMB peers=%d starved=%d%s%s%s' % (tc, st, vm, len(peers), _starved['count'], rp, fl, w))
 
     # ── loop ───────────────────────────────────────────────────────────────────────────
     def listen(self):
