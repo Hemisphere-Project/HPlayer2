@@ -150,8 +150,6 @@ class TimeClient():
             self.stop()
         
         self._terminated = False
-        if self._actor_fn is None:      # dropped by stop(); a racing refresh Timer may still land here
-            self._actor_fn = zactor_fn(self.actor_fn_guarded)
         self.actor = Zactor(self._actor_fn, create_string_buffer(b"Sync request"))
         self.done = False
         self._arm(120)
@@ -178,7 +176,7 @@ class TimeClient():
 
     def stop(self):
         self._terminated = True
-        if not self.done and self.actor is not None:
+        if not self.done:
             self.actor.sock().send(b"s", b"$TERM")
             retry = 0
             while not self.done and retry < 10:
@@ -187,15 +185,6 @@ class TimeClient():
         t, self._refresh = self._refresh, None      # a stopped client holds no finished Timer (3.13+: 8 MB each)
         if t:
             t.cancel()
-        if self.done:
-            # Leave no cycle and no socket behind. Dropping the Zactor of a finished actor is the path
-            # start() takes every round (zactor_destroy collects the shim's last signal or finds the
-            # pipe gone); after it the ctypes callback is not executing any more and can go too.
-            # A stopped client then dies by refcount when its peer drops it: on the players 3.14's
-            # incremental collector never reached these cycles — 24 of 26 stale peers on kouagou02
-            # were garbage after 3 h, ~2 fds per client (hplayer2#t-075, 2026-09-29).
-            self.actor = None
-            self._actor_fn = None
 
 
     # CLIENT TimeSync REQ Zactor
@@ -312,8 +301,6 @@ class Subscriber():
         if not self.done: 
             self.stop()
         
-        if self._actor_fn is None:      # dropped by stop()
-            self._actor_fn = zactor_fn(self.actor_fn_guarded)
         self.actor = Zactor(self._actor_fn, create_string_buffer(b"Subscriber"))
         self.done = False
         
@@ -330,10 +317,6 @@ class Subscriber():
                 sleep(0.1)
                 retry += 1
         self.sub.__del__()
-        if self.done:
-            # same as TimeClient.stop: no cycle, no socket left for a collector that never comes
-            self.actor = None
-            self._actor_fn = None
 
     def subscribe(self, topic):
         Zsock.set_unsubscribe(self.sub, topic.encode())
@@ -822,7 +805,6 @@ class ZyreNode ():
         for peer in list(self.book.values()) + [p for p, _ in list(self.gone.values())]:
             peer.stop()
         self.gone = {}
-        self.book = {}      # a stopped node keeps no peer (each one a client, a subscriber, timers, fds)
 
         self.interface.log('stopping node')
         # The actor usually leaves by itself (its loop breaks on `stopped`), and czmq
@@ -847,13 +829,7 @@ class ZyreNode ():
         self.zyre.__del__()
         self.publisher.__del__()
         self.timereply.__del__()
-        if self.done:
-            # the actor has returned: drop it and its ctypes callback (see TimeClient.stop) so the old
-            # node has no cycle left and dies by refcount once the interface points at the new one
-            self.actor = None
-            self._actor_fn = None
-            self._tsThread = None
-
+            
 
     def peer(self, uuid):
         if uuid in self.book and self.book[uuid].active:
