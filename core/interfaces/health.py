@@ -156,6 +156,21 @@ def thread_count():
         return threading.active_count()
 
 
+def fd_count():
+    try:
+        return len(os.listdir('/proc/self/fd'))
+    except OSError:
+        return 0
+
+
+def fd_limit():
+    try:
+        import resource
+        return resource.getrlimit(resource.RLIMIT_NOFILE)[0]
+    except Exception:
+        return 1024
+
+
 def sd_notify(msg):
     addr = os.environ.get('NOTIFY_SOCKET')
     if not addr:
@@ -184,11 +199,13 @@ class HealthInterface (BaseInterface):
     RESTARTS_PER_HOUR = 3
     RESTARTS_PER_DAY = 10
     BOUNDARY_MAX_WAIT = 1200.0      # never wait longer than this for a loop point
+    FD_RESTART = 0.85               # of the soft fd limit (1024 on the players): restart at a loop point
 
     def __init__(self, hplayer, restart=True):
         super().__init__(hplayer, "HEALTH")
         self.restartAllowed = restart
         self.startedAt = time.time()
+        self._fdLimit = fd_limit()
         self._pending = None            # (reason, requestedAt)
         self._starvedSeen = 0
         self._noPeerSince = None
@@ -298,6 +315,13 @@ class HealthInterface (BaseInterface):
         tc = thread_count()
         if tc > self.THREAD_MAX:
             self.requestRestart('%d threads (budget %d)' % (tc, self.THREAD_MAX))
+        # 1a. fd budget. The master's zyre ROUTER keeps one half-closed connection (CLOSE-WAIT,
+        # zmq level) per slave rebuild or crash — ~1.5/h with a flapping slave, 56 -> 86 fds in
+        # 13 h on Kouagou01-64 (2026-09-30): a month to the 1024 limit without a reboot. Restart
+        # at a loop point well before zyre starts failing to accept.
+        fds = fd_count()
+        if fds > self._fdLimit * self.FD_RESTART:
+            self.requestRestart('%d fds (limit %d)' % (fds, self._fdLimit))
 
         # 1b. finished threads something still references: join them (frees the 8 MB stack each
         # one keeps on CPython 3.13+), and name each kind once — that name is the holder to fix.
@@ -387,7 +411,7 @@ class HealthInterface (BaseInterface):
             rp = ' reaped=%d' % sum(rt.values())
             if rt:
                 rp += ' [' + ', '.join('%s:%d' % (k, n) for k, n in rt.most_common(3)) + ']'
-            self.log('summary: threads=%d stacks8M=%d vm=%dMB peers=%d starved=%d%s%s%s%s' % (tc, st, vm, len(peers), _starved['count'], rp, gcs, fl, w))
+            self.log('summary: threads=%d stacks8M=%d fds=%d vm=%dMB peers=%d starved=%d%s%s%s%s' % (tc, st, fds, vm, len(peers), _starved['count'], rp, gcs, fl, w))
 
     # ── loop ───────────────────────────────────────────────────────────────────────────
     def listen(self):

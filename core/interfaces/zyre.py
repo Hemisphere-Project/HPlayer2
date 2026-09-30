@@ -460,7 +460,8 @@ class Peer():
 
         if l != self.link:
             self.link = l
-            self.node.interface.emit('peer.link', {'name': self.name, 'data': self.link})
+            if not self.node.muted(self.name):      # a storm mutes one name's link events (t-078)
+                self.node.interface.emit('peer.link', {'name': self.name, 'data': self.link})
 
         if self.link < 3:
             self.timerLink = Timer(PING_PEER*1.5/1000.0, self.linker, args=[l+1])
@@ -530,6 +531,17 @@ class ZyreNode ():
         self.exits = 0
         self.startedAt = time.time()
         self.gone = {}         # uuid -> (Peer, when): EXITed peers kept GONE_GRACE s for a flap-back
+        # ENTER/EXIT storm breaker (hplayer2#t-078). zyre's HELLO ping-pong: a HELLO from a peer
+        # already `ready` makes zyre_node remove and re-require it, and require sends a HELLO
+        # back — two crossed HELLOs after a link event (kouagou03's dongle resets, a node rebuilt
+        # on the same endpoint) flip one peer name at the round-trip rate, 40–80 ENTER/EXIT per
+        # second for 10–40 min, until a message is lost (kouagou02 <-> kouagou03, 2026-09-29/30:
+        # 30–45 k flips per 10 min, ~15 episodes a day). Count the flips per name; past
+        # STORM_FLIPS in STORM_WINDOW s, mute that peer's link events and ask the supervisor for a
+        # node rebuild after a random delay: a new uuid on the same endpoint resets both peer
+        # tables, the random delay keeps the two sides from crossing HELLOs again.
+        self._flips = {}       # name -> [t, …] of its ENTER/EXIT within STORM_WINDOW
+        self._muted = {}       # name -> link events muted until (time)
 
         # Publisher
         self.pub_cache  = {}
@@ -584,6 +596,41 @@ class ZyreNode ():
         self._tsThread.start()
 
     GONE_GRACE = 20.0
+    STORM_WINDOW = 5.0              # s
+    STORM_FLIPS = 20                # ENTER+EXIT of one name within the window (normal: 2 per link event)
+    STORM_MUTE = 60.0               # s without link events for that name once a storm is detected
+    STORM_REBUILD_INTERVAL = 120.0  # s between two storm rebuilds (a rebuild starts a new node)
+
+    def _flip(self, name):
+        """One ENTER or EXIT of `name` (called on the actor thread). Detects the storm, mutes the
+        name's link events and requests one node rebuild after a random 1–5 s delay."""
+        now = time.time()
+        l = self._flips.setdefault(name, [])
+        l.append(now)
+        while l and now - l[0] > self.STORM_WINDOW:
+            del l[0]
+        if self._muted.get(name, 0.0) > now:
+            return
+        if len(l) < self.STORM_FLIPS:
+            return
+        self._muted[name] = now + self.STORM_MUTE
+        last = getattr(self.interface, '_stormRebuiltAt', 0.0)
+        if now - last > self.STORM_REBUILD_INTERVAL:
+            delay = random.uniform(1.0, 5.0)
+            self.interface._stormRebuiltAt = now
+            self.interface.log('peer', name, 'ENTER/EXIT storm: %d flips in %.0f s — muting its link events %.0f s, rebuilding the node in %.1f s'
+                               % (len(l), self.STORM_WINDOW, self.STORM_MUTE, delay))
+            self.interface.requestRebuild('zyre storm: %s flipped %d times in %.0f s' % (name, len(l), self.STORM_WINDOW), delay=delay)
+        else:
+            self.interface.log('peer', name, 'ENTER/EXIT storm: %d flips in %.0f s — muting its link events %.0f s (node rebuilt %.0f s ago, not again yet)'
+                               % (len(l), self.STORM_WINDOW, self.STORM_MUTE, now - last))
+
+    def muted(self, name):
+        until = self._muted.get(name, 0.0)
+        if until and until <= time.time():
+            del self._muted[name]
+            return False
+        return bool(until)
 
     def _expireGone(self):
         now = time.time()
@@ -690,6 +737,7 @@ class ZyreNode ():
                 # ENTER: add to book for external contact (i.e. TimeSync)
                 if e.type() == b"ENTER":
                     self.enters += 1
+                    self._flip(e.peer_name().decode(errors='replace'))
                     self._expireGone()
                     # The same process coming back (a link flap: EXIT then ENTER of one uuid, the
                     # Kouagou01-64 storm) gets its Peer back — clock client and subscriber intact —
@@ -733,6 +781,7 @@ class ZyreNode ():
                 # EXIT
                 elif e.type() == b"EXIT":
                     self.exits += 1
+                    self._flip(self.book[uuid].name if uuid in self.book else e.peer_name().decode(errors='replace'))
                     self._expireGone()
                     if uuid in self.book:
                         peer = self.book.pop(uuid)
@@ -1092,14 +1141,17 @@ class ZyreInterface (BaseInterface):
                  else (self.iface + ' still has no address after ' + str(int(self.IP_WAIT)) + ' s: starting the node anyway'))
         return ip
 
-    def requestRebuild(self, why):
+    def requestRebuild(self, why, delay=0.0):
         """Ask the supervisor to rebuild the node in place (e.g. the wallclock hears the master's
         clock but no zyre peer appears for a minute: a master rebooted or swapped under running
-        slaves keeps our address, so the address-change rebuild never fires — LACROIX 2026-09-15)."""
+        slaves keeps our address, so the address-change rebuild never fires — LACROIX 2026-09-15).
+        `delay` postpones it (the storm breaker's random 1–5 s, t-078)."""
+        self._rebuildAt = time.time() + delay
         self._rebuildWhy = why
 
     def listen(self):
         self._rebuildWhy = None
+        self._rebuildAt = 0.0
         self._boundIp = self._waitIfaceIp()
         self.node = ZyreNode(self, self.iface)
         # (the hplayer event handlers live in _installHandlers(), registered at construction)
@@ -1123,7 +1175,7 @@ class ZyreInterface (BaseInterface):
             # with another address): the beacon is bound to the old one -> rebuild, not
             # counted as a failure
             ip = self._ifaceIp()
-            why = self._rebuildWhy
+            why = self._rebuildWhy if time.time() >= self._rebuildAt else None
             if (self.iface and ip and ip != self._boundIp) or why:
                 if why:
                     self.log('rebuilding zyre node in place:', why)
