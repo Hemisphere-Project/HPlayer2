@@ -195,8 +195,14 @@ def seq_subscribed(text, our_client, node_client):
     return re.search(r'Connected From:\s*%d:\d+' % node_client, block) is not None
 
 
+RUNNING_STATE_RECORD_MIN = 42           # pre-2.0.1 record: mac..mediaIndex, 36 raw -> 42 encoded
+
+
 def parse_running_state(d):
-    """One chunk. Returns (meta, [receiver dicts])."""
+    """One chunk. Returns (meta, [receiver dicts]).
+    The firmware only ever grows a record by appending a trailer (2.0.1 syncQuality: 37 raw ->
+    43 encoded; v2.2 syncGaps: 39 -> 45), so the record size is read off the chunk, never
+    assumed: a fixed 43 dropped every pre-2.0.1 record whole and the slave table read empty."""
     if len(d) < 10:
         return None, []
     up = decode7(d[0:5])
@@ -205,13 +211,12 @@ def parse_running_state(d):
     n = d[9]
     receivers = []
     idx = 10
+    size = (len(d) - idx) // n if n else 0
+    if size < RUNNING_STATE_RECORD_MIN:
+        return meta, receivers
     for _ in range(n):
-        if idx + 43 > len(d):              # 2.0.1: 37 raw -> 43 encoded (was 36 -> 42)
-            break
-        r = decode7(d[idx:idx + 43])
-        idx += 43
-        if len(r) < 36:
-            break
+        r = decode7(d[idx:idx + size])
+        idx += size
         mac = r[0:6]
         receivers.append({
             'mac': ':'.join('%02X' % b for b in mac), 'mac_bytes': mac,
