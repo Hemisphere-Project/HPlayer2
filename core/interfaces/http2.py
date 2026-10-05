@@ -68,9 +68,6 @@ except ImportError:
 from ..engine.network import get_allip, get_hostname
 import socket
 
-thread = None
-thread_lock = threading.Lock()
-
 
 class Http2Interface (BaseInterface):
 
@@ -323,13 +320,19 @@ class ThreadedHTTPServer(object):
         
         self.sendQueue = queue.SimpleQueue()
 
+        # the queue's only consumer: started WITH the server (see serve() below), never on a
+        # first connect — a player nobody browsed kept every send since boot, the DMX meter
+        # alone ~16 MB/h (#t-080). With no client, emit() goes nowhere, as after a disconnect.
         def background_thread():
             while True:
-                socketio.emit('status', self.http2interface.hplayer.players()[0].status())  # {'msg': 'yo', 'timestamp': time.gmtime()}
-                
-                while not self.sendQueue.empty():
-                    cmd = self.sendQueue.get_nowait()
-                    socketio.emit(cmd[0], cmd[1])
+                try:
+                    socketio.emit('status', self.http2interface.hplayer.players()[0].status())  # {'msg': 'yo', 'timestamp': time.gmtime()}
+
+                    while not self.sendQueue.empty():
+                        cmd = self.sendQueue.get_nowait()
+                        socketio.emit(cmd[0], cmd[1])
+                except Exception as e:      # one bad message must not stop the drain for good
+                    self.http2interface.log('socketio send error:', e)
 
                 socketio.sleep(0.1)
 
@@ -348,10 +351,6 @@ class ThreadedHTTPServer(object):
             socketio.emit('config',             self.http2interface.config())
             socketio.emit('settings.updated',   self.http2interface.hplayer.settings())
             socketio.emit('playlist.updated',   self.http2interface.hplayer.playlist())
-            global thread
-            with thread_lock:
-                if thread is None:
-                    thread = socketio.start_background_task(target=background_thread)
 
 
         @socketio.on('reboot')
@@ -488,8 +487,13 @@ class ThreadedHTTPServer(object):
             print('Client disconnected', request.sid)
 
 
-        # prepare sub-thread
-        self.server_thread = threading.Thread(target=lambda:socketio.run(app, host='0.0.0.0', port=port))
+        # prepare sub-thread: the drain is spawned IN it — an eventlet green thread runs on
+        # the hub of the thread that spawned it, and only the server's thread runs one
+        def serve():
+            socketio.start_background_task(target=background_thread)
+            socketio.run(app, host='0.0.0.0', port=port)
+
+        self.server_thread = threading.Thread(target=serve)
         self.server_thread.daemon = True
 
     def start(self):

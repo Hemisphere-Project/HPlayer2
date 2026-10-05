@@ -65,9 +65,6 @@ try:
 except ImportError as err:
     _REGIE_IMPORT_ERRORS.append(("zeroconf", err))
 
-thread = None
-thread_lock = threading.Lock()
-
 REGIE_PATH1 = '/opt/RPi-Regie'
 REGIE_PATH2 = '/data/RPi-Regie'
 
@@ -353,6 +350,9 @@ class ThreadedHTTPServer(object):
 
         self.sendBuffer = queue.Queue()
 
+        # the queue's only consumer: started WITH the server (see serve() below), never on a
+        # first 'init' — a Regie nobody browsed kept every send since boot (#t-080, same shape
+        # as http2's sendQueue). With no client, emit() goes nowhere.
         def background_thread():
             while True:
                 try:
@@ -362,6 +362,8 @@ class ThreadedHTTPServer(object):
                     self.sendBuffer.task_done()
                 except queue.Empty:
                     socketio.sleep(0.1)
+                except Exception as e:      # one bad message must not stop the drain for good
+                    self.regieinterface.log('socketio send error:', e)
 
 
         @self.regieinterface.hplayer.on('files.dirlist-updated')
@@ -407,12 +409,6 @@ class ThreadedHTTPServer(object):
             # send project
             emit('data', self.projectData())
 
-            # Start update broadcaster
-            global thread
-            with thread_lock:
-                if thread is None:
-                    thread = socketio.start_background_task(target=background_thread)
-
         @socketio.on('register')
         def register(data):
             # enable peer monitoring
@@ -454,8 +450,13 @@ class ThreadedHTTPServer(object):
                 self.regieinterface.log('ndifile error', e)
 
 
-        # prepare sub-thread
-        self.server_thread = threading.Thread(target=lambda:socketio.run(app, host='0.0.0.0', port=port))
+        # prepare sub-thread: the drain is spawned IN it — an eventlet green thread runs on
+        # the hub of the thread that spawned it, and only the server's thread runs one
+        def serve():
+            socketio.start_background_task(target=background_thread)
+            socketio.run(app, host='0.0.0.0', port=port)
+
+        self.server_thread = threading.Thread(target=serve)
         self.server_thread.daemon = True
         
         # watchdog project.json
