@@ -297,7 +297,8 @@ class MpvPlayer(BasePlayer):
             self._mpv_send('{ "command": ["observe_property", 6, "audio-params/channel-count"] }')
             closeToTheEnd = False
             nearendEmitted = False
-            
+            endEmitted = False
+
             self.emit('status', self.status())
 
             # Receive
@@ -334,9 +335,10 @@ class MpvPlayer(BasePlayer):
                                     continue
                                 self.update('isPlaying', not mpvsays['data'])
 
-                                if self.status('isPlaying'): 
+                                if self.status('isPlaying'):
                                     closeToTheEnd = False
                                     nearendEmitted = False
+                                    endEmitted = False
                                     self.emit('playing', self.status('media'))
                                     # self.log('play')
 
@@ -378,8 +380,16 @@ class MpvPlayer(BasePlayer):
                                             self._applyPan(self._pan_current)
 
                             elif mpvsays['name'] == 'eof-reached':
+                                # Trust mpv's EOF on its own. It used to count only when the last
+                                # time-pos update had landed within 0.2 s of the duration
+                                # (closeToTheEnd); when that update lands earlier — about 1 end in 8
+                                # on TAUPAKI's 239 s WAVs, 2026-10-06 — core-idle arrived first,
+                                # 'stopped' went out without 'media-end', the playlist never saw its
+                                # end and the set sat paused at EOF for hours, until the next power
+                                # cut. endEmitted keeps it to one END per file (reset on 'playing').
                                 if 'data' in mpvsays and mpvsays['data'] == True:
-                                    if closeToTheEnd:
+                                    if not endEmitted and self.status('media'):
+                                        endEmitted = True
                                         closeToTheEnd = False
                                         self.update('isPaused', False)
                                         self.update('isPlaying', False)
