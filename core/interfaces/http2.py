@@ -5,7 +5,7 @@ import os
 import time
 import shutil
 import subprocess
-import queue
+import collections
 
 Flask = None
 Request = None
@@ -317,14 +317,24 @@ class ThreadedHTTPServer(object):
         # SOCKETIO Routing
         #
         
-        self.sendQueue = queue.SimpleQueue()
+        # Bounded. On an installed player no browser ever connects, so background_thread() — started
+        # on the first socketio 'connect' below — never runs and nothing drains this queue. As a
+        # SimpleQueue it kept every dmx-status (re-sent every 2–3 s while no DMX port is found) and
+        # every player.status event forever: 718 k tracked objects on the KOUAGOU master after 8 days
+        # without a power cut (vs 104 k at start), and health's 10-min gc.collect() walking them took
+        # ~1 s, freezing the sync controller that long — a speed-1.5 catch-up on every slave every
+        # 10 min (2026-10-06). A deque keeps the last 200 events for a late browser and drops the rest.
+        self.sendQueue = collections.deque(maxlen=200)
 
         def background_thread():
             while True:
                 socketio.emit('status', self.http2interface.hplayer.players()[0].status())  # {'msg': 'yo', 'timestamp': time.gmtime()}
-                
-                while not self.sendQueue.empty():
-                    cmd = self.sendQueue.get_nowait()
+
+                while self.sendQueue:
+                    try:
+                        cmd = self.sendQueue.popleft()
+                    except IndexError:
+                        break
                     socketio.emit(cmd[0], cmd[1])
 
                 socketio.sleep(0.1)
@@ -332,11 +342,11 @@ class ThreadedHTTPServer(object):
         @self.http2interface.hplayer.on('settings.updated')
         @self.http2interface.hplayer.on('playlist.updated')
         def settings_send(ev, *args):
-            self.sendQueue.put([ev] + list(args))
+            self.sendQueue.append([ev] + list(args))
 
         @self.http2interface.on('do-socketio')
         def remote_send(ev, *args):
-            self.sendQueue.put(args)
+            self.sendQueue.append(args)
 
 
         @socketio.on('connect')
