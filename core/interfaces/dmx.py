@@ -51,6 +51,7 @@ class DmxInterface(BaseInterface):
         self._conduiteMtime = 0
         self._mediaLoaded = -1          # sentinel != any media (incl. None)
         self._lastLevelsEmit = 0
+        self._lastLevels = None         # last dmx-levels sent, None while no link
         self._lastStatus = None
         self._lastStatusSent = 0
 
@@ -229,6 +230,7 @@ class DmxInterface(BaseInterface):
         self.serial = None
         self.port = None
         self._openProto = None
+        self._lastLevels = None         # no link, no frame: don't serve the last one as live
         self._emitStatus(connected=False)
 
     def _sleep(self, duration):     # interruptible by quit()
@@ -272,7 +274,12 @@ class DmxInterface(BaseInterface):
             return
         self._lastLevelsEmit = now
         chans = self._conduite.activeChannels() or list(range(1, 17))
-        h.send('dmx-levels', {'active': active, 'levels': {c: frame[c - 1] for c in chans}})
+        self._lastLevels = {'active': active, 'levels': {c: frame[c - 1] for c in chans}}
+        h.send('dmx-levels', self._lastLevels)
+
+    # what the page's meter last got, for a reader with no socket.io client (http2 GET /dmx)
+    def snapshot(self):
+        return {'status': self._lastStatus, 'levels': self._lastLevels}
 
     def _bindHttp2(self):
         # editor LOAD: http2 asks for a media's sidecar text (falls back to current media)

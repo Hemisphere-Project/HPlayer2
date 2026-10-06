@@ -14,6 +14,7 @@ send_from_directory = None
 send_file = None
 redirect = None
 url_for = None
+jsonify = None
 SocketIO = None
 emit = None
 join_room = None
@@ -37,6 +38,7 @@ try:
     send_file = getattr(_flask, "send_file", None)
     redirect = getattr(_flask, "redirect", None)
     url_for = getattr(_flask, "url_for", None)
+    jsonify = getattr(_flask, "jsonify", None)
 except ImportError as err:
     _HTTP2_IMPORT_ERRORS.append(("flask", err))
 
@@ -75,7 +77,7 @@ class Http2Interface (BaseInterface):
         if _HTTP2_IMPORT_ERRORS:
             missing = ", ".join(name for name, _ in _HTTP2_IMPORT_ERRORS)
             raise RuntimeError(f"Http2Interface requires optional packages: {missing}")
-        required = [Flask, Request, request, send_from_directory, send_file, redirect, url_for, SocketIO, emit, join_room, leave_room, close_room, rooms, disconnect, secure_filename]
+        required = [Flask, Request, request, send_from_directory, send_file, redirect, url_for, jsonify, SocketIO, emit, join_room, leave_room, close_room, rooms, disconnect, secure_filename]
         if any(dep is None for dep in required):
             raise RuntimeError("Http2Interface dependencies are unavailable")
         super(Http2Interface, self).__init__(hplayer, "HTTP2")
@@ -307,6 +309,15 @@ class ThreadedHTTPServer(object):
             fileslist_message()
             self.http2interface.emit('file-uploaded', filepath)
             return 'ok'
+
+        # live DMX state for a script or curl, no socket.io client needed: the same
+        # dmx-status / dmx-levels the page's meter gets (levels null while no link)
+        @app.route('/dmx')
+        def dmx_state():
+            dmx = self.http2interface.hplayer.interface('dmx')
+            if not dmx:
+                return jsonify({'error': 'no dmx interface on this player'}), 404
+            return jsonify(dmx.snapshot())
 
 
         @app.route('/<path:path>')
