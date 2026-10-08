@@ -438,7 +438,8 @@ class HPlayer2(Module):
     def run(self):
 
         sleep(0.1)
-        self._shutdown_event.set()
+        # never re-set the run event here: a SIGTERM during profile setup
+        # cleared it, and re-arming it would ignore that stop until SIGKILL
         self._shutdown_requested = False
         self._shutdown_complete = False
         self._exit_code = 0

@@ -65,3 +65,31 @@ def test_sigterm_ends_run_and_arms_the_exit_watchdog(monkeypatch):
 
     assert time.monotonic() - t0 < 2.0, 'SIGTERM did not end the main loop'
     assert armed == [10.0]          # the run() finally watchdog
+
+
+def test_sigterm_during_profile_setup_still_stops_run(monkeypatch):
+    if signal.getsignal(signal.SIGTERM) is not hplayer_mod.signal_handler:
+        pytest.fail('no engine SIGTERM handler: the signal would kill the test run')
+
+    class FakeTimer:
+        def __init__(self, interval, fn, args=()):
+            self.daemon = False
+
+        def start(self):
+            pass
+
+    monkeypatch.setattr(hplayer_mod, 'Timer', FakeTimer)
+    hplayer = HPlayer2(mediaPath=[])
+    monkeypatch.setattr(hplayer.settings, 'load', lambda *a, **k: None)
+
+    os.kill(os.getpid(), signal.SIGTERM)        # before run(): the profile is still building
+    net = threading.Timer(5.0, hplayer_mod._RUN_EVENT.clear)
+    net.start()
+    t0 = time.monotonic()
+    try:
+        hplayer.run()
+    finally:
+        net.cancel()
+        hplayer_mod._RUN_EVENT.set()
+
+    assert time.monotonic() - t0 < 2.0, 'run() re-armed the event and ignored the SIGTERM'
