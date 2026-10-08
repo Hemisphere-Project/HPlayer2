@@ -9,6 +9,8 @@ ExecStartPre=-hplayer2-kill
 ExecStart=/usr/local/bin/hplayer2 %i
 ExecStopPost=/bin/sh -c '/opt/HPlayer2/hplayer2-kill %i || true'
 Restart=always
+# belt: the engine's own exit watchdog cuts at 10 s; never wait out the 90 s default
+TimeoutStopSec=20
 Environment="HOME=/root"
 Environment="LD_LIBRARY_PATH=/usr/local/lib:/usr/local/lib"
 SupplementaryGroups=audio video render

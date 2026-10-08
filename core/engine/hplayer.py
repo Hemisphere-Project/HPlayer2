@@ -25,11 +25,23 @@ import tempfile
 _RUN_EVENT = Event()
 _RUN_EVENT.set()
 
-# CTR-C Handler
-def signal_handler(signal, frame):
-    print('\n'+colored('[SIGINT] You pressed Ctrl+C!', 'yellow'))
+# CZMQ must not own SIGINT/SIGTERM. At its first socket (the zyre node) it
+# installs a C handler for both that only sets zsys_interrupted: the handlers
+# below never ran, a `systemctl stop` / `kill` never ended the main loop, so
+# the exit watchdog in run()'s finally was never armed and a wedged teardown
+# held the unit until systemd's SIGKILL (kmini-001, 2026-09-04). zsys_init
+# reads this once: it must be set before the first czmq socket, i.e. here.
+os.environ['ZSYS_SIGHANDLER'] = 'false'
+
+# CTR-C and stop Handler
+def signal_handler(signum, frame):
+    if signum == signal.SIGINT:
+        print('\n'+colored('[SIGINT] You pressed Ctrl+C!', 'yellow'))
+    else:
+        print('\n'+colored('['+signal.Signals(signum).name+'] stopping..', 'yellow'))
     _RUN_EVENT.clear()
 signal.signal(signal.SIGINT, signal_handler)
+signal.signal(signal.SIGTERM, signal_handler)
 
 
 class HPlayer2(Module):
