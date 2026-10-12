@@ -1,7 +1,7 @@
 from core.engine.hplayer import HPlayer2
-from core.engine import network
+from profiles._common_anna import StatusLCD, introDuration
 
-import os, sys, types, platform, time
+import os, sys, platform, time
 from threading import Timer
 
 # DIRECTORY / FILE
@@ -272,15 +272,8 @@ def down(ev, *args):
 def select(ev, *args):
 	if keylock: 
 		return lockAlert()
-	global holdCounter 
-	if holdCounter >= 0: 
-			holdCounter+=1
-    
-holdCounter = 0
-scrollSpeed = 3.08
-introDuration = 1.5
-blinkCounter = 0
-blinkSpeed = 10
+	if lcd.holdCounter >= 0: 
+			lcd.holdCounter+=1
 
 
 # USB remote (teleco2 / M5Stack CoreS3) — has its own screen lock, not gated by keylock
@@ -318,18 +311,9 @@ def t2_voldown(ev, *args):
 
 
 
-# PATCH Keypad LCD update
-def lcd_update(self):
-    
-	global holdCounter, blinkCounter
-	if holdCounter > 10:
-		holdCounter = -1
-		Timer(0.4, lambda: self.emit('hardreset')).start()
-  
-	if holdCounter < 0:
-		self.lcd.set_color( 100, 0 , 0)
-		return [".:: HPlayer2 ::.", "   restarting   "]
-
+# PATCH Keypad LCD update (shared with 25-annatv, see profiles/_common_anna.py)
+#
+def lock_screen():
 	global lockAlertCounter, canToggle
 	if lockAlertCounter > 0:
 		lockAlertCounter -= 1
@@ -339,51 +323,12 @@ def lcd_update(self):
 		return [".. Unlocked ! ..", "                "]
 	else: 
 		canToggle = True
-	
-	lines = ["", ""]
- 
-	media = player.status()['media']
- 
-	# Line 0 : MEDIA
-	playlistCount = str(hplayer.playlist.index()+1) + "/" + str(hplayer.playlist.size())	
-	if media:
-		lines[0] = keypad.CHAR_PLAY + playlistCount + " " 
-		
-		media = os.path.basename(media)[:-4]
-		skroller3 = max(0, (player.position()*scrollSpeed) % len(media) - introDuration * scrollSpeed)
-		offset = min( int(skroller3), len(media)-15 +len(lines[0]) )
-		lines[0] += media[offset:]
 
-	else:
-		lines[0] = keypad.CHAR_STOP + playlistCount
-	
-	lines[0] = lines[0].ljust(16, ' ')[:16]
-  
+def zyre_peers():
+	return keypad.CHAR_PEERS +str(zyre.activeCount()).ljust(2, ' ')[:2]+" "
 
-	# Line 1 : VOLUME
-	lines[1] = keypad.CHAR_VOL +str(hplayer.settings.get('volume')).ljust(5, ' ')
-
-	# Line 1 : WIFI
-	lines[1] += keypad.CHAR_WIFI
-	if network.get_essid('wlan0'): 
-		lines[1] += (str( min(100, network.get_rssi('wlan0')) )+"%").ljust(6, ' ')
-		blinkCounter = 1
-	else: 
-		lines[1] += "---% "
-		blinkCounter = (blinkCounter+1) % blinkSpeed
-	
-	# Line 1 : ZYRE
-	lines[1] += keypad.CHAR_PEERS +str(zyre.activeCount()).ljust(2, ' ')[:2]+" "
-
-	# COLORS
-	if blinkCounter > 0: color = ( 100 if not media else 0 , 100, 100 if not media else 0)	# RED/GREEN: play state
-	else: color = ( 0, 0 , 100)														# BLUE flash: no wifi
-	
-	self.lcd.set_color( *color )
-  
-	return lines
-
-keypad.update = types.MethodType(lcd_update, keypad)
+lcd = StatusLCD(hplayer, player, keypad, overlay=lock_screen, suffix=zyre_peers)
+keypad.update = lcd.update
 
 
 # RUN
