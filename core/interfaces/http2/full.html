@@ -302,20 +302,13 @@
                     <div id="schedule_body" class="collapse panel-body">
                     <div class="card-body pt-3">
                         <div class="mb-2">
-                            <label><input type="checkbox" id="schedule_enable"> restrict playback to a daily window</label>
+                            <label><input type="checkbox" id="schedule_enable"> restrict playback to the weekly grid below</label>
                         </div>
-                        <div id="schedule_ctrls" class="mb-2"><span class="badge badge-secondary mr-2">open</span>
-                            <input type="time" id="schedule_open">
-                            <span class="badge badge-secondary mr-2 ml-3">close</span>
-                            <input type="time" id="schedule_close"></div>
-                        <div id="schedule_days_ctrls" class="mb-2"><span class="badge badge-secondary mr-2">days</span>
-                            <label class="mr-2 mb-0"><input type="checkbox" class="schedule-day" data-day="0"> Mon</label>
-                            <label class="mr-2 mb-0"><input type="checkbox" class="schedule-day" data-day="1"> Tue</label>
-                            <label class="mr-2 mb-0"><input type="checkbox" class="schedule-day" data-day="2"> Wed</label>
-                            <label class="mr-2 mb-0"><input type="checkbox" class="schedule-day" data-day="3"> Thu</label>
-                            <label class="mr-2 mb-0"><input type="checkbox" class="schedule-day" data-day="4"> Fri</label>
-                            <label class="mr-2 mb-0"><input type="checkbox" class="schedule-day" data-day="5"> Sat</label>
-                            <label class="mr-2 mb-0"><input type="checkbox" class="schedule-day" data-day="6"> Sun</label></div>
+                        <!-- the grid (hplayer2#t-082): rows are built by script.js from schedule-grid -->
+                        <div id="schedule_ctrls" class="mb-2">
+                            <div id="schedule_grid"></div>
+                            <small class="schedule-hint">several slots a day · a slot may end past midnight (it belongs to the day it starts) · volume blank = keep the current volume</small>
+                        </div>
                         <div id="schedule_status" class="mt-2">RTC: &mdash;</div>
                     </div>
                     </div><!-- /schedule_body -->

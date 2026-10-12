@@ -42,7 +42,7 @@ def onClose(ev, *args):
 
 # Persist radar + schedule tunables edited from the http2 web UI (interfaces read them live)
 for key in ('radar-range', 'radar-width', 'radar-enter-ms', 'radar-leave-ms',
-            'schedule-enable', 'schedule-open', 'schedule-close'):
+            'schedule-enable', 'schedule-grid', 'schedule-open', 'schedule-close'):
     hplayer.on('http2.' + key)(lambda ev, *a, k=key: hplayer.settings.set(k, a[0]))
 
 @hplayer.on('radar.*')
