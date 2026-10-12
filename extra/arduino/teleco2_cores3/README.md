@@ -56,12 +56,18 @@ The tinyusb env is kept maintained as the descriptor-level fallback.
 ### The `303a:1001` collision
 
 `303a:1001` is not unique to this remote — it is the generic Espressif
-USB-Serial/JTAG ID, shared by **any** ESP32-S3-family device in ROM CDC mode
-that may sit on the same player (JTAG-mode dev boards, other project hardware).
-Two consequences on the host side:
+USB-Serial/JTAG ID, shared by **any** ESP32-family device in ROM CDC mode
+that may sit on the same player (the radar box `../radar_ld2450`, JTAG-mode dev
+boards, other project hardware). Host side (`core/interfaces/teleco2.py`):
 
-- protocol v1 is self-identifying: the remote repeats `hello 1` every 3 s until
-  answered, so the host can drop a port that yields no valid protocol line
-  within ~10 s and rescan excluding it;
-- the per-player `teleco2-filter` setting remains the manual escape hatch —
-  key it on the USB **serial string** (`SER=<chip MAC>`), never on VID:PID.
+- under the default filter a port is only the remote's once the device proves
+  it: a hello carrying its fw (`hello 1 <fw>`, repeated every 3 s until
+  answered), a valid command, or a bare `hello 1` seen **twice** — the radar box
+  prints one bare `hello 1` on boot, and a flash must never fire on it;
+- a radar frame line, or no hello within 15 s (8 s stale + one 3 s beacon +
+  margin), rejects the port: the host re-scans excluding it until it is
+  unplugged. One tty is never opened by two interfaces of the same player;
+- the per-player `teleco2-filter` setting is the manual escape hatch — key it
+  on the USB **serial string** (`SER=<chip MAC>`), never on VID:PID. A filter
+  set there (or passed by the profile) is trusted: no probing, and a silent
+  device still gets the state dump after 15 s.

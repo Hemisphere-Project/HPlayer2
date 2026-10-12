@@ -52,9 +52,11 @@ doesn't match (all C3s share the chip; pins are set via `-DRADAR_RX/-DRADAR_TX`)
 
 Built with **HW USB-Serial/JTAG CDC** (`-DARDUINO_USB_MODE=1`): the port survives
 firmware crashes and flashing needs no button dance. It enumerates as Espressif
-`303a:1001` — the same VID:PID as the CoreS3 teleco2 remote. The 6 outdoor players
-carry no remote, so there's no collision. If a player ever needs both, give one a
-distinct USB product string via a TinyUSB build env and tighten the host filters.
+`303a:1001` — the same VID:PID as the CoreS3 teleco2 remote. A player carrying both
+sorts them out on its own: the radar interface drops a port that beacons a remote's
+`hello <proto> <fw>`, teleco2 drops one that streams radar frames, and neither opens
+a port the other holds. Pinning each by USB serial string (`radar-filter` /
+`teleco2-filter`, `SER=<chip MAC>`) stays the manual override.
 
 The Atom rig instead enumerates through its USB converter — an FTDI FT232 with
 M5-branded strings ("M5 Serial Converter", `0403:6001`) — NOT matched by the host

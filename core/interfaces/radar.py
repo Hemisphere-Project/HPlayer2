@@ -58,6 +58,10 @@ class RadarInterface(SerialBase):
     def onLine(self, line):
         parts = line.split()
         if not parts or parts[0] != 'T':
+            # 'hello <proto> <fw>' is a teleco2 CoreS3 remote beaconing on the shared
+            # 303a:1001 id; our own box only ever says 'hello <proto>', once, on boot
+            if len(parts) == 3 and parts[0] == 'hello' and all(p.isdigit() for p in parts[1:]):
+                self.rejectPort("teleco2 remote beacon")
             return                  # hello / boot spew — ignore
         rng = self._cfg('radar-range')
         wid = self._cfg('radar-width')
