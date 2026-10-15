@@ -5,6 +5,8 @@ import time
 from shutil import which
 from .base import BasePlayer
 
+LOAD_GRACE = 3.0   # s of IPC silence tolerated after a loadfile before the lockout watchdog counts
+
 class MpvPlayer(BasePlayer):
 
     _mpv_scale = 1          # % image scale
@@ -29,6 +31,7 @@ class MpvPlayer(BasePlayer):
         self._mpv_socketpath = '/tmp/hplayer-' + name
 
         self._mpv_lockedout = 0
+        self._mpv_loadtime = 0      # last loadfile: the lockout watchdog waits LOAD_GRACE after it
 
 
     ############
@@ -192,7 +195,9 @@ class MpvPlayer(BasePlayer):
                 # Timeout: retry
                 except socket.timeout:
                     # print('-', end ="")
-                    if self.status('isPlaying'):
+                    # Opening a file can keep mpv silent for over a second on a loaded Pi (mmal re-init, SD, sync):
+                    # 4 x 0.2 s timeouts used to hard-kill a healthy player right after a cue (HPO 2026-10-15).
+                    if self.status('isPlaying') and time.time() - self._mpv_loadtime > LOAD_GRACE:
                         if not self.status('media').split('.')[-1].lower() in self._imageExt:
                             self.log('PLAYBACK LOCKED OUT', self._mpv_lockedout)
                             if self._mpv_lockedout == 0:
@@ -201,6 +206,7 @@ class MpvPlayer(BasePlayer):
                                 print("CRASH RELOAD FILE", self.status('media'))
                                 self._mpv_send('{ "command": ["stop"] }')
                                 time.sleep(0.5)
+                                self._mpv_loadtime = time.time()
                                 self._mpv_send('{"command": ["loadfile", "'+self.status('media')+'"]}')
                             self._mpv_lockedout += 1
                             if self._mpv_lockedout > 3:
@@ -303,6 +309,7 @@ class MpvPlayer(BasePlayer):
         # self.log("play", path)
         self.update('isPaused', False)
         # self._mpv_send('{ "command": ["stop"] }')
+        self._mpv_loadtime = time.time()
         self._mpv_send('{ "command": ["loadfile", "'+path+'"] }')
         self._mpv_send('{ "command": ["set_property", "pause", false] }')
 
