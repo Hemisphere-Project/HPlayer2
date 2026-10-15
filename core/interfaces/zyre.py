@@ -444,26 +444,41 @@ class ZyreNode ():
         self.zyre.join(b"broadcast")
         self.zyre.join(b"sync")
 
+        # zyre_uuid() is not a getter in libzyre 2.0.1: it frees the cached string and asks the zyre actor
+        # again. Called from two threads at once it double-frees -> SIGSEGV. Read it once, here, single-threaded.
+        self.uuid = self.zyre.uuid()
+
+        # Every other zyre_*() that talks to the zyre actor pipe (whispers, shouts, own_groups, join, leave)
+        # may be called from several threads (Régie, mpv listeners, OSC, keypad): serialize them.
+        self._zyre_lock = Lock()
+
         # Add self to book
-        self.book[self.zyre.uuid()] = Peer(self, {
-            'uuid':         self.zyre.uuid(),
+        self.book[self.uuid] = Peer(self, {
+            'uuid':         self.uuid,
             'name':         self.zyre.name().decode(),
             'ip':           '127.0.0.1',
             'ts_port':      get_port(self.timereply),
             'pub_port':     get_port(self.publisher)
-        }) 
-        self.book[self.zyre.uuid()].subscribe(self.topics)
+        })
+        self.book[self.uuid].subscribe(self.topics)
 
         # (wall, monotonic) taken at the same instant - see _checkClockStep.
         # BEFORE the Zactor below: it starts the poller thread, which calls
         # _checkClockStep on its first pass.
         self._clockPair = (time.time(), time.monotonic())
 
+        # ZMQ sockets are not thread-safe: only the actor thread touches self.publisher and pub_cache.
+        # Other threads (mpv listeners, Régie, timers) hand their publish to the actor through its pipe,
+        # and that pipe's caller end is itself shared, so every send on it holds this lock.
+        # Two players stopping in the same millisecond used to publish concurrently -> SIGSEGV (HPO 2026-10-15).
+        self._pipe_lock = Lock()
+
         # Start Poller
         self._actor_fn = zactor_fn(self.actor_fn) # ctypes function reference must live as long as the actor.
         if netiface:
             netiface = create_string_buffer(str.encode(netiface))
         self.actor = Zactor(self._actor_fn, netiface)
+        Zsock.set_sndtimeo(self.actor.sock(), 200)     # a dead actor must drop a publish, never block the caller
         self.done = False
         self.broken = False    # set by actor_fn on confirmed poller failure
 
@@ -618,7 +633,11 @@ class ZyreNode ():
                     if e.type() == b"SHOUT": data['group'] = e.group().decode()
                     else: data['group'] = 'whisper'
 
-                    self.preProcessor1(data)
+                    try:
+                        self.preProcessor1(data)
+                    except Exception as err:
+                        # an exception escaping this ctypes callback would end the actor (node deaf)
+                        self.interface.log('ERROR processing', data, err)
 
 
             #
@@ -654,10 +673,24 @@ class ZyreNode ():
             #
             elif sock == internal_pipe:
                 msg = Zmsg.recv(internal_pipe)
-                if not msg or msg.popstr() == b"$TERM":
+                if not msg:
+                    break
+                cmd = msg.popstr()
+                if cmd == b"$TERM":
                     # safe_print('ZYRE Node TERM')
                     break
-                    
+
+                # PUBLISH requested by another thread (see publish)
+                elif cmd == b"PUB":
+                    topic = msg.popstr()
+                    payload = msg.popstr()
+                    out = Zmsg()
+                    out.addstr(topic)
+                    out.addstr(self.uuid)
+                    out.addstr(payload)
+                    self.pub_cache[topic] = Zmsg.dup(out)
+                    Zmsg.send(out, self.publisher)
+
         internal_pipe.__del__()
         self.interface.log('node stopped')   # WEIRD: print helps the closing going smoothly..
         self.done = True
@@ -674,7 +707,8 @@ class ZyreNode ():
         # every `systemctl stop` until the 90 s SIGKILL (kmini-001, 2026-09-04). Only
         # ask a still-running actor to leave, and give it a bounded second.
         if not self.done:
-            self.actor.sock().send(b"ss", b"$TERM")
+            with self._pipe_lock:
+                self.actor.sock().send(b"s", b"$TERM")
             retry = 0
             while not self.done and retry < 10:
                 sleep(0.1)
@@ -706,15 +740,15 @@ class ZyreNode ():
             peer.subscribe(self.topics)
 
     def publish(self, topic, args=None):
-        topic = topic.encode()
-        
+        # Called from any thread: never touch self.publisher here, let the actor send it.
+        if self.done:
+            return
         msg = Zmsg()
-        msg.addstr(topic)
-        msg.addstr(self.zyre.uuid())
+        msg.addstr(b"PUB")
+        msg.addstr(topic.encode())
         msg.addstr(json.dumps(args).encode())
-
-        self.pub_cache[topic] = Zmsg.dup(msg)
-        Zmsg.send(msg, self.publisher)
+        with self._pipe_lock:
+            Zmsg.send(msg, self.actor.sock())
 
     #
     # ZYRE send messages
@@ -744,20 +778,22 @@ class ZyreNode ():
 
     def whisper(self, uuid, event, args=None, delay_ms=0, at=0):
         data = self.makeMsg(event, args, delay_ms, at)
-        if uuid == self.zyre.uuid():
+        if uuid == self.uuid:
             data = json.loads(data.decode())
             data['from'] = 'self'
             data['group'] = 'whisper'
             self.preProcessor1(data)
         else:
-            self.zyre.whispers(uuid, data)
+            with self._zyre_lock:
+                self.zyre.whispers(uuid, data)
 
     def shout(self, group, event, args=None, delay_ms=0, at=0):
         data = self.makeMsg(event, args, delay_ms, at)
-        self.zyre.shouts(group.encode(), data)
+        with self._zyre_lock:
+            self.zyre.shouts(group.encode(), data)
 
-        # if own group -> send to self too !
-        groups = zlist_strlist( self.zyre.own_groups() )
+            # if own group -> send to self too !
+            groups = zlist_strlist( self.zyre.own_groups() )
         if group in groups:
             data = json.loads(data.decode())
             data['from'] = 'self'
@@ -768,13 +804,15 @@ class ZyreNode ():
         self.shout('broadcast', event, args, delay_ms, at)
         
     def tomyself(self, event, args=None, delay_ms=0, at=0):
-        self.whisper(self.zyre.uuid(), event, args, delay_ms, at)
+        self.whisper(self.uuid, event, args, delay_ms, at)
 
     def join(self, group):
-        self.zyre.join(group.encode())
+        with self._zyre_lock:
+            self.zyre.join(group.encode())
 
     def leave(self, group):
-        self.zyre.leave(group.encode())
+        with self._zyre_lock:
+            self.zyre.leave(group.encode())
 
     #
     # ZYRE messages processor
