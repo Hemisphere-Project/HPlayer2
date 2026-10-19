@@ -806,6 +806,14 @@ $(document).ready(function() {
             if (msg['schedule-open'] !== undefined) $('#schedule_open').val(msg['schedule-open']);
             if (msg['schedule-close'] !== undefined) $('#schedule_close').val(msg['schedule-close']);
             if (msg['schedule-reboot'] !== undefined) $('#schedule_reboot').prop('checked', !!msg['schedule-reboot']);
+            if (msg['schedule-volumes'] !== undefined) {
+                var vols = Array.isArray(msg['schedule-volumes']) ? msg['schedule-volumes'] : [];
+                $('.schedule-volume').each(function() {
+                    if (this === document.activeElement) return;    // never overwrite a field being typed in
+                    var v = vols[parseInt($(this).data('day'), 10)];
+                    $(this).val(v === null || v === undefined ? '' : v);
+                });
+            }
             if (msg['schedule-days'] !== undefined) {
                 var m = String(msg['schedule-days'] || '1111111');
                 if (m.length !== 7) m = '1111111';
@@ -836,12 +844,21 @@ $(document).ready(function() {
                 var why = st['open'] ? 'window OPEN — playing'
                         : (st['dayOpen'] === false ? 'closed TODAY (day off) — silent'
                                                    : 'window CLOSED — silent');
+                if (st['open'] && st['volume'] !== null && st['volume'] !== undefined) why += ' · volume ' + st['volume'];
                 if (st['reboot']) why += ' · clean-slate reboot ' + (st['rebootSlots'] || 'inactive today');
                 status.text(why).removeClass('rtc-warn').addClass('rtc-ok');
             }
         });
         $('#schedule_enable').on('change', function() { trigger('schedule-enable', this.checked); });
         $('#schedule_reboot').on('change', function() { trigger('schedule-reboot', this.checked); });
+        $('.schedule-volume').on('change', function() {
+            var vols = [];
+            for (var d = 0; d < 7; d++) {
+                var s = $('.schedule-volume[data-day="' + d + '"]').val();
+                vols.push(s === '' ? null : Math.max(0, Math.min(100, parseInt(s, 10) || 0)));
+            }
+            trigger('schedule-volumes', vols);
+        });
         $('#schedule_open').on('change', function() { trigger('schedule-open', this.value); });
         $('#schedule_close').on('change', function() { trigger('schedule-close', this.value); });
         $('.schedule-day').on('change', function() {

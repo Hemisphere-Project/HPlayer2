@@ -218,6 +218,16 @@
                             <label class="mr-2 mb-0"><input type="checkbox" class="schedule-day" data-day="4"> Fri</label>
                             <label class="mr-2 mb-0"><input type="checkbox" class="schedule-day" data-day="5"> Sat</label>
                             <label class="mr-2 mb-0"><input type="checkbox" class="schedule-day" data-day="6"> Sun</label></div>
+                        <!-- a volume per weekday (2026-10-19): set when the window opens, blank = keep -->
+                        <div id="schedule_volume_ctrls" class="mb-2"><span class="badge badge-secondary mr-2">volume</span>
+                            <label class="mr-2 mb-0">Mon <input type="number" class="schedule-volume" data-day="0" min="0" max="100" step="1" placeholder="&mdash;"></label>
+                            <label class="mr-2 mb-0">Tue <input type="number" class="schedule-volume" data-day="1" min="0" max="100" step="1" placeholder="&mdash;"></label>
+                            <label class="mr-2 mb-0">Wed <input type="number" class="schedule-volume" data-day="2" min="0" max="100" step="1" placeholder="&mdash;"></label>
+                            <label class="mr-2 mb-0">Thu <input type="number" class="schedule-volume" data-day="3" min="0" max="100" step="1" placeholder="&mdash;"></label>
+                            <label class="mr-2 mb-0">Fri <input type="number" class="schedule-volume" data-day="4" min="0" max="100" step="1" placeholder="&mdash;"></label>
+                            <label class="mr-2 mb-0">Sat <input type="number" class="schedule-volume" data-day="5" min="0" max="100" step="1" placeholder="&mdash;"></label>
+                            <label class="mr-2 mb-0">Sun <input type="number" class="schedule-volume" data-day="6" min="0" max="100" step="1" placeholder="&mdash;"></label>
+                            <div><small class="schedule-hint">set when the window opens (and at boot inside it) &middot; blank = keep the current volume, so fill every open day or the weekend level carries into Monday</small></div></div>
                         <div class="mb-2">
                             <label><input type="checkbox" id="schedule_reboot"> clean slate: reboot the player 10 min before opening and 5 min after closing (open days, RTC required)</label>
                         </div>

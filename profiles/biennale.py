@@ -363,10 +363,21 @@ def schedule_close(ev, *args):
 	elif not SYNC:
 		player.stop()                        # go silent when the window closes
 
+# The window may carry a volume per weekday (schedule-volumes, 2026-10-19): set on entering the
+# window, and at boot inside it; unset = the volume stays where it was. Same Nowde rule as above:
+# a slave takes its volume from the master (CC#7), never from its own schedule. The handler is
+# master's grid one (hplayer2#t-082) verbatim — same event, same payload.
+@hplayer.on('schedule.slot')
+def schedule_slot(ev, slot, *args):
+	if nowde_slave():
+		return
+	if slot.get('volume') is not None:
+		hplayer.settings.set('volume', slot['volume'])
+
 # persist radar + schedule tunables edited from the http2 web UI (interfaces read live)
 for _k in ('radar-range', 'radar-width', 'radar-enter-ms', 'radar-leave-ms',
            'schedule-enable', 'schedule-open', 'schedule-close', 'schedule-days', 'schedule-reboot',
-           'volume-link'):
+           'schedule-volumes', 'volume-link'):
 	hplayer.on('http2.' + _k)(lambda ev, *a, k=_k: hplayer.settings.set(k, a[0]))
 
 @hplayer.on('http2.loop-gap')

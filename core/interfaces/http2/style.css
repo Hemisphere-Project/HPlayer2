@@ -127,6 +127,9 @@ input[type=range]::-webkit-slider-runnable-track {
 #schedule-panel.no-rtc #schedule_ctrls,
 #schedule-panel.no-rtc label { opacity: .5; }
 #schedule-panel.no-rtc #schedule_status { opacity: 1; }
+/* a volume per weekday (2026-10-19): seven small fields, they wrap on a phone */
+#schedule_volume_ctrls .schedule-volume { width: 3.5em; }
+#schedule-panel .schedule-hint { opacity: .6; }
 /* Always-on audio graph: output status chips (audiohub interface) */
 .audio-status { vertical-align: middle; margin-right: .3rem; padding: .5em .6em; }
 .audio-status.badge-light { opacity: .5; }

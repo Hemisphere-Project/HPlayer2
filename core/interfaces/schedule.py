@@ -3,6 +3,7 @@ from .base import BaseInterface
 from datetime import datetime
 import subprocess
 import glob
+import json
 
 
 class ScheduleInterface(BaseInterface):
@@ -13,6 +14,11 @@ class ScheduleInterface(BaseInterface):
     Settable from a profile and from http2 (settings keys below). Emits edge events
         schedule.open   — the window just opened
         schedule.close  — the window just closed
+        schedule.slot   — the window in force changed (also once at startup when inside one), with
+                          {'day', 'open', 'close', 'volume'}: the day it started on and that day's
+                          volume (None = leave it as it is). Emitted BEFORE schedule.open, so the
+                          window opens at its level. Same event and payload as master's weekly
+                          grid (hplayer2#t-082): a profile handler serves both branches.
     and exposes isOpen() for trigger sources (e.g. the radar) to consult. Disabled =
     always open (fail-open), so adding this interface changes nothing until configured.
 
@@ -40,6 +46,11 @@ class ScheduleInterface(BaseInterface):
         # dirty state this clears. A power cut is a dirty stop; this is a clean one: /data
         # unmounts, mpv/HPlayer2/tmpfs start fresh every day.
         'schedule-reboot': False,
+        # 2026-10-19 (MBA garden, Thomas: "mainly change the volume on the weekend"): a volume per
+        # weekday — 7 values, Monday first, each 0..100, or None/blank = leave the volume where it
+        # is. Applied on entering the window and at boot inside it (schedule.slot), never while the
+        # schedule does not gate (disabled, no RTC, clock nobody set). None = no day volumes.
+        'schedule-volumes': None,
     }
     REBOOT_BEFORE_OPEN = 10     # minutes
     REBOOT_AFTER_CLOSE = 5      # minutes
@@ -56,6 +67,7 @@ class ScheduleInterface(BaseInterface):
         self.rtcPresent = False
         self._warnedClock = False
         self._lastOpen = None
+        self._lastSlot = False          # False = no baseline yet; None = outside the window
         self._rebootSlotDone = None     # "<date>-<label>" of the last slot acted on (or skipped)
 
     #
@@ -63,27 +75,31 @@ class ScheduleInterface(BaseInterface):
     #
 
     def isOpen(self):
-        if not self._cfgBool('schedule-enable'):
-            return True
-        if self.requireRtc and not self.rtcPresent:
-            return True                 # no trustworthy clock -> don't gate (see _checkRtc warning)
-        if not self._clockSane():
-            return True                 # RTC present but never set (dead cell, 2000-01-01) -> same thing
-        o = self._parseHM(self.hplayer.settings.get('schedule-open'))
-        c = self._parseHM(self.hplayer.settings.get('schedule-close'))
-        if o is None or c is None or o == c:
-            return True                 # misconfigured / degenerate -> fail open
-        now = datetime.now()
-        mins = now.hour * 60 + now.minute
-        if o < c:
-            # The window sits inside one day: that day must be an open day.
-            return self._dayOpen(now.weekday()) and (o <= mins < c)
-        # Window crosses midnight: it BELONGS to the day it started on, so the small hours
-        # after midnight are still the previous day's window (a Sunday 22:00-02:00 window
-        # plays into Monday morning even when Monday itself is a closed day).
-        if mins >= o:
-            return self._dayOpen(now.weekday())
-        return self._dayOpen((now.weekday() - 1) % 7)
+        win = self._window()
+        return win is None or self._windowDay(win, datetime.now()) is not None
+
+    def currentSlot(self):
+        """The window in force now as {'day', 'open', 'close', 'volume'} (day = the weekday it
+        STARTED on, Monday=0), or None: closed, or the schedule is not gating."""
+        win = self._window()
+        return None if win is None else self._slot(win, datetime.now())
+
+    def dayVolume(self, weekday):
+        """The volume set for that weekday (Monday=0), or None = leave the volume as it is.
+        A JSON string is accepted (http / osc); anything unreadable reads as None."""
+        raw = self.hplayer.settings.get('schedule-volumes')
+        if isinstance(raw, str):
+            try:
+                raw = json.loads(raw)
+            except ValueError:
+                return None
+        if not isinstance(raw, (list, tuple)) or len(raw) != 7:
+            return None
+        v = raw[weekday]
+        try:
+            return None if v in (None, '') else max(0, min(100, int(float(v))))
+        except (TypeError, ValueError):
+            return None
 
     #
     # thread
@@ -102,13 +118,21 @@ class ScheduleInterface(BaseInterface):
         # re-detect the RTC each tick: keeps the fail-open guarantee honest if a
         # module is missing/removed at runtime, and the http2 badge accurate
         self.rtcPresent = bool(glob.glob('/dev/rtc*'))
-        openNow = self.isOpen()
+        win = self._window()
+        slot = None if win is None else self._slot(win, datetime.now())
+        openNow = win is None or slot is not None      # isOpen(), from the same instant as slot
+        # The slot first: the day's volume is set before schedule.open starts the play, and once
+        # at startup inside the window, so a player booted (or power-cycled) mid-day takes it.
+        if slot != self._lastSlot:
+            self._lastSlot = slot
+            if slot is not None:
+                self.emit('slot', dict(slot))
         if self._lastOpen is None:
             self._lastOpen = openNow        # baseline, no edge at startup
         elif openNow != self._lastOpen:
             self._lastOpen = openNow
             self.emit('open' if openNow else 'close')
-        self._pushStatus(openNow)
+        self._pushStatus(openNow, slot)
         try:
             self._rebootTick()
         except Exception as e:
@@ -169,6 +193,46 @@ class ScheduleInterface(BaseInterface):
     # internals
     #
 
+    def _window(self):
+        """(open, close) in minutes of the day when the schedule gates, else None = always open."""
+        if not self._cfgBool('schedule-enable'):
+            return None
+        if self.requireRtc and not self.rtcPresent:
+            return None                 # no trustworthy clock -> don't gate (see _checkRtc warning)
+        if not self._clockSane():
+            return None                 # RTC present but never set (dead cell, 2000-01-01) -> same thing
+        o = self._parseHM(self.hplayer.settings.get('schedule-open'))
+        c = self._parseHM(self.hplayer.settings.get('schedule-close'))
+        if o is None or c is None or o == c:
+            return None                 # misconfigured / degenerate -> fail open
+        return (o, c)
+
+    def _windowDay(self, win, now):
+        """The weekday (Monday=0) the window holding `now` started on, or None when closed."""
+        o, c = win
+        mins = now.hour * 60 + now.minute
+        today = now.weekday()
+        if o < c:
+            # The window sits inside one day: that day must be an open day.
+            return today if (self._dayOpen(today) and o <= mins < c) else None
+        # Window crosses midnight: it BELONGS to the day it started on, so the small hours
+        # after midnight are still the previous day's window (a Sunday 22:00-02:00 window
+        # plays into Monday morning even when Monday itself is a closed day). Between its close
+        # and the next open it is closed (it used to read open there: master's fix, #t-082).
+        if mins >= o:
+            return today if self._dayOpen(today) else None
+        if mins < c:
+            yesterday = (today - 1) % 7
+            return yesterday if self._dayOpen(yesterday) else None
+        return None
+
+    def _slot(self, win, now):
+        day = self._windowDay(win, now)
+        if day is None:
+            return None
+        return {'day': day, 'open': self._fmtHM(win[0]), 'close': self._fmtHM(win[1]),
+                'volume': self.dayVolume(day)}
+
     def _checkRtc(self):
         self.rtcPresent = bool(glob.glob('/dev/rtc*'))
         if self.rtcPresent:
@@ -196,7 +260,7 @@ class ScheduleInterface(BaseInterface):
                      "schedule NOT enforced until the clock is set" % datetime.now().strftime('%Y-%m-%d'))
         return sane
 
-    def _pushStatus(self, openNow):
+    def _pushStatus(self, openNow, slot=None):
         h = self.hplayer.interface('http2')
         if h:
             h.send('schedule-status', {
@@ -204,6 +268,7 @@ class ScheduleInterface(BaseInterface):
                 'rtc': self.rtcPresent,
                 'clockOk': self._clockSane(),
                 'open': openNow,
+                'volume': slot['volume'] if slot else None,
                 'days': self._cfgDays(),
                 'dayOpen': self._dayOpen(datetime.now().weekday()),
                 'reboot': self._cfgBool('schedule-reboot'),
@@ -225,6 +290,10 @@ class ScheduleInterface(BaseInterface):
 
     def _cfgBool(self, key):
         return self.hplayer.settings.get(key) in (True, 1, '1', 'true', 'True', 'on')
+
+    @staticmethod
+    def _fmtHM(mins):
+        return '%02d:%02d' % (mins // 60, mins % 60)
 
     @staticmethod
     def _parseHM(val):
