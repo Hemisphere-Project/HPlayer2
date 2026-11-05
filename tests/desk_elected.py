@@ -15,7 +15,7 @@ No fleet, no mpv, no zyre/czmq. Only termcolor + pymitter:
 
     python3 -m venv /tmp/wallsync-venv
     /tmp/wallsync-venv/bin/pip install termcolor pymitter
-    /tmp/wallsync-venv/bin/python tests/desk_elected.py            # every test, ~3 min
+    /tmp/wallsync-venv/bin/python tests/desk_elected.py            # every test, ~6 min
     /tmp/wallsync-venv/bin/python tests/desk_elected.py takeover   # tests whose name matches
     /tmp/wallsync-venv/bin/python tests/desk_elected.py -v ...     # live node logs
 
@@ -151,6 +151,7 @@ class ZyreBus():
         self.nodes = {}             # name -> Node
         self.cut = set()            # (src, dst)
         self.drop = {}              # name -> number of next orders this node misses
+        self.tcReady = True         # False: no zyre TimeClient ever finishes (packet clock only)
         self.orders = []            # (time, src, event, args, r)
 
     def broadcast(self, src, event, args=None, delay_ms=0, at=0, extra=None):
@@ -194,23 +195,24 @@ class ZShim():
 
 
 class FakeTimeClient():
-    def __init__(self): self.status = 1; self.clockshift = 0
+    def __init__(self, bus): self.status = 1 if bus.tcReady else 0; self.clockshift = 0
 
 class FakePeer():
-    def __init__(self, name):
+    def __init__(self, name, bus):
         self.name = name; self.active = True; self.ip = '127.0.0.1'
-        self.timeclient = FakeTimeClient()
+        self.timeclient = FakeTimeClient(bus)
     def clockshift(self): return 0
 
 class FakeZyreNode():
     def __init__(self, me):
         self.me = me
+        self.bus = ZBUS
         self.book = {}
     def broadcast(self, event, args=None, delay_ms=0, at=0, extra=None):
-        ZBUS.broadcast(self.me, event, args, delay_ms, at, extra)
+        self.bus.broadcast(self.me, event, args, delay_ms, at, extra)
     def peerByName(self, name):
-        n = ZBUS.nodes.get(name)
-        return FakePeer(name) if n and n.alive else None
+        n = self.bus.nodes.get(name)
+        return FakePeer(name, self.bus) if n and n.alive else None
 
 class FakeZyre():
     def __init__(self, me): self.node = FakeZyreNode(me)
@@ -234,12 +236,17 @@ class Emitter():
 
 
 class FakePlayer():
-    """Real-time position x speed x crystal error; ends at its duration (or wraps, loop=True)."""
+    """Real-time position x speed x crystal error; ends at its duration (or wraps, loop=True).
+    Like mpv, a new file takes openDelay to open: its position holds at 0 and no status event
+    leaves meanwhile (a leader is silent for that long after a track change)."""
     name = 'player'
 
-    def __init__(self, rate=1.0, loop=False):
+    def __init__(self, rate=1.0, loop=False, openDelay=0.3):
         self.rate = rate
         self.loop = loop
+        self.openDelay = openDelay
+        self._openUntil = 0.0
+        self.seekLog = []           # (track, target s, when)
         self.lock = threading.RLock()
         self.media = None
         self.duration = 0.0
@@ -251,12 +258,18 @@ class FakePlayer():
         self.seeks = 0
         self.plays = []
 
+    def _clock(self):
+        return max(time.time(), self._openUntil)
+
+    def opening(self):
+        return self.playing and time.time() < self._openUntil
+
     def _now(self):
         if not self.playing:
             return 0.0
         if self.paused:
             return self._base
-        cur = self._base + (time.time() - self._t0) * self._speed * self.rate
+        cur = self._base + (self._clock() - self._t0) * self._speed * self.rate
         if self.loop and self.duration:
             cur %= self.duration
         return cur
@@ -271,7 +284,8 @@ class FakePlayer():
         with self.lock:
             self.media = media
             self.duration = DUR.get(os.path.basename(media), 60.0)
-            self._base = 0.0; self._t0 = time.time(); self._speed = 1.0
+            self._openUntil = time.time() + self.openDelay
+            self._base = 0.0; self._t0 = self._openUntil; self._speed = 1.0
             self.playing = True; self.paused = False
             self.plays.append(os.path.basename(media))
     def stop(self):
@@ -284,18 +298,19 @@ class FakePlayer():
     def resume(self):
         with self.lock:
             if self.paused:
-                self._t0 = time.time(); self.paused = False
+                self._t0 = self._clock(); self.paused = False
     def speed(self, s):
         with self.lock:
             if s == self._speed: return
-            self._base = self._now(); self._t0 = time.time(); self._speed = s
+            self._base = self._now(); self._t0 = self._clock(); self._speed = s
     def seekTo(self, milli, exact=False):
         with self.lock:
             self._base = milli / 1000.0
             if self.loop and self.duration:
                 self._base %= self.duration
-            self._t0 = time.time()
+            self._t0 = self._clock()
             self.seeks += 1
+            self.seekLog.append((self.track(), round(self._base, 2), time.time()))
     def status(self, key=None):
         s = {'media': self.media, 'duration': self.duration if self.media else 0, 'time': self.position()}
         return s[key] if key else s
@@ -347,11 +362,15 @@ DUR.update({'01_intro.mp3': 12.0, '02_ambiance_loop.mp3': 8.0, '03_story.mp3': 9
             '04_final_stop.mp3': 8.0, '05_extra.mp3': 90.0})
 
 
+ALL_NODES = []
+
 class Node():
-    def __init__(self, name, rate=1.0, files=FILES, role='elected', master=False, loop=False, **kw):
+    def __init__(self, name, rate=1.0, files=FILES, role='elected', master=False, loop=False,
+                 openDelay=0.3, **kw):
         self.name = name
         self.alive = True
-        self.player = FakePlayer(rate=rate, loop=loop)
+        ALL_NODES.append(self)
+        self.player = FakePlayer(rate=rate, loop=loop, openDelay=openDelay)
         self.playlist = FakePlaylist(self.player, files)
         self.hp = FakeHPlayer(self.player, self.playlist, FakeZyre(name))
         self.zshim = ZShim(self)
@@ -391,7 +410,7 @@ class Node():
         while not self._stop.wait(0.05):
             p = self.player
             with p.lock:
-                if not p.playing or p.paused:
+                if not p.playing or p.paused or p.opening():
                     continue
                 pos = p._now()
                 ended = not p.loop and pos >= p.duration
@@ -403,16 +422,22 @@ class Node():
                 self.hp.emit('player.status', 'time', round(pos, 3))
 
     def start(self):
-        ZBUS.nodes[self.name] = self
+        self.hp.zyre.node.bus.nodes[self.name] = self
+        self._udp = BUS
+        BUS.mute.discard(self.name)         # a node restarted under a dead one's name speaks again
         self.wc.recvThread.daemon = True
         self.wc.start()
         self.feeder.start()
         return self
 
     def kill(self):
-        """Power cut: the interface, its zyre and its player go at once."""
+        """Power cut: the interface, its zyre and its player go at once — and nothing leaves it
+        after that instant (no last packet)."""
         self.alive = False
         self.wc.stopped.set()
+        bus = getattr(self, '_udp', None)
+        if bus is not None:
+            bus.mute.add(self.name)
         self._stop.set()
         self.player.stop()
 
@@ -503,6 +528,11 @@ def run(name, fn):
         print('   --- last node logs ---')
         for line in LOG[-60:]:
             print('   | ' + line)
+    left = [n for n in ALL_NODES if n.alive]
+    for n in left:
+        n.kill()
+    if left:
+        time.sleep(0.5)
 
 
 # =============================================================================
@@ -542,7 +572,15 @@ def t_fixed_unchanged():
     check(pk and not any(k in pk[-1] for k in ('t', 'u', 'z')), 'fixed packets carry no rank/pause fields (%s)' % sorted(pk[-1]))
     check(m.wc.isLeader() and not s.wc.isLeader() and s.wc.leader() == 'WALL-MASTER', 'roles are the profile\'s: master leads, slave locked on it')
     check(not m.wc.elected and s.wc.mayAdvance(), 'fixed: every node may advance (unchanged)')
-    m.kill(); s.kill(); time.sleep(0.4)
+    s.hp.emit('zyre.event', {'event': 'unbuf_playindex', 'args': [1], 'r': [9, 0, 'WALL-SLAVE']})
+    check(not s.wc.isLeader() and s.wc._rank is None, 'a ranked order changes nothing on a fixed node')
+    m2 = Node('WALL-M2', role='fixed', master=True, loop=True).start()
+    m2.player.play('/data/media/loop.mp4')
+    time.sleep(3)
+    check(s.wc._lockedName == 'WALL-MASTER', 'a second fixed master is ignored while the first is alive (first heard)')
+    d = abs(m.player.position() - s.player.position()); d = min(d, 60.0 - d)
+    check(d < 0.08, 'still locked on the first: |diff| = %.0f ms' % (d * 1000))
+    m.kill(); s.kill(); m2.kill(); time.sleep(0.4)
 
 
 def t_order_moves_leadership():
@@ -571,6 +609,7 @@ def t_order_moves_leadership():
                 gaps.append(v - last); last = v
     th = threading.Thread(target=sampler, daemon=True); th.start()
     time.sleep(1.0)
+    tOrder = time.time()
     f['Anna-2'].order('unbuf_playindex', [2])
     t = wait_for(lambda: f.leaders() == ['Anna-2'], 2.0)
     check(t is not None, 'order from Anna-2 -> Anna-2 leads, Anna-1 demoted (%.2f s)' % (t or 0))
@@ -743,6 +782,140 @@ def t_track_end():
     f.shutdown()
 
 
+def t_slow_open():
+    # A mixed fleet: the new leader opens its file in 1.5 s (a video on a 3B+), its followers in
+    # 0.2 s (mp3). They play the new track for 1.3 s while the leader is still silent: their model
+    # of the OLD track must not drive the new one (a seek to the old track's position)
+    f = Fleet([('Anna-1', 1.0), ('Anna-2', 1.003), ('Anna-3', 0.997)], openDelay=0.2)
+    f['Anna-2'].player.openDelay = 1.5
+    f['Anna-1'].order('unbuf_playindex', [0])
+    time.sleep(7)                                    # a model of 01_intro now says 6+ s
+    tOrder = time.time()
+    f['Anna-2'].order('unbuf_playindex', [2])
+    time.sleep(6)
+    wild = [(n.name, s[1]) for n in f.alive() for s in n.player.seekLog
+            if s[2] > tOrder and s[0] == '03_story.mp3' and s[1] > 3.0]
+    check(not wild, 'no follower seeked the new track to the old track\'s position: %s' % wild)
+    check(f.leaders() == ['Anna-2'], 'Anna-2 leads')
+    # (the mp3 followers started 1.3 s ahead of the video leader: the servo slows them down, and
+    # its last 80 ms is the Drifter's slow tail — converging, not the bug this test is about)
+    sp = f.spread('Anna-2')
+    check(sp < 0.15, 'converging on it: spread %.0f ms after 6 s' % (sp * 1000))
+    f.shutdown()
+
+
+def t_order_fires_not_received():
+    # Leadership moves when the order FIRES, not when it arrives: during its `at` buffer the old
+    # leader still leads and emits (adopting at reception would hand the clock to a node still
+    # playing the old state).
+    f = Fleet([('Anna-1', 1.0), ('Anna-2', 1.002), ('Anna-3', 0.998)])
+    f['Anna-1'].order('unbuf_playindex', [0])
+    time.sleep(3)
+    f['Anna-2'].order('unbuf_playindex', [2], 1500)
+    time.sleep(0.8)
+    check(f.leaders() == ['Anna-1'] and f.emitting(0.3) == ['Anna-1'],
+          'mid-buffer: Anna-1 still leads and emits (%s / %s)' % (f.leaders(), f.emitting(0.3)))
+    check(set(f.tracks().values()) == {'01_intro.mp3'}, 'and everyone is still on the old state')
+    t = wait_for(lambda: f.leaders() == ['Anna-2'], 2.0)
+    check(t is not None, 'the order fired: Anna-2 leads (%.1f s later)' % (t or 0))
+    f.shutdown()
+
+
+def t_reboot_while_stopped():
+    # The leader reboots while the fleet is stopped: nobody else emits, so it comes back at term 0
+    # and its next order ranks BELOW what the followers remember of it.
+    f = Fleet([('Anna-1', 1.0), ('Anna-2', 1.002), ('Anna-3', 0.998)])
+    f['Anna-1'].order('unbuf_playindex', [2])
+    time.sleep(3)
+    f['Anna-1'].order('stop', None, 0)
+    time.sleep(2)
+    check(not any(n.player.isPlaying() for n in f.alive()), 'the fleet is stopped, Anna-1 leads %s' % (f['Anna-2'].wc._rank,))
+
+    f['Anna-1'].kill()
+    time.sleep(9.5)                                  # a real reboot: longer than takeoverAfter
+    n = f.add('Anna-1')
+    time.sleep(1.0)
+    check(n.wc._rank is None, 'rebooted Anna-1 heard nothing (a stopped fleet has no clock but its leader\'s)')
+    n.order('unbuf_playindex', [0])
+    t = wait_for(lambda: n.wc._rank and all(f[x].wc._rank == n.wc._rank and f[x].wc._lockedName == 'Anna-1' for x in ('Anna-2', 'Anna-3')), 3.0)
+    check(t is not None, 'its order at term %d is followed: the followers\' leader was silent > takeoverAfter (%.1f s)'
+          % (n.wc._rank[0] if n.wc._rank else -1, t or 0))
+    time.sleep(4)
+    sp = f.spread('Anna-1')
+    check(f.leaders() == ['Anna-1'] and sp < 0.08, 'one leader, locked: spread %.0f ms' % (sp * 1000))
+
+    # a fast restart (within takeoverAfter), stopped again: followed once its old self is 8 s silent
+    n.order('stop', None, 0)
+    time.sleep(2)
+    n.kill()
+    t0 = time.time()
+    time.sleep(2)
+    n2 = f.add('Anna-1')
+    time.sleep(0.5)
+    n2.order('unbuf_playindex', [2])
+    t = wait_for(lambda: all(f[x].wc._rank == n2.wc._rank for x in ('Anna-2', 'Anna-3')), 10.0)
+    check(t is not None and time.time() - t0 < 11.0,
+          'fast restart: followed %.1f s after the old leader went silent' % (time.time() - t0))
+    time.sleep(3)
+    sp = f.spread('Anna-1')
+    check(sp < 0.1, 'locked: spread %.0f ms' % (sp * 1000))
+    f.shutdown()
+
+
+def t_restart_within_takeover():
+    # The leader crashes while playing and is back in 3 s: it never reclaims; the takeover at ~8 s
+    # still happens and the restarted node follows its successor.
+    f = Fleet([('Anna-1', 1.001), ('Anna-2', 1.0), ('Anna-3', 0.998)])
+    f['Anna-2'].order('unbuf_playindex', [2])
+    time.sleep(5)
+    f['Anna-2'].kill()
+    t0 = time.time()
+    time.sleep(3)
+    n = f.add('Anna-2')
+    t = wait_for(lambda: f.leaders() != [], 10.0)
+    check(t is not None and 7.0 < time.time() - t0 < 10.5, 'takeover %.1f s after the crash' % (time.time() - t0))
+    time.sleep(0.5)
+    check(f.leaders() == ['Anna-1'] and not n.wc.isLeader(), 'by Anna-1; the restarted Anna-2 did not reclaim: %s' % f.leaders())
+    t = wait_for(lambda: n.player.track() == '03_story.mp3', 6.0)
+    check(t is not None, 'restarted Anna-2 joined the show')
+    time.sleep(4)
+    sp = f.spread('Anna-1')
+    check(sp < 0.1, 'in sync: spread %.0f ms' % (sp * 1000))
+    f.shutdown()
+
+
+def t_stop_without_timeclient():
+    # No zyre TimeClient (edge 15: the packet clock needs 3 one-second buckets after a lock
+    # switch). The leader's stop needs no clock shift: it must be followed at once, not after it.
+    f = Fleet([('Anna-1', 1.0), ('Anna-2', 1.002), ('Anna-3', 0.998)])
+    ZBUS.tcReady = False
+    f['Anna-1'].order('unbuf_playindex', [2])
+    time.sleep(6)
+    ZBUS.drop['Anna-3'] = 2                     # Anna-3 misses the next two orders
+    f['Anna-2'].order('unbuf_playindex', [4])
+    t = wait_for(lambda: f['Anna-3'].wc._lockedName == 'Anna-2', 3.0)
+    check(t is not None, 'Anna-3 locked on Anna-2 from its packets (fresh packet clock, %.1f s)' % ((t or 0)))
+    time.sleep(0.3)
+    t0 = time.time()
+    f['Anna-2'].order('stop', None, 0)
+    t = wait_for(lambda: not f['Anna-3'].player.isPlaying(), 8.0)
+    check(t is not None and t < 3.6, 'Anna-3 followed the missed stop in %.1f s (stopGrace 2 s + a beat), clock shift or not' % (t or 99))
+    f.shutdown()
+
+
+def t_stop_track():
+    f = Fleet([('Anna-1', 1.0), ('Anna-2', 1.002), ('Anna-3', 0.998)])
+    f['Anna-1'].order('unbuf_playindex', [3])        # 04_final_stop, 8 s
+    time.sleep(1)
+    n0 = len(ZBUS.orders)
+    t = wait_for(lambda: not any(n.player.isPlaying() for n in f.alive()), 10.0)
+    check(t is not None, "'_stop' track ended: everyone stopped")
+    time.sleep(2)
+    check(len(ZBUS.orders) == n0, 'and nobody ordered anything: %s' % [(o[1], o[2], o[3]) for o in ZBUS.orders[n0:]])
+    check(f.leaders() == ['Anna-1'], 'Anna-1 still leads the stopped fleet')
+    f.shutdown()
+
+
 TESTS = [
     ('pure: rank order, natural names, end-of-track by name, zyre wire', t_pure),
     ('fixed: role=fixed unchanged (first-heard master, no rank on the wire)', t_fixed_unchanged),
@@ -753,6 +926,12 @@ TESTS = [
     ('partition: an order on one side beats a takeover on the other', t_partition_heal),
     ('two orders 50 ms apart: one leader, the later state everywhere', t_two_orders_in_buffer),
     ('track end: one advance by the leader, _loop/_stop by name, fallback when it is dead', t_track_end),
+    ('slow file open: no model tick drives the new track', t_slow_open),
+    ('fires, not received: the old leader leads through the order\'s buffer', t_order_fires_not_received),
+    ('reboot while stopped: the rebooted leader\'s lower-term order is followed', t_reboot_while_stopped),
+    ('restart within takeoverAfter: no reclaim, takeover at ~8 s, it follows', t_restart_within_takeover),
+    ("'_stop' track in a fleet: everyone stops, nobody orders", t_stop_track),
+    ('missed stop with no TimeClient: followed before the clock-shift gate', t_stop_without_timeclient),
 ]
 
 for name, fn in TESTS:

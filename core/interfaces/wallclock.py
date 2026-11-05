@@ -301,6 +301,9 @@ class WallclockInterface (BaseInterface):
         self._rank = None               # (term, sub, name) of the current leader, None = nobody leads yet
         self._maxTerm = 0               # highest term seen, in an order or a packet
         self._isLeader = False          # written under _rankLock; the send loop reads it
+        self._rankAt = 0.0              # when the current rank was adopted (a named leader gets time to speak)
+        self._relock = False            # a gone leader was replaced: relock even on the same name (a rebooted
+                                        # process: new seq, its clock maybe stepped at boot)
         self._orderAt = 0.0             # last ranked order executed here
         self._stopSince = None          # we play while our leader says stopped, since
         self._pauseSince = None         # we play while our leader says paused, since
@@ -314,17 +317,20 @@ class WallclockInterface (BaseInterface):
     # Elected leader: rank bookkeeping and orders
     #
 
-    def _adopt(self, rank, why):
+    def _adopt(self, rank, why, force=False):
         """Compare-and-set the leader's rank (from an order, a packet or a takeover). True when it
         moved. Called from the zyre thread and the receive loop; the role flip is immediate, so the
         send loop starts or stops on the very tick the order fires."""
         with self._rankLock:
             if rank[0] > self._maxTerm:
                 self._maxTerm = rank[0]
-            if not rank_better(rank, self._rank):
+            if not force and not rank_better(rank, self._rank):
                 return False
             was = self._rank
             self._rank = rank
+            self._rankAt = time.time()
+            if force:
+                self._relock = True
             lead = rank[2] == self._myName
             self._isLeader = lead
             self.master = lead
@@ -332,6 +338,11 @@ class WallclockInterface (BaseInterface):
             self.log(colored('clock leader: %s (term %d.%d) <- %s%s' % (
                 rank[2], rank[0], rank[1], why, ' : this node emits' if lead else ''), 'magenta'))
         return True
+
+    def _silence(self):
+        """How long our leader has said nothing: since its last accepted packet, or since it was
+        named (by an order, a takeover or a packet) — a newly named leader gets time to speak."""
+        return time.time() - max(self._lastAccept, self._rankAt)
 
     def _onOrder(self, ev, data=None, *args):
         """zyre.event: fires when an order EXECUTES (after its `at` buffer), on every node at once."""
@@ -345,7 +356,13 @@ class WallclockInterface (BaseInterface):
         except (TypeError, ValueError):
             return
         self._orderAt = time.time()
-        self._adopt(rank, 'order ' + str(data.get('event')))
+        if self._adopt(rank, 'order ' + str(data.get('event'))):
+            return
+        cur = self._rank
+        if cur and rank != cur and not self._isLeader and self._silence() > self.takeoverAfter:
+            # Our leader is gone (silent for takeoverAfter): this order's sender replaces it even at
+            # a LOWER rank — a commander that rebooted (term 0) while the fleet was stopped
+            self._adopt(rank, '%s silent %.0f s, %s orders at a lower rank' % (cur[2], self._silence(), rank[2]), force=True)
 
     def stamp(self):
         """The rank an order from this node carries: {'r': [term, 0, me]}, term = highest seen + 1.
@@ -381,7 +398,7 @@ class WallclockInterface (BaseInterface):
         ends the show. One advance instead of one per player."""
         if not self.elected or self._isLeader:
             return True
-        return time.time() - self._lastAccept >= 2.0
+        return self._silence() >= 2.0
 
     def _rearmClockSync(self, peer, tc, name):
         # The TimeClient's own Timers are the only thing that ever starts a sampling round; when
@@ -520,6 +537,9 @@ class WallclockInterface (BaseInterface):
 
         while not self.stopped.is_set():
             self.stopped.wait(interval)
+            if self.elected and self.stopped.is_set():
+                break                   # shutting down: no last word — a "stopped" beat from a leader on
+                                        # its way out would read as a stopped fleet, and nobody would take over
 
             if time.time() - lastPin[0] > (2.0 if not pinned[0] else 30.0):
                 was = pinned[0]
@@ -730,11 +750,21 @@ class WallclockInterface (BaseInterface):
         if rank_better(prank, self._rank):
             self._adopt(prank, 'clock packet' + (' (we led)' if self._isLeader else ''))
         cur = self._rank
+        silent = self._silence()
+        if cur and prank != cur and not self._isLeader and silent > self.takeoverAfter:
+            # Our leader has been silent for takeoverAfter: it is gone, and a live emitter replaces
+            # it even at a LOWER rank. That is the leader itself rebooted (back at term 0: a stopped
+            # fleet carries no clock but its leader's, so it relearns nothing before its next
+            # order), or another node that rebooted giving the next order to a fleet whose leader
+            # died. While our leader lives, a lower rank stays ignored (§Edge 13).
+            self._adopt(prank, '%s silent %.0f s, %s emits at a lower rank' % (cur[2], silent, name), force=True)
+            cur = self._rank
         if prank != cur:
             self._quietLog('ignoring clock from %s (rank %d.%d, the leader is %s %d.%d)' % (
                 name, prank[0], prank[1], cur[2], cur[0], cur[1]) if cur else 'ignoring clock from ' + name)
             return False
-        if name != self._lockedName:
+        if name != self._lockedName or self._relock:
+            self._relock = False
             self._lockOn(name)
         return True
 
@@ -745,10 +775,11 @@ class WallclockInterface (BaseInterface):
         paused fleet (nothing to clock), nor a position it never locked on."""
         if self._isLeader or not self._lockedName or not self.player:
             return
-        now = time.time()
-        silent = now - self._lastAccept
+        silent = self._silence()
         if silent < self.takeoverAfter:
             return
+        if not self.hMasterPlaying:
+            return                  # its last word was "stopped": a fleet started since is an order's, not a claim's
         if not self.player.isPlaying() or self.player.isPaused():
             return
         if not self.hLastLocked or self._lastAccept - self.hLastLocked > 30.0:
@@ -945,6 +976,7 @@ class WallclockInterface (BaseInterface):
         self.log('slave: chasing wall clock on port', self.port)
 
         extraBase = None    # (pos, atLocal, dur, seq, cs) of the last chase-eligible packet
+        baseAt = 0.0        # when extraBase was taken
         roleSeen = False    # elected: the role this loop last acted on
 
         while not self.stopped.is_set():
@@ -961,7 +993,8 @@ class WallclockInterface (BaseInterface):
                         extraBase = None
                         if self.drifter:
                             self.drifter.release()
-                    # (demoted: the first packet carrying the better rank locks us on its sender)
+                    # (demoted: the first packet carrying the better rank locks us on its sender;
+                    # _rankAt restarted the silence clock when the better rank was adopted)
                 self._takeover()
 
             if not joined[0] and time.time() - lastTry[0] > 2.0:
@@ -1012,9 +1045,13 @@ class WallclockInterface (BaseInterface):
                 # until the freewheel budget runs out.
                 # (only for a player that plays: a slave stopped by the master's zyre 'stop' must not
                 # be restarted by its own model)
-                # (elected: nor a paused one — a model tick would resume it)
+                # (elected: nor a paused one — a model tick would resume it; nor on a model older
+                # than the last order: it is the REPLACED track's, and the new leader is silent
+                # until mpv has opened the new file — a tick would seek the new track to the old
+                # one's position)
                 if extraBase and self.drifter and time.time() - self._lastAccept > 0.2 \
-                        and self.player.isPlaying() and not (self.elected and self.player.isPaused()):
+                        and self.player.isPlaying() \
+                        and not (self.elected and (self.player.isPaused() or self._orderAt > baseAt)):
                     bpos, batLocal, bdur, bseq, bcs, bwrap = extraBase
                     clock = self._modelClock(extraBase)
                     if bdur > 3:
@@ -1116,6 +1153,22 @@ class WallclockInterface (BaseInterface):
                 if src:
                     self.log('clock shift from', src, 'for', name, '(' + str(cs) + 'us)')
                 self.hCsSource = src
+
+            # Elected: the leader's stop and pause need no clock shift — follow them before the
+            # gate below (a lock switch with no TimeClient yet waits ~3 s for the packet clock)
+            if self.elected:
+                if not pkt.get('p', False):
+                    self.drifter.release()
+                    self._followStop(name)
+                    continue
+                self._stopSince = None
+                if pkt.get('z'):
+                    self.drifter.release()
+                    self._followPause(name, pkt)
+                    continue
+                self._pauseSince = None
+                self._pauseAligned = False
+
             if cs is None:
                 self._quietLog('waiting for clock sync with ' + name)
                 self.drifter.release()
@@ -1139,17 +1192,7 @@ class WallclockInterface (BaseInterface):
             # Master not playing
             if not pkt.get('p', False):
                 self.drifter.release()
-                if self.elected:
-                    self._followStop(name)
                 continue
-            if self.elected:
-                self._stopSince = None
-                if pkt.get('z'):
-                    self.drifter.release()
-                    self._followPause(name, pkt)
-                    continue
-                self._pauseSince = None
-                self._pauseAligned = False
 
             m = pkt.get('m') or ''
             mdur = pkt.get('dur', 0) or 0
@@ -1264,6 +1307,7 @@ class WallclockInterface (BaseInterface):
                 continue
 
             extraBase = (pkt.get('pos', 0.0), atLocal, mdur, s, cs, wrapDur)   # chase-eligible: gaps extrapolate from here
+            baseAt = time.time()
             res = self.drifter.tick(clock, wrapDur)
             if res:
                 res['seq'] = s
