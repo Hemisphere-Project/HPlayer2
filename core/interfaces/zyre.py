@@ -1273,9 +1273,11 @@ class ZyreInterface (BaseInterface):
         self.log( "done.")
 
     def activeCount(self):
-        return len(self.node.book)
+        node = getattr(self, 'node', None)      # not built until listen() has an address (up to 90 s)
+        return len(node.book) if node else 0
 
     def peersList(self):
-        return self.node.book
+        node = getattr(self, 'node', None)
+        return node.book if node else {}
 
         

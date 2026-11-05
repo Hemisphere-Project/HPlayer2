@@ -87,8 +87,13 @@ class Settings():
 class Wallclock():
     def __init__(self, *a, **k):
         self.args, self.kw = a, k
-        self.orders = []; self.advance = True; self.leading = False
-    def order(self, event, args=None, delay_ms=0): self.orders.append((event, args, delay_ms))
+        self.orders = []; self.advance = True; self.leading = False; self.dupName = False
+        self.autos = []
+    def order(self, event, args=None, delay_ms=0, auto=False, source=None):
+        self.orders.append((event, args, delay_ms))
+        if auto:
+            self.autos.append((event, args, os.path.basename(source or '')))
+        return True
     def mayAdvance(self): return self.advance
     def isLeader(self): return self.leading
 
@@ -105,8 +110,10 @@ class Keypad(Emitter):
 
 
 class Zyre():
-    def __init__(self, *a, **k): self.args = a; self.node = None
-    def activeCount(self): return 4
+    """Like ZyreInterface: NO `node` until listen() has an address (up to 90 s at boot)."""
+    def __init__(self, *a, **k): self.args = a; self.local = []
+    def activeCount(self): return len(self.node.book)          # the 3c22786 call: raises without a node
+    def emit(self, ev, *args): self.local.append((ev, args))
 
 
 class Dummy():
@@ -149,6 +156,7 @@ _time.sleep = _sleep
 hp = FakeHPlayer2.last
 wc = hp.ifaces['wallclock']
 kp = hp.ifaces['keypad']
+zy = hp.ifaces['zyre']
 ok = 0
 
 def check(cond, msg):
@@ -165,6 +173,19 @@ check(names[0] == 'health' and hp.added[0][2] == {'restart': False}, 'health fir
 check(('zyre', ('wint',), {}) in hp.added, 'zyre on wint')
 check(('wallclock', ('wint',), {'role': 'elected'}) in hp.added, 'wallclock on wint, role=elected')
 check(set(names) >= {'keypad', 'http', 'keyboard', 'teleco2'}, 'keypad, http, numpad, CoreS3 remote: %s' % names)
+check(('teleco2', (False, 'wint'), {}) in hp.added, 'the CoreS3 remote reports OUR WiFi (wint), parc mode (local=False)')
+
+# boot with no address yet: zyre has no node for up to 90 s
+g0 = mod['go_next'].__globals__
+g0['lockAlertCounter'] = 0
+hp.player.media = None
+lines = kp.update()
+check(isinstance(lines, list) and 'P0' in lines[1], 'LCD before the zyre node exists: alive, 0 peers: %r' % (lines,))
+g0['broadcast']('playindex', 1)
+check(wc.orders == [] and zy.local == [('unbuf_playindex', (1,))], 'an order with no zyre node runs on this player: %s' % zy.local)
+class _Node():
+    book = {'a': 1, 'b': 2, 'c': 3, 'd': 4}
+zy.node = _Node()
 check(hp.settings.get('loop') == -1, 'loop -1 at load')
 hp.emit('app-run')
 check(hp.settings.get('loop') == -1 and hp.settings.get('volume') == 95, 'app-run on a fresh card: loop -1, volume 95')
@@ -217,7 +238,9 @@ n = len(wc.orders)
 for idx, want in ((0, ('unbuf_playindex', [1], 300)), (1, ('unbuf_playindex', [1], 300)), (2, ('unbuf_playindex', [3], 300))):
     hp.playlist._index = idx
     hp.emit('playlist.end')
-    check(wc.orders[-1] == want, 'end of %s -> %s' % (os.path.basename(hp.playlist.trackAtIndex(idx)), want))
+    src = os.path.basename(hp.playlist.trackAtIndex(idx))
+    check(wc.orders[-1] == want and wc.autos[-1] == (want[0], want[1], src),
+          'end of %s -> %s, as an auto advance tagged with it' % (src, want))
 hp.playlist._index = 3
 n = len(wc.orders)
 hp.emit('playlist.end')
@@ -240,6 +263,13 @@ check(l1.endswith('*') and len(l1) <= 16, "the leader shows `*`: %r" % l1)
 wc.leading = False
 l0, l1 = upd()
 check(not l1.endswith('*'), 'a follower does not: %r' % l1)
+wc.dupName = True
+l0, l1 = upd()
+check(l1.startswith('NAME TAKEN') and kp.lcd.color == (100, 0, 0), 'a duplicate name shows on the LCD, in red: %r' % l1)
+wc.dupName = False
+zy.node = None
+l0, l1 = upd()
+check('P0' in l1, 'the node gone again: still alive, 0 peers: %r' % l1)
 
 print('\nALL %d CHECKS PASSED' % ok)
 sys.stdout.flush()

@@ -188,7 +188,7 @@ def index_pattern(idx):
 class WallclockInterface (BaseInterface):
 
     def __init__(self, hplayer, netiface=None, master=False, player=None,
-                    port=3737, group='239.192.0.37', rate=20, unicast=False,
+                    port=None, group=None, rate=20, unicast=False,
                     masterName=None, staleness=1.0, extrapolate=4.0, modelMax=6 * 3600,
                     driftLog='/tmp/wallclock-drift.csv', durTolerance=1.0,
                     role='fixed', takeoverAfter=8.0, stopGrace=2.0, pauseGrace=1.0,
@@ -199,6 +199,12 @@ class WallclockInterface (BaseInterface):
 
         self.role = role
         self.elected = role == 'elected'
+        # An elected fleet has its own channel: a fixed master and an Anna leader on one LAN never
+        # hear each other's clock (fixed defaults unchanged: 3737 / 239.192.0.37)
+        if port is None:
+            port = 3738 if self.elected else 3737
+        if group is None:
+            group = '239.192.0.38' if self.elected else '239.192.0.37'
         if self.elected:
             master = False              # nobody leads until an order (or a takeover) names a leader
         self.iface = netiface
@@ -304,6 +310,11 @@ class WallclockInterface (BaseInterface):
         self._rankAt = 0.0              # when the current rank was adopted (a named leader gets time to speak)
         self._relock = False            # a gone leader was replaced: relock even on the same name (a rebooted
                                         # process: new seq, its clock maybe stepped at boot)
+        self._leaderIdle = False        # our leader's last accepted packet said stopped or paused
+        self._dark = False              # our last play hit 'nomedia': as leader, send no clock
+        self.dupName = False            # another player on zyre carries OUR name: never lead
+        self._dupCheckAt = 0.0
+        self._dupLogAt = 0.0
         self._orderAt = 0.0             # last ranked order executed here
         self._stopSince = None          # we play while our leader says stopped, since
         self._pauseSince = None         # we play while our leader says paused, since
@@ -312,6 +323,8 @@ class WallclockInterface (BaseInterface):
         self._darkNoted = None          # leader media we have no file for (logged once)
         if self.elected:
             self.hplayer.on('zyre.event')(self._onOrder)
+            self.hplayer.on('playlist.nomedia')(self._onNoMedia)
+            self.hplayer.on('playlist.do-play')(self._onDoPlay)
 
     #
     # Elected leader: rank bookkeeping and orders
@@ -331,7 +344,7 @@ class WallclockInterface (BaseInterface):
             self._rankAt = time.time()
             if force:
                 self._relock = True
-            lead = rank[2] == self._myName
+            lead = rank[2] == self._myName and not self.dupName
             self._isLeader = lead
             self.master = lead
         if not was or was[2] != rank[2]:
@@ -355,9 +368,18 @@ class WallclockInterface (BaseInterface):
             rank = (int(r[0]), int(r[1]), str(r[2]))
         except (TypeError, ValueError):
             return
-        self._orderAt = time.time()
-        if self._adopt(rank, 'order ' + str(data.get('event'))):
+        auto = data.get('a') is not None
+        if auto and self._staleAdvance(rank, data.get('a')):
+            # zyre's preProcessor2 reads the event name AFTER zyre.event: renamed, it is never executed
+            self.log('stale track-end advance from %s (rank %d.%d, ends %s): dropped' % (
+                rank[2], rank[0], rank[1], data.get('a') or '?'))
+            data['event'] = 'wallclock-stale-advance'
             return
+        self._orderAt = time.time()
+        if self._adopt(rank, ('advance ' if auto else 'order ') + str(data.get('event'))):
+            return
+        if auto:
+            return                      # an advance never replaces a leader by force
         cur = self._rank
         if cur and rank != cur and not self._isLeader and self._silence() > self.takeoverAfter:
             # Our leader is gone (silent for takeoverAfter): this order's sender replaces it even at
@@ -372,15 +394,93 @@ class WallclockInterface (BaseInterface):
             t = self._maxTerm
         return {'r': [t, 0, self._myName]}
 
-    def order(self, event, args=None, delay_ms=0):
-        """Broadcast a zyre order; a transport order carries this node's rank under role='elected'."""
+    def stampAuto(self, source):
+        """The rank a TRACK-END advance carries: (term, sub+1, me), the takeover class — never an
+        order's term+1, so an advance can't outrank a human order (a player cut off from the fleet
+        and looping a `_loop` track alone would otherwise out-rank the operator's stop and, back in
+        range, restart the fleet). Tagged 'a' with the track it ends: receivers drop it when stale."""
+        r = self._rank
+        rank = [r[0], r[1] + 1, self._myName] if r else [self._maxTerm, 1, self._myName]
+        return {'r': rank, 'a': os.path.basename(str(source or ''))}
+
+    def _staleAdvance(self, rank, source):
+        """A track-end advance is stale here when a later order already ruled (its rank is below
+        ours), or when we are not at the end of the track it ends: we moved on (another player's
+        advance ran first, or ours did while cut off), or we already replayed a `_loop` track.
+        zyre delivers what a short WiFi cut held back LATE (§Edge 8): without this, every player
+        would restart the new track on the heal."""
+        cur = self._rank
+        if cur and rank_better(cur, rank):
+            return True
+        if not self.player or not self.player.isPlaying():
+            return False                # ended / stopped at the end: the advance is ours too
+        mine = self.player.status('media')
+        mine = os.path.basename(mine) if mine else ''
+        if source and not self._sameMedia(mine, source):
+            return True
+        try:
+            dur = float(self.player.status('duration') or 0)
+            pos = float(self.player.position() or 0)
+        except (TypeError, ValueError):
+            return False
+        return dur > 3 and pos < dur - 3.0
+
+    def order(self, event, args=None, delay_ms=0, auto=False, source=None):
+        """Broadcast a zyre order; a transport order carries this node's rank under role='elected'.
+        auto=True: a track-end advance (source = the track it ends), ranked by stampAuto().
+        False when zyre is not up (the caller may handle the order locally)."""
         z = self.hplayer.interface('zyre')
         if not z or not getattr(z, 'node', None):
             self.log('order', event, 'dropped: zyre not up')
-            return
+            return False
         base = event[6:] if event.startswith('unbuf_') else event
-        extra = self.stamp() if self.elected and base in ORDER_EVENTS else None
+        extra = None
+        if self.elected and base in ORDER_EVENTS:
+            extra = self.stampAuto(source) if auto else self.stamp()
         z.node.broadcast(event, args, delay_ms, extra=extra)
+        return True
+
+    def _onNoMedia(self, ev, *args):
+        """The playlist could not play what it was told (index out of range, missing file): as
+        leader we would beat p=0 and stop-follow would stop the whole fleet. Dark: send nothing —
+        followers play on, the 2 s fallback covers the track end, a playing one takes over at 8 s."""
+        if not self._dark:
+            self._dark = True
+            if self._isLeader:
+                self.log(colored('no media for the order we lead: sending no clock (a playing follower takes over)', 'yellow'))
+
+    def _onDoPlay(self, ev, *args):
+        self._dark = False
+
+    def _checkDupName(self):
+        """Another player on zyre carries our name (an unstamped card: two `Anna-0`): two clocks under
+        one name would desync the fleet silently. Never lead while it lasts; say it loudly."""
+        now = time.time()
+        if now - self._dupCheckAt < 2.0:
+            return
+        self._dupCheckAt = now
+        z = self.hplayer.interface('zyre')
+        node = getattr(z, 'node', None) if z else None
+        if not node:
+            return
+        try:
+            dup = any(getattr(p, 'name', None) == self._myName and getattr(p, 'active', True)
+                      for p in list(node.book.values()))
+        except Exception:
+            return
+        if dup and (not self.dupName or now - self._dupLogAt > 60):
+            self._dupLogAt = now
+            self.log(colored('ANOTHER PLAYER ON THIS NETWORK IS NAMED %s: this player will not lead. '
+                             'Rename one card (hostrename in /boot/starter.txt).' % self._myName, 'red'))
+        if dup and not self.dupName:
+            self.dupName = True
+            with self._rankLock:
+                if self._isLeader:
+                    self._isLeader = False
+                    self.master = False
+        elif not dup and self.dupName:
+            self.dupName = False
+            self.log('name conflict on %s gone' % self._myName)
 
     def isLeader(self):
         return self.master if not self.elected else self._isLeader
@@ -551,6 +651,8 @@ class WallclockInterface (BaseInterface):
                 rank = self._rank
                 if not self._isLeader or not rank or rank[2] != self._myName:
                     continue            # a follower: someone else emits
+                if self._dark:
+                    continue            # leading with no media to play: silence, never a p=0 beat
 
             media = self.player.status('media')
             dur = self.player.status('duration')
@@ -743,6 +845,9 @@ class WallclockInterface (BaseInterface):
         """A clock packet's rank against ours: a better one is adopted (a missed order, a takeover,
         a healed partition — and a leader that hears it demotes); only the leader's own packets
         are chased. True = chase this packet."""
+        if 't' not in pkt:
+            self._quietLog('ignoring clock from %s: a role=fixed master (another fleet on this LAN), never a leader here' % name)
+            return False
         try:
             prank = (int(pkt.get('t', 0)), int(pkt.get('u', 0)), name)
         except (TypeError, ValueError):
@@ -751,7 +856,10 @@ class WallclockInterface (BaseInterface):
             self._adopt(prank, 'clock packet' + (' (we led)' if self._isLeader else ''))
         cur = self._rank
         silent = self._silence()
-        if cur and prank != cur and not self._isLeader and silent > self.takeoverAfter:
+        # (not when our gone leader's last word was "stopped" or "paused" and this is another
+        # player: a stale wanderer back in range must not restart or resume the fleet)
+        if cur and prank != cur and not self._isLeader and silent > self.takeoverAfter \
+                and (name == cur[2] or not self._leaderIdle):
             # Our leader has been silent for takeoverAfter: it is gone, and a live emitter replaces
             # it even at a LOWER rank. That is the leader itself rebooted (back at term 0: a stopped
             # fleet carries no clock but its leader's, so it relearns nothing before its next
@@ -773,20 +881,24 @@ class WallclockInterface (BaseInterface):
         at (term, sub + 1, us). Every such follower claims at about the same time; the claims meet
         in the packets and the lowest name wins within one interval. Nobody claims a stopped or
         paused fleet (nothing to clock), nor a position it never locked on."""
-        if self._isLeader or not self._lockedName or not self.player:
+        if self._isLeader or not self.player or not self._rank:
             return
         silent = self._silence()
         if silent < self.takeoverAfter:
             return
-        if not self.hMasterPlaying:
-            return                  # its last word was "stopped": a fleet started since is an order's, not a claim's
         if not self.player.isPlaying() or self.player.isPaused():
             return
-        if not self.hLastLocked or self._lastAccept - self.hLastLocked > 30.0:
-            return
+        if self._lockedName:
+            if not self.hMasterPlaying:
+                return              # its last word was "stopped": a fleet started since is an order's, not a claim's
+            if not self.hLastLocked or self._lastAccept - self.hLastLocked > 30.0:
+                return
+        elif abs(self._orderAt - self._rankAt) > 1.0:
+            return                  # never heard a leader, and no order named this one: nothing to take over
+        # (no lock yet: an ORDER named a leader that never spoke — dark, a duplicate name, dead right
+        # after ordering. Every player started that order at the same `at`: our position is the show's)
         r = self._rank
-        if r:
-            self._adopt((r[0], r[1] + 1, self._myName), 'takeover: %s silent %.0f s' % (self._lockedName, silent))
+        self._adopt((r[0], r[1] + 1, self._myName), 'takeover: %s silent %.0f s' % (self._lockedName or r[2], silent))
 
     def _followStop(self, name):
         """The leader says stopped (p=0) while we play: a stop we missed. Stop after stopGrace —
@@ -995,6 +1107,7 @@ class WallclockInterface (BaseInterface):
                             self.drifter.release()
                     # (demoted: the first packet carrying the better rank locks us on its sender;
                     # _rankAt restarted the silence clock when the better rank was adopted)
+                self._checkDupName()
                 self._takeover()
 
             if not joined[0] and time.time() - lastTry[0] > 2.0:
@@ -1110,6 +1223,8 @@ class WallclockInterface (BaseInterface):
             self._lastAccept = time.time()
             self.hLastAccept = self._lastAccept
             self.hMasterPlaying = bool(pkt.get('p', False))
+            if self.elected:
+                self._leaderIdle = not pkt.get('p', False) or bool(pkt.get('z'))
             self._rejoins = 0
             self._pkt.add(pkt.get('tx', pkt.get('at', 0)), int(self._lastAccept * PRECISION))
             extraBase = None    # re-set below only if this packet is chase-eligible
@@ -1168,6 +1283,11 @@ class WallclockInterface (BaseInterface):
                     continue
                 self._pauseSince = None
                 self._pauseAligned = False
+                if self.player.isPaused() and time.time() - self._orderAt < self.pauseGrace:
+                    # we just paused on an order: a z=0 packet here was sent in the instant between the
+                    # leader adopting the pause's rank and pausing — not a resume
+                    self.drifter.release()
+                    continue
 
             if cs is None:
                 self._quietLog('waiting for clock sync with ' + name)

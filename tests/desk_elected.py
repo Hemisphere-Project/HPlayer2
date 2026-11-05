@@ -148,31 +148,46 @@ W.socket = _fs                  # the wallclock module's `socket` is the fake fr
 # =============================================================================
 class ZyreBus():
     def __init__(self):
-        self.nodes = {}             # name -> Node
+        self.nodes = {}             # name -> Node (the latest under that name)
+        self.members = []           # every Node ever started on this bus (two may share a name)
+        self.hold = set()           # names cut off with libzyre's queueing: their traffic waits for release()
+        self.held = []
         self.cut = set()            # (src, dst)
         self.drop = {}              # name -> number of next orders this node misses
         self.tcReady = True         # False: no zyre TimeClient ever finishes (packet clock only)
         self.orders = []            # (time, src, event, args, r)
 
-    def broadcast(self, src, event, args=None, delay_ms=0, at=0, extra=None):
+    def broadcast(self, src, event, args=None, delay_ms=0, at=0, extra=None, owner=None):
         raw = Z.ZyreNode.makeMsg(None, event, args, delay_ms, at, extra)
         d0 = json.loads(raw.decode())
         self.orders.append((time.time(), src, event, d0.get('args'), d0.get('r')))
-        for name, n in list(self.nodes.items()):
+        for n in list(self.members):
+            name = n.name
             if not n.alive:
                 continue
-            if name != src:
+            me = n is owner if owner is not None else name == src
+            if not me:
                 if (src, name) in self.cut:
                     continue
                 if self.drop.get(name):
                     self.drop[name] -= 1
                     continue
             data = json.loads(raw.decode())
-            data['from'] = 'self' if name == src else src
+            data['from'] = 'self' if me else src
             data['group'] = 'broadcast'
-            if name == src:
+            if me:
                 n.zshim.preProcessor1(data)                         # zyre delivers to self inline
+            elif src in self.hold or name in self.hold:
+                self.held.append((n, data))                         # queued in the peer's DEALER until the heal
             else:
+                threading.Timer(0.005, n.zshim.preProcessor1, args=[data]).start()
+
+    def release(self):
+        """The cut heals: what libzyre queued arrives now, LATE (preProcessor1 still plays it)."""
+        self.hold.clear()
+        held, self.held = self.held, []
+        for n, data in held:
+            if n.alive:
                 threading.Timer(0.005, n.zshim.preProcessor1, args=[data]).start()
 
 ZBUS = ZyreBus()
@@ -207,9 +222,14 @@ class FakeZyreNode():
     def __init__(self, me):
         self.me = me
         self.bus = ZBUS
-        self.book = {}
+        self.owner = None
+    @property
+    def book(self):
+        """zyre's peer book: every other live player on the bus — including one with OUR name."""
+        return {id(n): FakePeer(n.name, self.bus) for n in self.bus.members
+                if n.alive and n is not self.owner}
     def broadcast(self, event, args=None, delay_ms=0, at=0, extra=None):
-        self.bus.broadcast(self.me, event, args, delay_ms, at, extra)
+        self.bus.broadcast(self.me, event, args, delay_ms, at, extra, owner=self.owner)
     def peerByName(self, name):
         n = self.bus.nodes.get(name)
         return FakePeer(name, self.bus) if n and n.alive else None
@@ -325,15 +345,20 @@ class FakePlaylist():
         self.player = player
         self.files = ['/data/media/' + f for f in files]
         self._index = -1
+        self.hp = None
     def size(self): return len(self.files)
     def index(self): return self._index
     def trackAtIndex(self, k): return self.files[k] if 0 <= k < len(self.files) else None
     def playindex(self, k, pause=False):
         if 0 <= k < len(self.files):
             self._index = k
+            if self.hp:
+                self.hp.emit('playlist.do-play', self.files[k], k, pause)
             self.player.play(self.files[k])
         else:
-            self.player.stop()
+            self.player.stop()                      # the real one: emit('stop') + emit('nomedia')
+            if self.hp:
+                self.hp.emit('playlist.nomedia')
 
 
 class FakeSettings():
@@ -373,6 +398,7 @@ class Node():
         self.player = FakePlayer(rate=rate, loop=loop, openDelay=openDelay)
         self.playlist = FakePlaylist(self.player, files)
         self.hp = FakeHPlayer(self.player, self.playlist, FakeZyre(name))
+        self.playlist.hp = self.hp
         self.zshim = ZShim(self)
         self.wc = WallclockInterface(self.hp, None, master, player=self.player, port=PORT,
                                      role=role, driftLog=None, **kw)
@@ -396,13 +422,16 @@ class Node():
             if not wc.mayAdvance():
                 return
             idx = pl.index()
-            act = end_action(pl.trackAtIndex(idx))
-            if act == 'loop':
-                self.advances += 1
-                wc.order('unbuf_playindex', [idx], 300)
-            elif act == 'next' and idx < pl.size() - 1:
-                self.advances += 1
-                wc.order('unbuf_playindex', [idx + 1], 300)
+            track = pl.trackAtIndex(idx)
+            act = end_action(track)
+            target = idx if act == 'loop' else idx + 1
+            if act == 'stop' or (act == 'next' and idx >= pl.size() - 1):
+                return
+            self.advances += 1
+            try:
+                wc.order('unbuf_playindex', [target], 300, auto=True, source=track)
+            except TypeError:                       # (an older wallclock: no track-end advances)
+                wc.order('unbuf_playindex', [target], 300)
         hp.on('playlist.end')(onEnd)
 
     def _feed(self):
@@ -422,6 +451,8 @@ class Node():
                 self.hp.emit('player.status', 'time', round(pos, 3))
 
     def start(self):
+        self.hp.zyre.node.owner = self
+        self.hp.zyre.node.bus.members.append(self)
         self.hp.zyre.node.bus.nodes[self.name] = self
         self._udp = BUS
         BUS.mute.discard(self.name)         # a node restarted under a dead one's name speaks again
@@ -902,6 +933,155 @@ def t_stop_without_timeclient():
     check(t is not None and t < 3.6, 'Anna-3 followed the missed stop in %.1f s (stopGrace 2 s + a beat), clock shift or not' % (t or 99))
     f.shutdown()
 
+def cut(names, others, hold=False):
+    """WiFi cut between two groups: clock packets lost; zyre orders dropped, or held (libzyre's
+    queue across a cut shorter than its 10 s expiry) and delivered late on heal()."""
+    BUS.split(names, others)
+    if hold:
+        ZBUS.hold.update(names)
+    else:
+        for x in names:
+            for y in others:
+                ZBUS.cut.add((x, y)); ZBUS.cut.add((y, x))
+
+def heal():
+    BUS.heal()
+    ZBUS.cut.clear()
+    ZBUS.release()
+
+
+def t_wanderer_cannot_undo_stop():
+    # A player cut off across loop ends of a `_loop` track while the operator stops the fleet: its
+    # track-end advances must never out-rank the stop (they used to stamp term+1, once per loop)
+    f = Fleet([('Anna-1', 1.0), ('Anna-3', 1.002), ('Anna-9', 0.998)])
+    f['Anna-3'].order('unbuf_playindex', [1])        # 02_ambiance_loop, 8 s
+    time.sleep(2)
+    cut(['Anna-1'], ['Anna-3', 'Anna-9'])            # the LOWER name wanders off: it wins every tie
+    time.sleep(1)
+    f['Anna-3'].order('stop', None, 300)
+    time.sleep(15)                                   # Anna-1 loops alone, twice
+    check(f['Anna-1'].player.isPlaying() and not f['Anna-3'].player.isPlaying(), 'while cut: the wanderer loops alone, the fleet is stopped')
+    heal()
+    time.sleep(5)
+    check(not f['Anna-3'].player.isPlaying() and not f['Anna-9'].player.isPlaying(),
+          'healed: the operator\'s stop stands (%s)' % f.tracks())
+    check(not f['Anna-1'].player.isPlaying(), 'and the wanderer followed it (stopped)')
+    check(f.leaders() == ['Anna-3'], 'the operator still leads: %s' % f.leaders())
+    f.shutdown()
+
+
+def t_late_advance_held():
+    # The leader is cut off across its track end for 6 s, under zyre's 10 s expiry: libzyre holds
+    # the advances and delivers them LATE. Nobody may restart the new track.
+    f = Fleet([('Anna-1', 1.0), ('Anna-2', 1.002), ('Anna-3', 0.998)])
+    f['Anna-1'].order('unbuf_playindex', [0])        # 01_intro, 12 s
+    time.sleep(9)
+    cut(['Anna-1'], ['Anna-2', 'Anna-3'], hold=True)
+    time.sleep(6)                                    # the end falls inside the cut: every side advances
+    heal()
+    time.sleep(4)
+    twice = {n.name: n.player.plays.count('02_ambiance_loop.mp3') for n in f.alive()}
+    check(all(v == 1 for v in twice.values()), 'each player started 02_ambiance_loop exactly once: %s' % twice)
+    check(set(f.tracks().values()) == {'02_ambiance_loop.mp3'}, 'all on it: %s' % f.tracks())
+    sp = f.spread(f.leaders()[0]) if f.leaders() else 9
+    check(len(f.leaders()) == 1 and sp < 0.1, 'one leader, in sync: %s, spread %.0f ms' % (f.leaders(), sp * 1000))
+    f.shutdown()
+
+
+def t_stale_wanderer_cannot_restart():
+    # A player out of range misses the stop; the stop's giver then dies (silent > takeoverAfter);
+    # the wanderer comes back still playing (it took its own clock alone): the stopped fleet stays stopped
+    f = Fleet([('Anna-1', 1.0), ('Anna-2', 1.002), ('Anna-4', 0.998)])
+    f['Anna-2'].order('unbuf_playindex', [2])        # 03_story, 90 s
+    time.sleep(4)
+    cut(['Anna-4'], ['Anna-1', 'Anna-2'])
+    time.sleep(1)
+    f['Anna-2'].order('stop', None, 300)
+    time.sleep(2)
+    f['Anna-2'].kill()
+    time.sleep(10)
+    check(f['Anna-4'].player.isPlaying() and f['Anna-4'].wc.isLeader(), 'the wanderer plays on alone and leads itself')
+    heal()
+    time.sleep(5)
+    check(not f['Anna-1'].player.isPlaying(), 'healed: the stopped player stays stopped (%s)' % f.tracks())
+    # paused variant: the same with a pause
+    f.shutdown()
+
+
+def t_dark_commander():
+    # The commander has no media for its own order (an empty card): it must not lead the fleet
+    # into a stop with p=0 beats. The others play on; a playing player takes the clock.
+    f = Fleet([('Anna-1', 1.0), ('Anna-2', 1.002), ('Anna-3', 0.998)])
+    n = f['Anna-1']
+    n.playlist.files = []                            # an empty media folder
+    n.order('unbuf_playindex', [0])
+    time.sleep(1.5)
+    check(not n.player.isPlaying() and f['Anna-2'].player.isPlaying(), 'the commander is dark, the others play 01_intro')
+    time.sleep(8.5)
+    check(f['Anna-2'].player.isPlaying() and f['Anna-3'].player.isPlaying(), 'the fleet did NOT stop: %s' % f.tracks())
+    check(f.leaders() == ['Anna-2'], 'a playing player took the clock: %s' % f.leaders())
+    time.sleep(3)
+    sp = f.spread('Anna-2')
+    check(sp < 0.1, 'in sync on it: spread %.0f ms' % (sp * 1000))
+    f.shutdown()
+
+
+def t_duplicate_name():
+    # Two cards left as `Anna-0`: neither may lead; they say so; a uniquely named player takes the clock
+    f = Fleet([('Anna-0', 1.0), ('Anna-1', 1.002), ('Anna-2', 0.998)])
+    orig = f['Anna-0']
+    twin = f.add('Anna-0', rate=1.001)
+    f.nodes['Anna-0'] = orig                        # keep both in the fleet's view
+    f.nodes['Anna-0x'] = twin
+    time.sleep(3)
+    first = [n for n in ZBUS.members if n.name == 'Anna-0']
+    check(len(first) == 2 and all(n.wc.dupName for n in first), 'both Anna-0 see the other: %s' % [n.wc.dupName for n in first])
+    first[0].order('unbuf_playindex', [2])
+    time.sleep(1.5)
+    check(not any(n.wc.isLeader() for n in first), 'a duplicate name never leads, even on its own order')
+    t = wait_for(lambda: f['Anna-1'].wc.isLeader() and not f['Anna-2'].wc.isLeader(), 12.0)
+    check(t is not None, 'Anna-1 took the clock (%.1f s)' % (t or 0))
+    time.sleep(3)
+    sp = f.spread('Anna-1')
+    check(sp < 0.1, 'every player in sync on it, both Anna-0 included: spread %.0f ms' % (sp * 1000))
+    f.shutdown()
+
+
+def t_own_channel():
+    # role='elected' has its own port/group; and a role='fixed' master heard anyway (a forced shared
+    # port) is never a leader for elected players
+    hpE = FakeHPlayer(FakePlayer(), FakePlaylist(None, []), FakeZyre('x'))
+    e = WallclockInterface(hpE, None, False, player=hpE.player, role='elected', driftLog=None)
+    hpF = FakeHPlayer(FakePlayer(), FakePlaylist(None, []), FakeZyre('y'))
+    fx = WallclockInterface(hpF, None, False, player=hpF.player, driftLog=None)
+    check((e.port, e.group) == (3738, '239.192.0.38') and (fx.port, fx.group) == (3737, '239.192.0.37'),
+          'elected on 3738/239.192.0.38, fixed unchanged on 3737/239.192.0.37')
+    f = Fleet([('Anna-1', 1.0), ('Anna-2', 1.002)])
+    m = Node('WALL-MASTER', role='fixed', master=True, loop=True).start()
+    m.player.play('/data/media/03_biennale.mp4')
+    time.sleep(4)
+    check(f['Anna-1'].wc._rank is None and not f['Anna-1'].player.isPlaying(), 'an elected player ignores a fixed master on its port')
+    f.shutdown()
+
+
+def t_pause_window():
+    # The leader adopts the pause's rank, and only then pauses: a packet sent in between says t=T+1, z=0.
+    # Widen that instant to 80 ms: followers already paused on the order must stay paused.
+    f = Fleet([('Anna-1', 1.0), ('Anna-2', 1.002), ('Anna-3', 0.998)])
+    f['Anna-1'].hp.on('zyre.event')(lambda ev, d=None, *a: time.sleep(0.08) if isinstance(d, dict) and d.get('event') == 'pause' else None)
+    f['Anna-1'].order('unbuf_playindex', [2])
+    time.sleep(4)
+    undone = 0
+    for i in range(3):
+        f['Anna-1'].order('pause', None, 300)
+        time.sleep(0.9)
+        undone += sum(1 for x in ('Anna-2', 'Anna-3') if not f[x].player.isPaused())
+        f['Anna-1'].order('resume', None, 300)
+        time.sleep(2.5)
+    check(undone == 0, 'no follower resumed by the leader\'s in-between packet: %d undone over 3 pauses' % undone)
+    f.shutdown()
+
+
 
 def t_stop_track():
     f = Fleet([('Anna-1', 1.0), ('Anna-2', 1.002), ('Anna-3', 0.998)])
@@ -932,6 +1112,13 @@ TESTS = [
     ('restart within takeoverAfter: no reclaim, takeover at ~8 s, it follows', t_restart_within_takeover),
     ("'_stop' track in a fleet: everyone stops, nobody orders", t_stop_track),
     ('missed stop with no TimeClient: followed before the clock-shift gate', t_stop_without_timeclient),
+    ('wanderer: its track-end advances never undo the operator\'s stop', t_wanderer_cannot_undo_stop),
+    ('late advances: held across a track end, delivered late, nobody restarts', t_late_advance_held),
+    ('stale wanderer: back after the stop\'s giver died, it restarts nobody', t_stale_wanderer_cannot_restart),
+    ('dark commander: no media for its own order, the fleet plays on', t_dark_commander),
+    ('duplicate name: neither Anna-0 leads, a unique one takes the clock', t_duplicate_name),
+    ('own channel: elected port/group; a fixed master is never a leader', t_own_channel),
+    ('pause window: the leader\'s in-between packet resumes nobody', t_pause_window),
 ]
 
 for name, fn in TESTS:

@@ -50,7 +50,7 @@ wallclock	= hplayer.addInterface('wallclock', SYNC_IFACE, role='elected')
 keypad 		= hplayer.addInterface('keypad')
 http		= hplayer.addInterface('http', 8037)
 keyboard 	= hplayer.addInterface('keyboard')
-teleco2		= hplayer.addInterface('teleco2')				# USB remote (M5Stack CoreS3)
+teleco2		= hplayer.addInterface('teleco2', False, SYNC_IFACE)	# USB remote (M5Stack CoreS3): parc orders, our WiFi
 
 if keypad.lcd: keypad.lcd.set_color( 100, 0, 100)
 keypad.draw( [".:: HPlayer2 ::.", "   Starting "+keypad.CHAR_LOVE+"   "] )
@@ -112,17 +112,24 @@ def seed_settings(ev, *args):
 # play / stop / pause / resume: buffered 300 ms (every player changes state at the same instant)
 # and, through wallclock.order(), stamped with this player's rank: it becomes the clock leader.
 # volume: immediate and unranked (it never moves the clock).
-def broadcast(path, *args):
+# auto=True (track end only): ranked as an advance, never as an order, tagged with the track it ends.
+def broadcast(path, *args, auto=False, source=None):
 	if path.startswith('play'):
 		event, delay = 'unbuf_' + path, 300		# 'unbuf_': handled below, never by hplayer's own play*
 	elif path in ('stop', 'pause', 'resume'):
 		event, delay = path, 300
 	else:
 		event, delay = path, 0
-	if wallclock:
-		wallclock.order(event, list(args), delay)
-	elif zyre and getattr(zyre, 'node', None):
-		zyre.node.broadcast(event, list(args), delay)
+	node = getattr(zyre, 'node', None) if zyre else None
+	if node and wallclock:
+		wallclock.order(event, list(args), delay, auto=auto, source=source)
+	elif node:
+		node.broadcast(event, list(args), delay)
+	elif zyre:
+		# zyre not up yet (no address at boot, up to 90 s): this player alone, like biennale's
+		# zbroadcast — the elected clock realigns it once the node is up
+		hplayer.log('[zyre] node not up yet:', event, 'handled locally')
+		zyre.emit(event, *args)
 
 
 # Build playlist: the whole media folder, navigated by index
@@ -154,11 +161,12 @@ def track_end(ev, *args):
 	if wallclock and not wallclock.mayAdvance():
 		return
 	idx = hplayer.playlist.index()
-	act = end_action(hplayer.playlist.trackAtIndex(idx))
+	track = hplayer.playlist.trackAtIndex(idx)
+	act = end_action(track)
 	if act == 'loop':
-		broadcast('playindex', idx)
+		broadcast('playindex', idx, auto=True, source=track)
 	elif act == 'next' and idx < hplayer.playlist.size() - 1:
-		broadcast('playindex', idx + 1)
+		broadcast('playindex', idx + 1, auto=True, source=track)
 
 
 # Transport actions, parc-wide (shared by keypad / http / numpad / teleco2 remote)
@@ -369,9 +377,16 @@ def lcd_update(self):
 		lines[1] += "---% "
 		blinkCounter = (blinkCounter+1) % blinkSpeed
 
-	# Line 1 : ZYRE peers, and `*` while this player emits the clock
-	lines[1] += keypad.CHAR_PEERS +str(zyre.activeCount() if zyre else 0).ljust(2, ' ')[:2]
+	# Line 1 : ZYRE peers (0 until the node is built: no address yet at boot), `*` while this player emits the clock
+	_zn = getattr(zyre, 'node', None) if zyre else None
+	lines[1] += keypad.CHAR_PEERS +str(len(_zn.book) if _zn else 0).ljust(2, ' ')[:2]
 	lines[1] += '*' if (wallclock and wallclock.isLeader()) else ' '
+
+	# Another card carries our name: say it, in red, until one is renamed
+	if wallclock and getattr(wallclock, 'dupName', False):
+		lines[1] = ("NAME TAKEN " + network.get_hostname())[:16]
+		self.lcd.set_color( 100, 0, 0)
+		return lines
 
 	# COLORS
 	if blinkCounter > 0: color = ( 100 if not media else 0 , 100, 100 if not media else 0)	# RED/GREEN: play state
@@ -381,7 +396,20 @@ def lcd_update(self):
 
 	return lines
 
-keypad.update = types.MethodType(lcd_update, keypad)
+# Never let a display error kill the keypad thread (its loop has no guard: the LCD and every key
+# would be dead until a restart) — keep the last good screen and say it once a minute
+_lcdLast = [[".:: HPlayer2 ::.", "                "]]
+_lcdErrAt = [0.0]
+def lcd_update_safe(self):
+	try:
+		_lcdLast[0] = lcd_update(self)
+	except Exception as e:
+		if time.time() - _lcdErrAt[0] > 60:
+			_lcdErrAt[0] = time.time()
+			hplayer.log('keypad LCD update failed:', repr(e))
+	return _lcdLast[0]
+
+keypad.update = types.MethodType(lcd_update_safe, keypad)
 
 
 # RUN
