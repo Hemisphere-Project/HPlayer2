@@ -92,13 +92,18 @@ def freePort():
         return s.getsockname()[1]
 
 
+def qsize(q):
+    # http2's queue is a bounded collections.deque since biennale 36ba73b; regie's is still a SimpleQueue
+    return q.qsize() if hasattr(q, 'qsize') else len(q)
+
+
 def drained(q, timeout=5.0):
     deadline = time.time() + timeout
     while time.time() < deadline:
-        if q.empty():
+        if qsize(q) == 0:
             return True
         time.sleep(0.05)
-    return q.empty()
+    return qsize(q) == 0
 
 
 def test_http2_drains_with_no_browser():
@@ -107,7 +112,7 @@ def test_http2_drains_with_no_browser():
     server.start()
     for n in range(200):
         iface.emit('do-socketio', 'dmx-levels', {'active': True, 'levels': {1: n % 256}})
-    assert drained(server.sendQueue), f'{server.sendQueue.qsize()} messages still queued'
+    assert drained(server.sendQueue), f'{qsize(server.sendQueue)} messages still queued'
 
 
 def test_regie_drains_with_no_browser(tmp_path):
@@ -117,6 +122,6 @@ def test_regie_drains_with_no_browser(tmp_path):
     try:
         for n in range(200):
             iface.hplayer.emit('files.dirlist-updated')
-        assert drained(server.sendBuffer), f'{server.sendBuffer.qsize()} messages still queued'
+        assert drained(server.sendBuffer), f'{qsize(server.sendBuffer)} messages still queued'
     finally:
         server.stop()
