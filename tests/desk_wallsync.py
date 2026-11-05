@@ -186,11 +186,7 @@ slave.drifter.doLog = False
 # into the master's (simulated) clock: at = real_now + CS
 def feeder():
     while not stopFeed.is_set():
-        # (pos, at, mono): 'at' is skewed into the master's simulated clock,
-        # the monotonic stamp is the real arrival instant the send loop
-        # measures latch staleness against
-        master._latch = (mPlayer.position(), int(time.time() * PRECISION) + CS_US,
-                         time.monotonic())
+        master._latch = (mPlayer.position(), int(time.time() * PRECISION) + CS_US)
         stopFeed.wait(0.05)
 stopFeed = threading.Event()
 
@@ -210,14 +206,10 @@ print("   after 12s: |master-slave| = %.0f ms  (slave seeks=%d)" % (d * 1000, sP
 assert d < 0.08, "slave should be locked within 80ms, got %.3f" % d
 assert sPlayer.seeks <= 1, "at most the initial catch-up seek"
 
-# staleness: stop the master -> slave freewheels at speed 1.0.
-# The wait must clear the EXTRAPOLATION budget (4s by default), not just the
-# 1s staleness: inside it the slave is still chasing on extraBase by design,
-# so asserting freewheel after 2s was asserting the wrong thing.
+# staleness: stop the master -> slave freewheels at speed 1.0
 master.stopped.set(); stopFeed.set(); f.join()
-time.sleep(slave.extrapolate + 1.0)
-print("   master silent %.0fs: slave speed=%.2f freewheeling=%s"
-      % (slave.extrapolate + 1.0, sPlayer._speed, slave._freewheeling))
+time.sleep(2.0)
+print("   master silent 2s: slave speed=%.2f freewheeling=%s" % (sPlayer._speed, slave._freewheeling))
 assert sPlayer._speed == 1.0, "slave must freewheel at 1.0"
 assert slave._freewheeling, "slave must report freewheeling"
 print("   PASS")
