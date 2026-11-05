@@ -947,7 +947,7 @@ class ZyreNode ():
     # ZYRE send messages
     #
 
-    def makeMsg(self, event, args=None, delay_ms=0, at=0):
+    def makeMsg(self, event, args=None, delay_ms=0, at=0, extra=None):
         data = {}
         data['event'] = event
         data['args'] = []
@@ -967,10 +967,15 @@ class ZyreNode ():
                 data['at'] = 0
             data['at'] += int(time.time()*PRECISION + delay_ms * PRECISION / 1000)
 
+        # extra top-level fields (the wallclock leader rank 'r', hplayer2#t-086): receivers that
+        # do not know a field ignore it
+        if extra:
+            data.update(extra)
+
         return json.dumps(data).encode()
 
-    def whisper(self, uuid, event, args=None, delay_ms=0, at=0):
-        data = self.makeMsg(event, args, delay_ms, at)
+    def whisper(self, uuid, event, args=None, delay_ms=0, at=0, extra=None):
+        data = self.makeMsg(event, args, delay_ms, at, extra)
         if uuid == self.uuid:
             data = json.loads(data.decode())
             data['from'] = 'self'
@@ -980,8 +985,8 @@ class ZyreNode ():
             with self._zyre_lock:
                 self.zyre.whispers(uuid, data)
 
-    def shout(self, group, event, args=None, delay_ms=0, at=0):
-        data = self.makeMsg(event, args, delay_ms, at)
+    def shout(self, group, event, args=None, delay_ms=0, at=0, extra=None):
+        data = self.makeMsg(event, args, delay_ms, at, extra)
         with self._zyre_lock:
             self.zyre.shouts(group.encode(), data)
 
@@ -993,11 +998,11 @@ class ZyreNode ():
             data['group'] = group
             self.preProcessor1(data)
 
-    def broadcast(self, event, args=None, delay_ms=0, at=0):
-        self.shout('broadcast', event, args, delay_ms, at)
+    def broadcast(self, event, args=None, delay_ms=0, at=0, extra=None):
+        self.shout('broadcast', event, args, delay_ms, at, extra)
         
-    def tomyself(self, event, args=None, delay_ms=0, at=0):
-        self.whisper(self.uuid, event, args, delay_ms, at)
+    def tomyself(self, event, args=None, delay_ms=0, at=0, extra=None):
+        self.whisper(self.uuid, event, args, delay_ms, at, extra)
 
     def join(self, group):
         with self._zyre_lock:

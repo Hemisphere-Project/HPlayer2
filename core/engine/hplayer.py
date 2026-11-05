@@ -396,7 +396,7 @@ class HPlayer2(Module):
     # INTERFACES
     #
 
-    def addInterface(self, iface, *argv):
+    def addInterface(self, iface, *argv, **kwargs):
         try:
             InterfaceClass = ifacelib.getInterface(iface)
         except (ImportError, AttributeError) as err:
@@ -404,7 +404,7 @@ class HPlayer2(Module):
             return None
 
         try:
-            instance = InterfaceClass(self, *argv)
+            instance = InterfaceClass(self, *argv, **kwargs)     # kwargs: e.g. wallclock role='elected'
         except RuntimeError as err:
             self.log("interface", iface, "disabled:", err)
             return None

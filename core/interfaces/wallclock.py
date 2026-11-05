@@ -7,9 +7,49 @@ import json
 import time
 import os
 import re
+import threading
 from collections import deque
 
 PRECISION = 1000000     # us - same clock base as the zyre TimeClient
+
+# Transport orders that move the clock leadership under role='elected' (the zyre event name,
+# without the profile's 'unbuf_' prefix). Volume and the rest are not orders: they never move it.
+ORDER_EVENTS = ('play', 'playindex', 'playz', 'playpause', 'next', 'prev', 'stop', 'pause', 'resume')
+
+
+def natural_key(name):
+    """Name order for the leader tie-break: Anna-2 < Anna-10 (a plain string compare says the
+    opposite). Alternating str/int, so any two keys compare position by position."""
+    return [int(t) if t.isdigit() else t.lower() for t in re.split(r'(\d+)', str(name or ''))]
+
+
+def rank_better(a, b):
+    """Is clock-leader rank a = (term, sub, name) better than b? Higher term wins (an order),
+    then higher sub (a takeover), then the LOWER name. Every node applies the same order, so
+    every node elects the same leader from the same ranks. None = no leader (anything beats it)."""
+    if a is None:
+        return False
+    if b is None:
+        return True
+    if a[0] != b[0]:
+        return a[0] > b[0]
+    if a[1] != b[1]:
+        return a[1] > b[1]
+    ka, kb = natural_key(a[2]), natural_key(b[2])
+    if ka != kb:
+        return ka < kb
+    return str(a[2]) < str(b[2])            # 'anna-02' vs 'Anna-2': still one total order
+
+
+def end_action(track):
+    """What a track's end does, from its NAME alone, so every node derives the same answer:
+    '_loop' replays it, '_stop' stops, anything else moves on (the profile stops at the list's end)."""
+    n = os.path.basename(str(track or '')).lower()
+    if n.find('_loop') > 0:
+        return 'loop'
+    if n.find('_stop') > 0:
+        return 'stop'
+    return 'next'
 
 
 class PacketClock():
@@ -124,6 +164,7 @@ def index_pattern(idx):
 #    l    master loops seamlessly (1) or through its playlist (0)
 #    tx   us epoch (master clock) when the packet was SENT — the packet-derived clock offset
 #         (PacketClock) reads it; absent from masters before 2026-09-25
+#    t, u, z   role='elected' only: the leader's rank (term, sub) and its pause state (below)
 #
 #  Transport (2026-09-25): the master sends every packet to the multicast group AND to the
 #  sync subnet's broadcast address. Broadcast needs no membership, so no lost-IGMP-state,
@@ -131,18 +172,37 @@ def index_pattern(idx):
 #  Slaves drop the duplicate by seq. A STOPPED master sends a 1 Hz heartbeat (p=0): its slaves
 #  stop chasing. Silence means "link or master trouble": slaves chase their model of it.
 #
+#  ROLES. role='fixed' (the default) is the master/slave split above, set once by the profile.
+#  role='elected' (hplayer2#t-086, the Anna players: no fixed master, orders from any keypad or
+#  remote) runs both sides in every node, and ONE node at a time emits: the one that gave the
+#  last transport order. Orders are unchanged — every node still executes every zyre order —
+#  they just carry the sender's rank r = (term, sub, name) (stamp()/order() below). term is a
+#  Lamport counter (highest seen + 1), never a timestamp: the fleet's clocks are years apart.
+#  A node adopts a rank when the order FIRES (zyre.event, the instant every node changes state
+#  together), or from the first clock packet that carries it (a missed order). A leader silent
+#  for takeoverAfter is replaced by its playing, locked followers: same term, sub + 1 — so a real
+#  order always outranks a takeover, and a healed partition rejoins the side that got the
+#  latest order. Followers also follow the leader's state when they missed the order itself:
+#  its media (by basename, or by NN_ index), its stop (p=0 for stopGrace), its pause (z=1).
+#
 class WallclockInterface (BaseInterface):
 
     def __init__(self, hplayer, netiface=None, master=False, player=None,
                     port=3737, group='239.192.0.37', rate=20, unicast=False,
                     masterName=None, staleness=1.0, extrapolate=4.0, modelMax=6 * 3600,
-                    driftLog='/tmp/wallclock-drift.csv', durTolerance=1.0):
+                    driftLog='/tmp/wallclock-drift.csv', durTolerance=1.0,
+                    role='fixed', takeoverAfter=8.0, stopGrace=2.0, pauseGrace=1.0,
+                    mediaGrace=2.0, mediaStart=None):
 
         super().__init__(hplayer, "WALLCLOCK")
         self.logQuietEvents.extend(['drift'])
 
+        self.role = role
+        self.elected = role == 'elected'
+        if self.elected:
+            master = False              # nobody leads until an order (or a takeover) names a leader
         self.iface = netiface
-        self.master = master
+        self.master = master            # role='elected': True while this node is the clock leader
         self.port = port
         self.group = group
         self.rate = rate
@@ -188,7 +248,7 @@ class WallclockInterface (BaseInterface):
         self.hCsSource = None           # slave: 'zyre' | 'packets'
         self.hMismatch = 0.0            # slave: last time the master's media was not ours to chase
 
-        if self.master:
+        if self.master or self.elected:
             self.drifter = None
             # Latch (pos, at) pairs from the player status events; the send
             # loop reads the latch at its own rate. No extrapolation here:
@@ -197,7 +257,7 @@ class WallclockInterface (BaseInterface):
             self._latch = None
             if self.player:
                 self.hplayer.on(self.player.name + '.status')(self._onPlayerStatus)
-        else:
+        if not self.master:
             # danceMode: joining slaves seek-ahead + pause + timed-resume
             # instead of chaining blind jumps (113s -> ~10s join, 2026-07-23)
             self.drifter = Drifter(self.player, log=self.log, danceMode=True) if self.player else None
@@ -230,6 +290,98 @@ class WallclockInterface (BaseInterface):
             self._rejoins = 0           # silent-socket re-joins (log throttle)
             self._rejoinLogAt = 0.0
             self._legacyStalled = None  # the profile's stall hook, restored when leaving cue mode
+
+        # Elected clock leader (role='elected'): see ROLES above
+        self.takeoverAfter = takeoverAfter
+        self.stopGrace = stopGrace
+        self.pauseGrace = pauseGrace
+        self.mediaGrace = mediaGrace
+        self.mediaStart = mediaStart    # profile hook: start this local media path (default: its playlist index)
+        self._rankLock = threading.Lock()
+        self._rank = None               # (term, sub, name) of the current leader, None = nobody leads yet
+        self._maxTerm = 0               # highest term seen, in an order or a packet
+        self._isLeader = False          # written under _rankLock; the send loop reads it
+        self._orderAt = 0.0             # last ranked order executed here
+        self._stopSince = None          # we play while our leader says stopped, since
+        self._pauseSince = None         # we play while our leader says paused, since
+        self._pauseAligned = False      # paused on the leader's frozen frame already (once per pause)
+        self._mediaWrongSince = None    # we are not on the leader's media, since
+        self._darkNoted = None          # leader media we have no file for (logged once)
+        if self.elected:
+            self.hplayer.on('zyre.event')(self._onOrder)
+
+    #
+    # Elected leader: rank bookkeeping and orders
+    #
+
+    def _adopt(self, rank, why):
+        """Compare-and-set the leader's rank (from an order, a packet or a takeover). True when it
+        moved. Called from the zyre thread and the receive loop; the role flip is immediate, so the
+        send loop starts or stops on the very tick the order fires."""
+        with self._rankLock:
+            if rank[0] > self._maxTerm:
+                self._maxTerm = rank[0]
+            if not rank_better(rank, self._rank):
+                return False
+            was = self._rank
+            self._rank = rank
+            lead = rank[2] == self._myName
+            self._isLeader = lead
+            self.master = lead
+        if not was or was[2] != rank[2]:
+            self.log(colored('clock leader: %s (term %d.%d) <- %s%s' % (
+                rank[2], rank[0], rank[1], why, ' : this node emits' if lead else ''), 'magenta'))
+        return True
+
+    def _onOrder(self, ev, data=None, *args):
+        """zyre.event: fires when an order EXECUTES (after its `at` buffer), on every node at once."""
+        if not isinstance(data, dict):
+            return
+        r = data.get('r')
+        if not isinstance(r, (list, tuple)) or len(r) < 3:
+            return
+        try:
+            rank = (int(r[0]), int(r[1]), str(r[2]))
+        except (TypeError, ValueError):
+            return
+        self._orderAt = time.time()
+        self._adopt(rank, 'order ' + str(data.get('event')))
+
+    def stamp(self):
+        """The rank an order from this node carries: {'r': [term, 0, me]}, term = highest seen + 1.
+        Merge it into the zyre message (ZyreNode.broadcast(..., extra=stamp()))."""
+        with self._rankLock:
+            self._maxTerm += 1
+            t = self._maxTerm
+        return {'r': [t, 0, self._myName]}
+
+    def order(self, event, args=None, delay_ms=0):
+        """Broadcast a zyre order; a transport order carries this node's rank under role='elected'."""
+        z = self.hplayer.interface('zyre')
+        if not z or not getattr(z, 'node', None):
+            self.log('order', event, 'dropped: zyre not up')
+            return
+        base = event[6:] if event.startswith('unbuf_') else event
+        extra = self.stamp() if self.elected and base in ORDER_EVENTS else None
+        z.node.broadcast(event, args, delay_ms, extra=extra)
+
+    def isLeader(self):
+        return self.master if not self.elected else self._isLeader
+
+    def leader(self):
+        """Name of the node emitting the clock (role='elected': None while nobody leads)."""
+        if not self.elected:
+            return self._myName if self.master else self._lockedName
+        r = self._rank
+        return r[2] if r else None
+
+    def mayAdvance(self):
+        """Track end: may THIS node order the next track? role='fixed': yes (unchanged). Elected:
+        the leader only — or a follower whose leader has been silent 2 s, so a dead leader never
+        ends the show. One advance instead of one per player."""
+        if not self.elected or self._isLeader:
+            return True
+        return time.time() - self._lastAccept >= 2.0
 
     def _rearmClockSync(self, peer, tc, name):
         # The TimeClient's own Timers are the only thing that ever starts a sampling round; when
@@ -328,11 +480,13 @@ class WallclockInterface (BaseInterface):
         pin()
 
         dest = 'unicast to zyre peers' if self.unicast else (self.group + (' + broadcast ' + bcast[0] if bcast[0] else ''))
-        self.log('master clock: emitting on', dest, 'port', self.port, 'at', self.rate, 'Hz')
+        self.log(('leader clock (while elected): ' if self.elected else 'master clock: ') + 'emitting on',
+                 dest, 'port', self.port, 'at', self.rate, 'Hz')
 
         interval = 1.0 / self.rate
         seq = 0
         lastBeat = 0.0
+        lastMedia = None
 
         def send(pkt):
             nonlocal seq
@@ -373,8 +527,18 @@ class WallclockInterface (BaseInterface):
                 if pinned[0] and not was:
                     self.log('multicast egress pinned to', self.iface, '(late: interface was not up at start)')
 
+            if self.elected:
+                rank = self._rank
+                if not self._isLeader or not rank or rank[2] != self._myName:
+                    continue            # a follower: someone else emits
+
             media = self.player.status('media')
             dur = self.player.status('duration')
+            if self.elected and media != lastMedia:
+                # A new track: the latch still holds the OLD track's position (fresh for 1 s) —
+                # never send it under the new name; wait for the new track's first status.
+                lastMedia = media
+                self._latch = None
             base = {
                 'v': 1,
                 'n': self._myName,
@@ -382,10 +546,16 @@ class WallclockInterface (BaseInterface):
                 'm': os.path.basename(media) if media else '',
                 'l': 1 if self.seamless else 0
             }
+            if self.elected:
+                base['t'] = rank[0]
+                base['u'] = rank[1]
+                base['z'] = 1 if self.player.isPaused() else 0
 
             latch = self._latch
             now = time.time()
             fresh = latch is not None and (now * PRECISION - latch[1]) <= PRECISION
+            if self.elected and self.player.isPaused():
+                fresh = False           # paused: the beat below carries the exact frozen position
 
             if fresh:
                 pos, at = latch
@@ -401,6 +571,12 @@ class WallclockInterface (BaseInterface):
                 lastBeat = now
                 pos = latch[0] if latch else 0.0
                 send(dict(base, at=int(now * PRECISION), pos=pos, p=False))
+            elif self.elected and self.player.isPaused() and now - lastBeat >= 1.0:
+                # Elected: a paused leader says so (1 Hz, z=1, its frozen position), so a follower
+                # that missed the pause pauses too instead of chasing its model of a running clock.
+                lastBeat = now
+                pos = self.player.position()
+                send(dict(base, at=int(now * PRECISION), pos=float(pos) if pos else 0.0, p=True))
 
         sock.close()
 
@@ -539,6 +715,166 @@ class WallclockInterface (BaseInterface):
         elif self._legacyStalled:
             self._legacyStalled()
 
+    #
+    # Elected follower (role='elected')
+    #
+
+    def _electedArbitrate(self, pkt, name):
+        """A clock packet's rank against ours: a better one is adopted (a missed order, a takeover,
+        a healed partition — and a leader that hears it demotes); only the leader's own packets
+        are chased. True = chase this packet."""
+        try:
+            prank = (int(pkt.get('t', 0)), int(pkt.get('u', 0)), name)
+        except (TypeError, ValueError):
+            return False
+        if rank_better(prank, self._rank):
+            self._adopt(prank, 'clock packet' + (' (we led)' if self._isLeader else ''))
+        cur = self._rank
+        if prank != cur:
+            self._quietLog('ignoring clock from %s (rank %d.%d, the leader is %s %d.%d)' % (
+                name, prank[0], prank[1], cur[2], cur[0], cur[1]) if cur else 'ignoring clock from ' + name)
+            return False
+        if name != self._lockedName:
+            self._lockOn(name)
+        return True
+
+    def _takeover(self):
+        """Our leader has been silent for takeoverAfter while we play, locked on it: claim the clock
+        at (term, sub + 1, us). Every such follower claims at about the same time; the claims meet
+        in the packets and the lowest name wins within one interval. Nobody claims a stopped or
+        paused fleet (nothing to clock), nor a position it never locked on."""
+        if self._isLeader or not self._lockedName or not self.player:
+            return
+        now = time.time()
+        silent = now - self._lastAccept
+        if silent < self.takeoverAfter:
+            return
+        if not self.player.isPlaying() or self.player.isPaused():
+            return
+        if not self.hLastLocked or self._lastAccept - self.hLastLocked > 30.0:
+            return
+        r = self._rank
+        if r:
+            self._adopt((r[0], r[1] + 1, self._myName), 'takeover: %s silent %.0f s' % (self._lockedName, silent))
+
+    def _followStop(self, name):
+        """The leader says stopped (p=0) while we play: a stop we missed. Stop after stopGrace —
+        never right after an order of ours (the leader's packets lag the order by a tick)."""
+        now = time.time()
+        if not self.player.isPlaying() or now - self._orderAt < self.stopGrace:
+            self._stopSince = None
+            return
+        if self._stopSince is None:
+            self._stopSince = now
+            return
+        if now - self._stopSince >= self.stopGrace:
+            self._stopSince = None
+            self.log(colored('leader %s is stopped, we still play -> stopping (missed stop)' % name, 'yellow'))
+            self.player.stop()
+
+    @staticmethod
+    def _sameMedia(mine, m):
+        """Our media is the leader's: the same basename, or the same NN_ index."""
+        if not mine or not m:
+            return False
+        if mine == m:
+            return True
+        i = media_index_of(m)
+        return bool(i and media_index_of(mine) == i)
+
+    def _followPause(self, name, pkt):
+        """The leader says paused (z=1) while we play: a pause we missed. Pause after pauseGrace.
+        Paused (by the order or by this), wait on the leader's frozen frame: the resume then starts
+        together instead of leaving the servo a second to claw back. (A missed resume needs
+        nothing: the next chase tick resumes a paused player.)"""
+        now = time.time()
+        if self.player.isPaused():
+            self._pauseSince = None
+            if not self._pauseAligned:
+                self._pauseAligned = True
+                mine = self.player.status('media')
+                pos = float(pkt.get('pos') or 0.0)
+                if self._sameMedia(os.path.basename(mine) if mine else '', pkt.get('m') or '') \
+                        and abs(float(self.player.position() or 0.0) - pos) > 0.04:
+                    self.player.seekTo(pos * 1000, exact=True)
+            return
+        self._pauseAligned = False
+        if not self.player.isPlaying() or now - self._orderAt < self.pauseGrace:
+            self._pauseSince = None
+            return
+        if self._pauseSince is None:
+            self._pauseSince = now
+            return
+        if now - self._pauseSince >= self.pauseGrace:
+            self._pauseSince = None
+            self.log(colored('leader %s is paused, we still play -> pausing (missed pause)' % name, 'yellow'))
+            self.player.pause()
+
+    def _localMedia(self, m, midx):
+        """Our playlist entry for the leader's media: the same basename first, else the same NN_
+        index (03_x.mp4 on a video player where the others carry 03_x.mp3). (path, index) or (None, -1)."""
+        pl = getattr(self.hplayer, 'playlist', None)
+        if not pl or not m:
+            return None, -1
+        tracks = [pl.trackAtIndex(k) for k in range(pl.size())]
+        for k, t in enumerate(tracks):
+            if t and os.path.basename(t) == m:
+                return t, k
+        if midx:
+            for k, t in enumerate(tracks):
+                if t and media_index_of(t) == midx:
+                    return t, k
+        return None, -1
+
+    def _electedMedia(self, name, m, midx, mdur, mine, mydur, clock):
+        """Elected follower, leader playing. On its media (same basename or same NN_ index) and
+        playing: chase — returns the wrap length. Otherwise we missed an order: once that has
+        lasted mediaGrace, join the leader's media at its position (the drifter seeks us in), or
+        stay dark when we have no such file. Returns None = no chase on this packet."""
+        playing = self.player.isPlaying()
+        same = self._sameMedia(mine, m)
+        if same and playing:
+            self._mediaWrongSince = None
+            self._darkNoted = None
+            if mdur > 3 and mydur > 3 and abs(mydur - mdur) > self.durTolerance:
+                if clock >= mydur - 0.05:
+                    self.drifter.release()      # our file is shorter: it ended, wait for the leader to move on
+                    return None
+                return 0                        # another length: chase without wrap arithmetic
+            return mdur
+
+        self.drifter.release()
+        now = time.time()
+        if now - self._orderAt < self.mediaGrace or now - self._cueStartedAt < 3.0:
+            self._mediaWrongSince = None        # an order just fired / a join is coming up: let the packets catch up
+            return None
+        if self._mediaWrongSince is None:
+            self._mediaWrongSince = now
+            return None
+        if now - self._mediaWrongSince < self.mediaGrace:
+            return None
+        if mdur > 3 and clock > mdur - 2.0:
+            return None                         # the leader is about to end it: its advance carries us
+        path, k = self._localMedia(m, midx)
+        if not path:
+            if self._darkNoted != m:
+                self._darkNoted = m
+                self.log(colored('leader %s plays %s: no such media here -> dark' % (name, m), 'yellow'))
+            if playing:
+                self.player.stop()
+            return None
+        self._mediaWrongSince = None
+        self._darkNoted = None
+        self.log(colored('leader %s plays %s, we %s -> joining it at %.1fs (missed order)' % (
+            name, m, ('play ' + mine) if playing and mine else 'are stopped', clock), 'yellow'))
+        self._cueStartedAt = now
+        if self.mediaStart:
+            self.mediaStart(path)
+        else:
+            self.hplayer.playlist.playindex(k)
+        self.drifter.arm()
+        return None
+
     def _runSlave(self):
         sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
         sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
@@ -609,8 +945,24 @@ class WallclockInterface (BaseInterface):
         self.log('slave: chasing wall clock on port', self.port)
 
         extraBase = None    # (pos, atLocal, dur, seq, cs) of the last chase-eligible packet
+        roleSeen = False    # elected: the role this loop last acted on
 
         while not self.stopped.is_set():
+
+            if self.elected:
+                if self._isLeader != roleSeen:
+                    roleSeen = self._isLeader
+                    if roleSeen:
+                        # Promoted: our own player is the clock now — stop chasing anyone
+                        self._lockedName = None
+                        self._freewheeling = False
+                        self._modelCheck = None
+                        self._stopSince = self._pauseSince = self._mediaWrongSince = None
+                        extraBase = None
+                        if self.drifter:
+                            self.drifter.release()
+                    # (demoted: the first packet carrying the better rank locks us on its sender)
+                self._takeover()
 
             if not joined[0] and time.time() - lastTry[0] > 2.0:
                 # ENODEV/EADDRNOTAVAIL = the interface is not up yet: retry on the same socket;
@@ -651,15 +1003,18 @@ class WallclockInterface (BaseInterface):
                 # driver reload or interface re-creation drops IGMP state silently — kouagou03
                 # sat unchased for two days with its socket bound and no group, 2026-09-18).
                 # Re-join every 5 s; an already-present membership answers EADDRINUSE, harmless.
-                if joined[0] and time.time() - lastTry[0] > 5.0 and time.time() - self._lastAccept > 5.0:
+                # (elected: not while we lead — a leader hears no clock but its own, by design)
+                if joined[0] and time.time() - lastTry[0] > 5.0 and time.time() - self._lastAccept > 5.0 \
+                        and not (self.elected and self._isLeader):
                     joined[0] = False
                     join(rebind=True)
                 # Delivery gap: keep servoing on the extrapolated clock
                 # until the freewheel budget runs out.
                 # (only for a player that plays: a slave stopped by the master's zyre 'stop' must not
                 # be restarted by its own model)
+                # (elected: nor a paused one — a model tick would resume it)
                 if extraBase and self.drifter and time.time() - self._lastAccept > 0.2 \
-                        and self.player.isPlaying():
+                        and self.player.isPlaying() and not (self.elected and self.player.isPaused()):
                     bpos, batLocal, bdur, bseq, bcs, bwrap = extraBase
                     clock = self._modelClock(extraBase)
                     if bdur > 3:
@@ -688,10 +1043,13 @@ class WallclockInterface (BaseInterface):
             if not name or name == self._myName:
                 continue
 
-            # Master lock-on / arbitration
-            if self.masterName and name != self.masterName:
+            # Master lock-on / arbitration (elected: by rank, never by who was heard first)
+            if self.elected:
+                if not self._electedArbitrate(pkt, name):
+                    continue
+            elif self.masterName and name != self.masterName:
                 continue
-            if not self._lockedName:
+            elif not self._lockedName:
                 self._lockOn(name)
             elif name != self._lockedName:
                 if self._candName != name:
@@ -766,8 +1124,9 @@ class WallclockInterface (BaseInterface):
             # Loop ownership announced by the master: mirror it live, so a master that hands
             # its loop to the playlist (several cues, loop gap) never leaves a slave wrapping
             # seamlessly on its own — and the other way round.
+            # (elected: off — the profile owns the loop, Anna runs loop=-1 and loops '_loop' tracks itself)
             l = bool(pkt.get('l', 1))
-            if l != self._masterSeamless:
+            if l != self._masterSeamless and not self.elected:
                 self._masterSeamless = l
                 self.log('master loops ' + ('seamlessly (mpv)' if l else 'through its playlist') + ' -> mirroring')
                 # playlist loop too: under a playlist-owned loop our file must END and stay
@@ -780,7 +1139,17 @@ class WallclockInterface (BaseInterface):
             # Master not playing
             if not pkt.get('p', False):
                 self.drifter.release()
+                if self.elected:
+                    self._followStop(name)
                 continue
+            if self.elected:
+                self._stopSince = None
+                if pkt.get('z'):
+                    self.drifter.release()
+                    self._followPause(name, pkt)
+                    continue
+                self._pauseSince = None
+                self._pauseAligned = False
 
             m = pkt.get('m') or ''
             mdur = pkt.get('dur', 0) or 0
@@ -808,7 +1177,12 @@ class WallclockInterface (BaseInterface):
                 self.log('master clock is back:', name, 'after %.0f s, model was off by %+.0f ms' % (getattr(self, '_backAfter', 0), err * 1000))
                 self._modelCheck = None
 
-            if midx and self.player:
+            if self.elected:
+                # ── Elected: chase the leader's media if we play it, else join it (missed order)
+                wrapDur = self._electedMedia(name, m, midx, mdur, mine, mydur, clock)
+                if wrapDur is None:
+                    continue
+            elif midx and self.player:
                 # ── Cue mode: the master plays NN_ -> we play OUR NN_ file and chase its
                 # position. No NN_ here -> stay dark. Ours shorter -> end, hold, wait for
                 # the master to loop or move on. Ours longer -> the master's wrap seeks us back.
@@ -909,6 +1283,16 @@ class WallclockInterface (BaseInterface):
         if not self.player:
             self.log('no player to sync: wallclock interface idle')
             self.stopped.wait()
+            return
+
+        if self.elected:
+            # Both sides in one node: the send loop emits only while we lead (_isLeader)
+            self.log('interface ready (elected leader)')
+            sender = threading.Thread(target=self._runMaster, name='wallclock-lead', daemon=True)
+            sender.start()
+            self._runSlave()
+            sender.join(2.0)
+            self.log('done.')
             return
 
         self.log('interface ready (' + ('master' if self.master else 'slave') + ')')
