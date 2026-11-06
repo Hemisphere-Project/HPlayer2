@@ -57,7 +57,7 @@ if getattr(wallclock, 'drifter', None):
 keypad 		= hplayer.addInterface('keypad')
 http		= hplayer.addInterface('http', 8037)
 keyboard 	= hplayer.addInterface('keyboard')
-teleco2		= hplayer.addInterface('teleco2', False, SYNC_IFACE)	# USB remote (M5Stack CoreS3): parc orders, our WiFi
+teleco2		= hplayer.addInterface('teleco2', False, SYNC_IFACE, netport=3740)	# CoreS3 remote: USB, or WiFi (fw >= 6: tcp 3740, discovery udp 3739)
 
 if keypad.lcd: keypad.lcd.set_color( 100, 0, 100)
 keypad.draw( [".:: HPlayer2 ::.", "   Starting "+keypad.CHAR_LOVE+"   "] )

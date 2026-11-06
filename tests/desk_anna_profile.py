@@ -176,7 +176,8 @@ check(names[0] == 'health' and hp.added[0][2] == {'restart': False}, 'health fir
 check(('zyre', ('wint',), {}) in hp.added, 'zyre on wint')
 check(('wallclock', ('wint',), {'role': 'elected'}) in hp.added, 'wallclock on wint, role=elected')
 check(set(names) >= {'keypad', 'http', 'keyboard', 'teleco2'}, 'keypad, http, numpad, CoreS3 remote: %s' % names)
-check(('teleco2', (False, 'wint'), {}) in hp.added, 'the CoreS3 remote reports OUR WiFi (wint), parc mode (local=False)')
+check(('teleco2', (False, 'wint'), {'netport': 3740}) in hp.added,
+      'the CoreS3 remote reports OUR WiFi (wint), parc mode (local=False), WiFi remotes on tcp 3740 (#t-090)')
 check((wc.drifter.deadZoneEnter, wc.drifter.deadZoneExit) == (0.010, 0.030),
       'audio dead zone: enter 10 ms, exit 30 ms (the default 25/80 parks a follower up to 80 ms off)')
 
