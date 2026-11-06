@@ -8,6 +8,7 @@ returns at once), then its handlers are fired and what they order is checked:
    orders, none on volume; keylock gates the keypad, not the remote
  - zyre orders -> playlist; track end -> ONE advance decided by name, only when mayAdvance()
  - fresh settings file -> loop -1 + volume 95 at app-run
+ - the follower's audio dead zone: 10/30 ms
  - keypad LCD: the short-name clamp (hplayer2#t-083) and the leader `*`
 
     /tmp/wallsync-venv/bin/python tests/desk_anna_profile.py      (termcolor + pymitter)
@@ -87,6 +88,7 @@ class Settings():
 class Wallclock():
     def __init__(self, *a, **k):
         self.args, self.kw = a, k
+        self.drifter = types.SimpleNamespace(deadZoneEnter=0.025, deadZoneExit=0.08)   # Drifter's defaults
         self.orders = []; self.advance = True; self.leading = False; self.dupName = False
         self.autos = []
     def order(self, event, args=None, delay_ms=0, auto=False, source=None):
@@ -174,6 +176,8 @@ check(('zyre', ('wint',), {}) in hp.added, 'zyre on wint')
 check(('wallclock', ('wint',), {'role': 'elected'}) in hp.added, 'wallclock on wint, role=elected')
 check(set(names) >= {'keypad', 'http', 'keyboard', 'teleco2'}, 'keypad, http, numpad, CoreS3 remote: %s' % names)
 check(('teleco2', (False, 'wint'), {}) in hp.added, 'the CoreS3 remote reports OUR WiFi (wint), parc mode (local=False)')
+check((wc.drifter.deadZoneEnter, wc.drifter.deadZoneExit) == (0.010, 0.030),
+      'audio dead zone: enter 10 ms, exit 30 ms (the default 25/80 parks a follower up to 80 ms off)')
 
 # boot with no address yet: zyre has no node for up to 90 s
 g0 = mod['go_next'].__globals__

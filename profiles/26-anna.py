@@ -47,6 +47,13 @@ hplayer.log("sync interface:", SYNC_IFACE)
 health		= hplayer.addInterface('health', restart=False)
 zyre		= hplayer.addInterface('zyre', SYNC_IFACE)
 wallclock	= hplayer.addInterface('wallclock', SYNC_IFACE, role='elected')
+# Audio is heard: the Drifter's default dead zone (enter 25 ms, exit 80 ms) lets a follower park up
+# to 80 ms off its leader, audible on co-located speakers (Anna bench, 2026-11-06). 10/30 holds
+# without hunting now that the elected follower compares like with like (Drifter.posAge); desk:
+# t_tight_deadzone_join. Joins still JUMP first (seekThreshold 2 s): the dead zone only sets the end.
+if getattr(wallclock, 'drifter', None):
+	wallclock.drifter.deadZoneEnter = 0.010
+	wallclock.drifter.deadZoneExit = 0.030
 keypad 		= hplayer.addInterface('keypad')
 http		= hplayer.addInterface('http', 8037)
 keyboard 	= hplayer.addInterface('keyboard')

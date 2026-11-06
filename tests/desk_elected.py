@@ -1234,6 +1234,37 @@ def t_cached_position():
     f.shutdown()
 
 
+def t_tight_deadzone_join():
+    f = Fleet([('Anna-1', 1.0), ('Anna-2', 1.0001)], mpvLike=True)
+    a, b = f['Anna-1'], f['Anna-2']
+    for n in (a, b):                                    # what 26-anna sets after addInterface
+        n.wc.drifter.deadZoneEnter, n.wc.drifter.deadZoneExit = 0.010, 0.030
+    samples = _record_ticks(b, a)
+    a.order('unbuf_playindex', [2])
+    time.sleep(4)
+    ZBUS.drop['Anna-2'] = 1                             # Anna-2 misses the next order: it JOINs
+    a.order('unbuf_playindex', [4])
+    t = wait_for(lambda: b.player.track() == '05_extra.mp3', 8.0)
+    check(t is not None, 'Anna-2 missed the order and joined 05_extra from the packets (%.1f s)' % (t or 0))
+    time.sleep(12)                                      # the JUMP, its landing, the servo
+    t0 = time.time()
+    time.sleep(8)
+    win = [x for x in samples if x[0] >= t0]
+    check(len(win) > 60, '%d servo ticks on Anna-2 in an 8 s window' % len(win))
+    true = [x[2] for x in win]
+    off = statistics.median(true)
+    check(abs(off) < 0.020 and max(abs(v) for v in true) < 0.040,
+          'joined Anna-2 sits on the leader: true offset median %+.1f ms, worst %.1f ms'
+          % (off * 1000, max(abs(v) for v in true) * 1000))
+    flips = sum(1 for i in range(1, len(win)) if win[i][3] != win[i - 1][3])
+    tail = [x for x in win if x[0] >= t0 + 5.0]
+    locked = sum(1 for x in tail if x[3]) / float(len(tail) or 1)
+    check(flips <= 4 and locked >= 0.95,
+          'dead zone 10/30 ms holds without hunting: %d lock flips in 8 s, locked %.0f%% of the last 3 s'
+          % (flips, locked * 100))
+    f.shutdown()
+
+
 TESTS = [
     ('pure: rank order, natural names, end-of-track by name, zyre wire', t_pure),
     ('fixed: role=fixed unchanged (first-heard master, no rank on the wire)', t_fixed_unchanged),
@@ -1262,6 +1293,7 @@ TESTS = [
     ('fallback advances in a different order per node: one leader at once', t_fallback_skew),
     ('dark commander into a stopped fleet, its leader gone: a player takes over', t_dark_into_stopped),
     ('mpv-like cached position: the follower servo compares like with like', t_cached_position),
+    ('mpv-like join with a 10/30 ms dead zone: on the leader, no hunting', t_tight_deadzone_join),
 ]
 
 for name, fn in TESTS:
