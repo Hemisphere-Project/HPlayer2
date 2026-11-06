@@ -21,7 +21,7 @@ No fleet, no mpv, no zyre/czmq. Only termcolor + pymitter:
 
 Real-time sleeps: the servo, the takeover delay and the graces run at their real cadence.
 """
-import sys, os, time, types, threading, queue, json, inspect
+import sys, os, time, types, threading, queue, json, inspect, random, statistics
 import socket as _socket
 
 REPO = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -260,10 +260,16 @@ class Emitter():
 class FakePlayer():
     """Real-time position x speed x crystal error; ends at its duration (or wraps, loop=True).
     Like mpv, a new file takes openDelay to open: its position holds at 0 and no status event
-    leaves meanwhile (a leader is silent for that long after a track change)."""
+    leaves meanwhile (a leader is silent for that long after a track change).
+    mpvLike: position() is the LAST status event's value, rounded to 10 ms, like mpv.py's
+    (_status['time'] <- each time-pos event), and the events come 45-85 ms apart, mpv's cadence on
+    audio (measured 2026-11-06, mpv 0.41: median 55-80 ms). The default player answers the exact
+    position at any instant, which no real player does: it hid a ~35 ms follower bias on the desk."""
     name = 'player'
 
-    def __init__(self, rate=1.0, loop=False, openDelay=0.3):
+    def __init__(self, rate=1.0, loop=False, openDelay=0.3, mpvLike=False):
+        self.mpvLike = mpvLike
+        self._cached = 0.0
         self.rate = rate
         self.loop = loop
         self.openDelay = openDelay
@@ -298,6 +304,8 @@ class FakePlayer():
 
     def position(self):
         with self.lock:
+            if self.mpvLike:
+                return self._cached
             return round(min(self._now(), self.duration or 1e9), 3)
     def isPlaying(self): return self.playing or self.paused
     def isPaused(self): return self.paused
@@ -309,10 +317,12 @@ class FakePlayer():
             self._openUntil = time.time() + self.openDelay
             self._base = 0.0; self._t0 = self._openUntil; self._speed = 1.0
             self.playing = True; self.paused = False
+            self._cached = 0.0                  # mpv.py: update('time', 0) on play
             self.plays.append(os.path.basename(media))
     def stop(self):
         with self.lock:
             self.playing = False; self.paused = False; self.media = None
+            self._cached = 0.0
     def pause(self):
         with self.lock:
             if self.playing and not self.paused:
@@ -393,11 +403,11 @@ ALL_NODES = []
 
 class Node():
     def __init__(self, name, rate=1.0, files=FILES, role='elected', master=False, loop=False,
-                 openDelay=0.3, **kw):
+                 openDelay=0.3, mpvLike=False, **kw):
         self.name = name
         self.alive = True
         ALL_NODES.append(self)
-        self.player = FakePlayer(rate=rate, loop=loop, openDelay=openDelay)
+        self.player = FakePlayer(rate=rate, loop=loop, openDelay=openDelay, mpvLike=mpvLike)
         self.playlist = FakePlaylist(self.player, files)
         self.hp = FakeHPlayer(self.player, self.playlist, FakeZyre(name))
         self.playlist.hp = self.hp
@@ -437,8 +447,9 @@ class Node():
         hp.on('playlist.end')(onEnd)
 
     def _feed(self):
-        # mpv's status events (20 Hz while it plays; none while paused) + its end of file
-        while not self._stop.wait(0.05):
+        # mpv's status events (20 Hz while it plays; none while paused) + its end of file.
+        # mpvLike: mpv's own cadence on audio, and the value rounded and cached like mpv.py's.
+        while not self._stop.wait(random.uniform(0.045, 0.085) if self.player.mpvLike else 0.05):
             p = self.player
             with p.lock:
                 if not p.playing or p.paused or p.opening():
@@ -447,6 +458,8 @@ class Node():
                 ended = not p.loop and pos >= p.duration
                 if ended:
                     p.stop()
+                elif p.mpvLike:
+                    pos = p._cached = round(pos, 2)
             if ended:
                 self.hp.emit('playlist.end')
             else:
@@ -1184,6 +1197,43 @@ def t_stop_track():
     f.shutdown()
 
 
+
+def _record_ticks(node, ref):
+    """Wrap a follower's Drifter.tick: every servo step records (when, the servo's diff, the TRUE
+    offset ref - node from both players' exact timelines, locked, speed). + = the follower is late."""
+    d = node.wc.drifter
+    orig = d.tick
+    samples = []
+    def tick(clock, duration=0):
+        res = orig(clock, duration)
+        if res and not res.get('jumped'):
+            with ref.player.lock, node.player.lock:
+                true = ref.player._now() - node.player._now()
+            samples.append((time.time(), res['diff'], true, res['locked'], res['speed']))
+        return res
+    d.tick = tick
+    return samples
+
+
+def t_cached_position():
+    f = Fleet([('Anna-1', 1.0), ('Anna-2', 1.0)], mpvLike=True)
+    a, b = f['Anna-1'], f['Anna-2']
+    samples = _record_ticks(b, a)
+    a.order('unbuf_playindex', [2])                     # 03_story, 90 s: both start at the same `at`
+    check(wait_for(lambda: f.leaders() == ['Anna-1'], 2.0) is not None, 'order from Anna-1 -> Anna-1 leads')
+    time.sleep(8)
+    t0 = time.time()
+    time.sleep(6)
+    win = [x for x in samples if x[0] >= t0]
+    check(len(win) > 40, '%d servo ticks on Anna-2 in a 6 s window' % len(win))
+    bias = statistics.median([x[1] - x[2] for x in win])
+    check(abs(bias) < 0.008,
+          "the servo's diff IS the true offset: median bias %+.1f ms (mpv-like cached position)" % (bias * 1000))
+    off = statistics.median([x[2] for x in win])
+    check(abs(off) < 0.030, 'fresh start: Anna-2 on the leader, true offset %+.1f ms' % (off * 1000))
+    f.shutdown()
+
+
 TESTS = [
     ('pure: rank order, natural names, end-of-track by name, zyre wire', t_pure),
     ('fixed: role=fixed unchanged (first-heard master, no rank on the wire)', t_fixed_unchanged),
@@ -1211,6 +1261,7 @@ TESTS = [
     ('longer NN_ cue on a follower: it switches with the fleet', t_longer_cue_file),
     ('fallback advances in a different order per node: one leader at once', t_fallback_skew),
     ('dark commander into a stopped fleet, its leader gone: a player takes over', t_dark_into_stopped),
+    ('mpv-like cached position: the follower servo compares like with like', t_cached_position),
 ]
 
 for name, fn in TESTS:

@@ -63,6 +63,14 @@ class Drifter():
         # wallclock — mixed fleets (hub and non-hub players) stay aligned.
         self.offset = 0.0
 
+        # Position age (opt-in; the elected wallclock plugs it): posAge(pos) -> seconds since
+        # `pos` was the player's true position, or None. mpv's position() is the LAST time-pos
+        # event, and those come every ~40 ms (25 fps video) to 55-80 ms (audio). The clock is
+        # extrapolated to now, so clock - pos reads `age` too late: +20..40 ms of bias, and the
+        # servo parks a follower that far AHEAD (Anna bench, 2026-11-06). With posAge, both
+        # sides are compared at the same instant. None = the historic servo (fixed role, nowde).
+        self.posAge = None
+
         # ── Smart join (danceMode) ──────────────────────────────────────
         # Benchmarked 2026-07-23 (extra/bench: N100/vaapi + RPi/mmal, GOP
         # 1s..single-keyframe): keyframe-mode seeks are instant but land a
@@ -174,6 +182,10 @@ class Drifter():
         self.lastPos = pos
 
         diff = clock - pos
+        if self.posAge is not None:
+            age = self.posAge(pos)
+            if age is not None and 0.0 <= age < 0.5:
+                diff -= age * self.lastSpeed        # our position NOW, like the clock
 
         # Wrap-aware shortest path: on looping media the clock and the player
         # wrap independently; +-duration jumps around the loop point are not

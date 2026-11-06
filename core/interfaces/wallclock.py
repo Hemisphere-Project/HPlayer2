@@ -267,6 +267,8 @@ class WallclockInterface (BaseInterface):
             # danceMode: joining slaves seek-ahead + pause + timed-resume
             # instead of chaining blind jumps (113s -> ~10s join, 2026-07-23)
             self.drifter = Drifter(self.player, log=self.log, danceMode=True) if self.player else None
+            if self.drifter and self.elected:
+                self.drifter.posAge = self._ownPosAge   # compare like with like (see _ownPosAge)
             self._lockedName = None
             self._lastSeq = None
             self._lastAccept = 0
@@ -553,6 +555,17 @@ class WallclockInterface (BaseInterface):
         if bdur > 3:
             clock = clock % bdur
         return clock
+
+    def _ownPosAge(self, pos):
+        """Seconds since our player's position `pos` was true (elected only, via Drifter.posAge).
+        The leader stamps `at` when its time-pos event arrives, and the follower extrapolates
+        that to now. But our own position() is the cached LAST event, 40-80 ms apart on mpv, so
+        it must be aged the same way, or every follower locks ~half an event interval ahead.
+        The latch holds the same event (same thread, same value): None when it does not."""
+        latch = self._latch
+        if latch is None or abs(latch[0] - float(pos)) > 0.0005:
+            return None
+        return time.time() - latch[1] / PRECISION
 
     def _pickShift(self, peer):
         """TimeClient first (Thomas, 2026-09-25), the packets as fallback: a missing zyre peer or
