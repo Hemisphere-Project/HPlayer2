@@ -1,4 +1,5 @@
 #include <Arduino.h>
+#include <stdarg.h>
 #include <WiFi.h>
 #include <WiFiUdp.h>
 #include <Preferences.h>
@@ -57,6 +58,18 @@ static char     rx[RX_BUF];
 static size_t   rxLen = 0;
 static bool     rxOver = false;
 
+// bench diagnostics: "# ..." lines on the USB, only on VBUS without a player (a laptop running
+// `pio device monitor`). A player drops them unread (not a command), fw 5 hosts included.
+static void netLog(const char* fmt, ...) {
+    if (!S.vbus || S.mode != MODE_NET) return;
+    char l[120];
+    va_list ap;
+    va_start(ap, fmt);
+    vsnprintf(l, sizeof(l), fmt, ap);
+    va_end(ap);
+    Serial.printf("# %lu %s\n", (unsigned long)(millis() / 1000), l);
+}
+
 const char* netPlayer() { return cur; }
 const char* netSsid() { return ssid; }
 
@@ -85,6 +98,7 @@ static void startWifi() {
 }
 
 static void closeSession(const char* why) {
+    if (S.net == NET_LINK) netLog("session %s closed: %s", cur, why);
     if (cli.connected()) cli.stop();
     rxLen = 0;
     rxOver = false;
@@ -93,7 +107,6 @@ static void closeSession(const char* why) {
     probing = false;
     nextProbe = millis();
     S.dBar = S.dPage = true;
-    (void)why;
 }
 
 void netDrop(const char* why) {
@@ -116,6 +129,7 @@ void netEnable(bool on) {
         S.noWifiSince = millis();
         wifiFails = 0;
         startWifi();
+        netLog("wifi on, joining %s%s", ssid, haveFast ? " (last AP)" : "");
     } else {
         closeSession("usb");
         if (udpUp) { udp.stop(); udpUp = false; }
@@ -245,6 +259,7 @@ void netLoop() {
     if (WiFi.status() != WL_CONNECTED) {
         if (S.net != NET_NOWIFI) {
             closeSession("wifi lost");
+            netLog("wifi lost");
             S.net = NET_NOWIFI;
             S.noWifiSince = now;
             S.heard = 0;
@@ -252,6 +267,7 @@ void netLoop() {
         }
         if (now - wifiTryAt > WIFI_RETRY_MS) {
             if (wifiFails < 255) wifiFails++;
+            netLog("wifi: no association in %d s (try %d%s)", WIFI_RETRY_MS / 1000, wifiFails, haveFast && wifiFails < 2 ? ", last AP" : ", any AP");
             WiFi.disconnect();
             startWifi();
         }
@@ -259,6 +275,7 @@ void netLoop() {
     }
 
     if (S.net == NET_NOWIFI) {          // just associated
+        netLog("wifi up: %s ch %d ip %s rssi %d dBm", ssid, (int)WiFi.channel(), WiFi.localIP().toString().c_str(), (int)WiFi.RSSI());
         wifiFails = 0;
         S.noWifiSince = 0;
         const uint8_t* b = WiFi.BSSID();
@@ -291,8 +308,18 @@ void netLoop() {
                 probing = false;
                 S.heard = candsN;
                 S.dPage = true;
+                char h[96] = "";
+                for (int j = 0; j < candsN && strlen(h) < 80; j++) {
+                    char one[28];
+                    snprintf(one, sizeof(one), " %s%s/%d", cands[j].nm, cands[j].lead ? "*" : "", cands[j].rssi);
+                    strlcat(h, one, sizeof(h));
+                }
                 int k = choose();
-                if (k < 0 || !attach(k)) nextProbe = millis() + REPROBE_MS;
+                netLog("probe: %d heard%s -> %s", candsN, h, k >= 0 ? cands[k].nm : "nobody");
+                if (k < 0 || !attach(k)) {
+                    if (k >= 0) netLog("connect %s failed", cands[k].nm);
+                    nextProbe = millis() + REPROBE_MS;
+                }
             }
         }
         return;
@@ -318,7 +345,7 @@ void netLoop() {
     }
     now = millis();
     if (!cli.connected() || now - lastNetRx > DEAD_MS) {
-        closeSession("dead");
+        closeSession(!cli.connected() ? "tcp closed" : "no line for 3 s");
         return;
     }
     if (now - lastHb >= HB_MS) {
