@@ -2,6 +2,7 @@
 #include "state.h"
 #include "link.h"
 #include "ui.h"
+#include "net.h"
 
 //
 // TRANSPORT page — outlined deck keys + 7-seg volume + segmented progress
@@ -236,7 +237,8 @@ void drawPeers(M5Canvas& c) {
         const Peer& p = S.peers[r];
         c.fillRect(8, y + ROW_H / 2 - 5, 10, 10, LK_COL[p.lk & 3]);
         c.drawRect(7, y + ROW_H / 2 - 6, 12, 12, C_LINE);
-        snprintf(txt, sizeof(txt), "%s%s", p.nm, p.me ? " *" : "");
+        bool pin = S.pinned[0] && !strcmp(p.nm, S.pinned);
+        snprintf(txt, sizeof(txt), "%s%s%s", p.nm, p.me ? " *" : "", pin ? " PIN" : "");
         c.setTextColor(p.me ? C_CYAN : C_PAPER);
         c.drawString(txt, 28, y + ROW_H / 2);
         c.setTextColor(LK_COL[p.lk & 3]);
@@ -251,4 +253,11 @@ void drawPeers(M5Canvas& c) {
         c.drawString(txt, SCREEN_W - 10, PAGE_H - 8);
         c.setTextDatum(middle_left);
     }
+}
+
+// tap a peer: pin it (the WiFi attach order tries it first); tap it again: unpin
+void tapPeers(int x, int y) {
+    int r = y / ROW_H;
+    if (r >= 0 && r < S.peersN && r < PAGE_H / ROW_H)
+        netPin(S.peers[r].nm);
 }

@@ -11,7 +11,32 @@ struct Peer {
     bool    me;         // the player we are plugged into
 };
 
+// transport mode (fw 6): ONE transport alive at a time
+#define MODE_BOOT   0       // just booted on VBUS: listening to the USB before going wireless
+#define MODE_USB    1       // VBUS + a player talking on the USB: WiFi off (fw 5 behaviour)
+#define MODE_NET    2       // on battery (or a charger): WiFi + TCP to a player
+// network state (MODE_NET)
+#define NET_OFF     0
+#define NET_NOWIFI  1       // not associated
+#define NET_SEARCH  2       // associated, probing / choosing a player
+#define NET_LINK    3       // TCP session open
+
 struct AppState {
+    // transport
+    uint8_t  mode = MODE_BOOT;
+    uint8_t  net = NET_OFF;
+    int      wifiRssi = 0;              // own signal, 0..100 (MODE_NET)
+    uint8_t  heard = 0;                 // players that answered the last probe
+    char     pinned[20] = "";           // tap-to-pin on PEERS: attach to this player first
+    uint32_t noWifiSince = 0;           // MODE_NET without WiFi since (0 = associated / not NET)
+    int      offIn = -1;                // power-off countdown shown in its last minute (s), -1 none
+
+    // power
+    int      bat = -1;                  // battery %, -1 unknown
+    bool     chg = false;               // charging
+    bool     vbus = false;              // USB power present
+    bool     dimmed = false;
+
     // link
     bool     linked = false;
     bool     byed = false;              // host said bye (clean shutdown)

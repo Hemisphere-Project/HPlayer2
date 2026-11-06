@@ -2,6 +2,8 @@
 #include "state.h"
 #include "link.h"
 #include "ui.h"
+#include "net.h"
+#include "power.h"
 
 static M5Canvas bar(&M5.Display);
 static M5Canvas page(&M5.Display);
@@ -20,11 +22,52 @@ static void microLabel(M5Canvas& c, const char* txt, int x, int y) {
     c.drawString(txt, x, y);
 }
 
-static void drawWifiBars(M5Canvas& c, int x, int base) {
+static void drawWifiBars(M5Canvas& c, int x, int base, int rssi) {
     for (int b = 0; b < 4; b++) {
         int h = 3 + b * 3;
-        uint16_t col = (S.rssi > b * 25) ? C_CYAN : C_PANEL;
+        uint16_t col = (rssi > b * 25) ? C_CYAN : C_PANEL;
         c.fillRect(x + b * 5, base - h, 4, h, col);
+    }
+}
+
+// battery block (centre cx): "BAT" (+ a bolt while charging) over "87%", amber <= 15, red <= 5
+static void drawBattery(M5Canvas& c, int cx) {
+    uint16_t col = S.bat < 0 ? C_DIM : S.bat <= 5 ? C_RED : S.bat <= 15 ? C_AMBER : S.chg ? C_GREEN : C_PAPER;
+    microLabel(c, "BAT", cx - 4, 2);
+    if (S.chg) {
+        int x = cx + 8, y = 1;
+        c.fillTriangle(x + 4, y, x, y + 5, x + 3, y + 5, C_GREEN);
+        c.fillTriangle(x + 2, y + 4, x + 6, y + 4, x + 1, y + 10, C_GREEN);
+    }
+    char v[6];
+    if (S.bat < 0) strcpy(v, "--");
+    else snprintf(v, sizeof(v), "%d%%", S.bat);
+    c.setFont(F_MONO);
+    c.setTextColor(col);
+    c.setTextDatum(bottom_center);
+    c.drawString(v, cx, BAR_H - 3);
+}
+
+// link block (x0..x0+56): the player's name over the transport glyph (USB / WiFi arcs) + bars
+static void drawLinkBlock(M5Canvas& c, int x0) {
+    const char* nm = S.linked && S.hostName[0] ? S.hostName : (S.mode == MODE_NET ? netPlayer() : S.hostName);
+    char n9[10];
+    strlcpy(n9, nm, sizeof(n9));
+    c.setFont(F_MICRO);
+    c.setTextDatum(top_center);
+    c.setTextColor(S.linked ? C_CYAN : C_DIM);
+    c.drawString(n9[0] ? n9 : (S.mode == MODE_NET ? "WIFI" : "USB"), x0 + 28, 2);
+    int base = BAR_H - 5;
+    if (S.mode == MODE_NET) {
+        uint16_t col = S.net >= NET_SEARCH ? C_CYAN : C_RED;
+        for (int r = 3; r <= 9; r += 3) c.drawArc(x0 + 8, base, r, r - 1, 225, 315, col);
+        c.fillCircle(x0 + 8, base - 1, 1, col);
+        drawWifiBars(c, x0 + 20, base, S.wifiRssi);
+    } else {
+        c.setTextDatum(bottom_left);
+        c.setTextColor(C_CYAN);
+        c.drawString("USB", x0, base + 1);
+        drawWifiBars(c, x0 + 20, base, S.rssi);     // the player's WiFi, as fw 5 showed it
     }
 }
 
@@ -41,7 +84,12 @@ static void drawBar() {
     if (S.byed || !S.linked) {
         bar.setFont(F_MONO);
         bar.setTextDatum(middle_left);
-        if (S.byed) {
+        if (S.mode == MODE_NET) {               // fw 6, on WiFi: NO WIFI -> SEARCHING -> LINK
+            bool red = S.net <= NET_NOWIFI;
+            bar.fillRect(2, 3, 112, BAR_H - 8, red ? C_RED : C_AMBER);
+            bar.setTextColor(C_BG);
+            bar.drawString(red ? "NO WIFI" : S.net == NET_SEARCH ? "SEARCHING" : "LINKING", 8, (BAR_H - 2) / 2);
+        } else if (S.byed) {
             bar.setTextColor(C_DIM);
             bar.drawString("PLAYER OFF", 6, (BAR_H - 2) / 2);
         } else {
@@ -49,10 +97,8 @@ static void drawBar() {
             bar.setTextColor(C_BG);
             bar.drawString("NO LINK", 12, (BAR_H - 2) / 2);
         }
-        if (S.hostName[0]) {
-            bar.setTextColor(C_CYAN);
-            bar.drawString(S.hostName, 116, (BAR_H - 2) / 2);
-        }
+        drawBattery(bar, 173);
+        drawLinkBlock(bar, 200);
     } else {
         // state glyph + marquee title (white content, colored state)
         drawStateGlyph(bar, 3, (BAR_H - 2) / 2);
@@ -60,7 +106,7 @@ static void drawBar() {
         bar.setTextDatum(middle_left);
         bar.setTextColor(S.med[0] ? C_PAPER : C_DIM);
         const char* title = S.med[0] ? S.med : "-- NO MEDIA --";
-        const int winX = 18, winW = S.mute ? 130 : 190;
+        const int winX = 18, winW = S.mute ? 84 : 128;
         int tw = bar.textWidth(title);
         int off = 0;
         marqueeActive = tw > winW;
@@ -80,24 +126,24 @@ static void drawBar() {
 
         // mute alert (volume itself lives on the PLAY page)
         if (S.mute) {
-            bar.fillRect(152, 4, 44, BAR_H - 10, C_RED);
+            bar.fillRect(106, 4, 40, BAR_H - 10, C_RED);
             bar.setFont(F_MICRO);
             bar.setTextDatum(middle_center);
             bar.setTextColor(C_BG);
-            bar.drawString("MUTE", 174, (BAR_H - 2) / 2);
+            bar.drawString("MUTE", 126, (BAR_H - 2) / 2);
         }
 
-        // labeled readouts: SYNC / RSSI
+        // readouts: battery / player + transport + signal / SYNC
+        drawBattery(bar, 173);
+        drawLinkBlock(bar, 200);
+
         char v[8];
-        microLabel(bar, "SYNC", 250, 2);
+        microLabel(bar, "SYNC", 279, 2);
         bar.setFont(F_MONO);
         bar.setTextColor(S.peersTotal > 1 ? C_CYAN : C_DIM);
         snprintf(v, sizeof(v), "%d", S.peersTotal);
         bar.setTextDatum(bottom_center);
-        bar.drawString(v, 250, BAR_H - 3);
-
-        microLabel(bar, "RSSI", 291, 2);
-        drawWifiBars(bar, 282, BAR_H - 5);
+        bar.drawString(v, 279, BAR_H - 3);
     }
 
     if (S.locked) {     // padlock, far right
@@ -113,7 +159,34 @@ static void drawBar() {
 // page area
 //
 
+static void drawWaitingNet(M5Canvas& c) {
+    const char* big = S.net <= NET_NOWIFI ? "NO WIFI" : S.net == NET_SEARCH ? "SEARCHING" : "LINKING";
+    char small[48];
+    if (S.net <= NET_NOWIFI) snprintf(small, sizeof(small), "joining %s ...", netSsid());
+    else if (S.net == NET_SEARCH) snprintf(small, sizeof(small), "players heard: %d", S.heard);
+    else snprintf(small, sizeof(small), "%s", netPlayer());
+    c.setFont(F_MONO_BIG);
+    c.setTextDatum(middle_center);
+    c.setTextColor(S.net <= NET_NOWIFI ? C_RED : C_AMBER);
+    c.drawString(big, SCREEN_W / 2, PAGE_H / 2 - 24);
+    c.setFont(F_MONO);
+    c.setTextColor(S.net == NET_LINK ? C_CYAN : C_DIM);
+    c.drawString(small, SCREEN_W / 2, PAGE_H / 2 + 8);
+    if (S.offIn >= 0) {
+        snprintf(small, sizeof(small), "power off in %d s - touch to stay on", S.offIn);
+        c.setFont(F_MICRO);
+        c.setTextColor(C_AMBER);
+        c.drawString(small, SCREEN_W / 2, PAGE_H / 2 + 34);
+    } else if (S.pinned[0]) {
+        snprintf(small, sizeof(small), "pinned: %s", S.pinned);
+        c.setTextColor(C_CYAN);
+        c.drawString(small, SCREEN_W / 2, PAGE_H / 2 + 32);
+    }
+    c.drawRect(24, 8, SCREEN_W - 48, PAGE_H - 16, C_LINE);
+}
+
 static void drawWaiting(M5Canvas& c) {
+    if (S.mode == MODE_NET) return drawWaitingNet(c);
     c.setFont(F_MONO_BIG);
     c.setTextDatum(middle_center);
     c.setTextColor(C_AMBER);
@@ -235,13 +308,28 @@ static void tap(int x, int y) {
     } else if (y >= PAGE_Y && S.linked) {
         if (S.page == 0) tapTransport(x, y - PAGE_Y);
         else if (S.page == 1) tapMedia(x, y - PAGE_Y);
+        else tapPeers(x, y - PAGE_Y);
     }
 }
+
+static bool swallowing = false;    // the touch that woke a dimmed screen, until released
 
 static void handleTouch() {
     auto t = M5.Touch.getDetail();
 
+    if (swallowing) {
+        if (!t.isPressed()) swallowing = false;
+        return;
+    }
+    if (S.dimmed && (t.wasPressed() || t.isPressed())) {
+        powerWake();                    // wakes only: never a button
+        swallowing = true;
+        T.pressed = false;
+        return;
+    }
+
     if (t.wasPressed()) {
+        powerWake();                    // (not dimmed: just the idle clock)
         T.pressed = true;
         T.dragged = false;
         T.startX = t.x; T.startY = t.y; T.lastY = t.y;
@@ -272,6 +360,20 @@ static void handleTouch() {
 //
 // public
 //
+
+void uiPowerOff() {
+    M5.Display.setBrightness(BRIGHT_NORMAL);
+    M5.Display.fillScreen(C_BG);
+    M5.Display.setTextDatum(middle_center);
+    M5.Display.setFont(F_MONO_BIG);
+    M5.Display.setTextColor(C_AMBER);
+    M5.Display.drawString("NO WIFI FOR 10 MIN", SCREEN_W / 2, SCREEN_H / 2 - 30);
+    M5.Display.setTextColor(C_RED);
+    M5.Display.drawString("POWERING OFF", SCREEN_W / 2, SCREEN_H / 2 + 4);
+    M5.Display.setFont(F_MONO);
+    M5.Display.setTextColor(C_DIM);
+    M5.Display.drawString("power button to restart", SCREEN_W / 2, SCREEN_H / 2 + 40);
+}
 
 void uiBegin() {
     M5.Display.setBrightness(BRIGHT_NORMAL);

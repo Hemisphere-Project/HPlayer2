@@ -2,11 +2,14 @@
 #include <ArduinoJson.h>
 #include "state.h"
 #include "link.h"
+#include "net.h"
+#include "power.h"
 #include "version.h"
 
-#define RX_BUF      640
-#define STALE_MS    8000
-#define HELLO_MS    3000
+#define RX_BUF          640
+#define STALE_MS        8000    // USB: host silent this long -> unlinked (fw 5)
+#define HELLO_MS        3000
+#define USB_LISTEN_MS   4000    // boot on VBUS: listen to the USB this long before going wireless
 
 #define STR_(x)     #x
 #define STR(x)      STR_(x)
@@ -16,25 +19,61 @@ static size_t   bufLen = 0;
 static bool     overflow = false;
 static uint32_t lastHello = 0;
 static uint32_t lastResync = 0;
+static uint32_t lastSerialRx = 0;
+static uint32_t bootAt = 0;
+static char     helloLine[48];
 
-void sendCmd(const char* cmd) {
-    Serial.print(cmd);
+const char* linkHello() { return helloLine; }
+
+static void serialLine(const char* line) {
+    Serial.print(line);
     Serial.print('\n');
 }
 
+static void sendLine(const char* line) {
+    if (S.mode == MODE_NET) netSend(line);      // dropped unless a session is alive
+    else serialLine(line);
+}
+
+void sendCmd(const char* cmd) {
+    sendLine(cmd);
+}
+
 void sendCmdi(const char* cmd, int arg) {
-    Serial.printf("%s %d\n", cmd, arg);
+    char l[48];
+    snprintf(l, sizeof(l), "%s %d", cmd, arg);
+    sendLine(l);
+}
+
+static void setMode(uint8_t m) {
+    if (S.mode == m) return;
+    S.mode = m;
+    S.linked = false;
+    S.byed = false;
+    netEnable(m == MODE_NET);                   // USB mode: WiFi OFF, one transport at a time
+    powerActivity();                            // a mode change is worth a bright screen
+    S.dBar = S.dPage = true;
 }
 
 static void copyStr(char* dst, size_t cap, JsonVariantConst v) {
     strlcpy(dst, v | "", cap);
 }
 
-static void parseLine(const char* line) {
+void linkParse(const char* line, bool fromSerial) {
     JsonDocument doc;
     if (deserializeJson(doc, line) != DeserializationError::Ok) return;  // boot spew, noise..
     const char* t = doc["t"] | "";
     if (!*t) return;
+
+    if (fromSerial) {
+        lastSerialRx = millis();
+        if (S.mode != MODE_USB) {
+            if (!S.vbus) return;                // no USB power: not a player on our port
+            setMode(MODE_USB);                  // a player talks on our USB: it wins, WiFi goes off
+        }
+    } else if (S.mode != MODE_NET) {
+        return;                                 // a late TCP line after the switch to USB
+    }
 
     S.lastRx = millis();
     if (!S.linked) {
@@ -60,6 +99,7 @@ static void parseLine(const char* line) {
         S.rssi = doc["rssi"] | 0;
         copyStr(S.ssid, sizeof(S.ssid), doc["ssid"]);
         copyStr(S.ip, sizeof(S.ip), doc["ip"]);
+        if (fromSerial) netLearnSsid(S.ssid);   // the show's SSID, learned from a player over USB only
     }
     else if (!strcmp(t, "list")) {
         uint8_t g = doc["g"] | 0;
@@ -105,15 +145,20 @@ static void parseLine(const char* line) {
     else if (!strcmp(t, "bye")) {
         S.byed = true;
         S.linked = false;
+        if (!fromSerial) netDrop("player bye");   // its player shuts down: fail over now
     }
 
     S.dBar = S.dPage = true;
 }
 
 void linkBegin() {
+    char chip[16];
+    snprintf(chip, sizeof(chip), "%012llX", (unsigned long long)ESP.getEfuseMac());
+    snprintf(helloLine, sizeof(helloLine), "hello " STR(PROTO_VERSION) " " STR(FW_VERSION) " %s", chip);
     Serial.setRxBufferSize(4096);       // full dump bursts ~11KB; HWCDC drops on overflow
     Serial.begin(115200);
-    sendCmd("hello " STR(PROTO_VERSION) " " STR(FW_VERSION));
+    bootAt = millis();
+    serialLine(helloLine);
     lastHello = millis();
 }
 
@@ -128,7 +173,7 @@ void linkLoop() {
             if (c == '\n') {
                 if (!overflow && bufLen) {
                     buf[bufLen] = 0;
-                    parseLine(buf);
+                    linkParse(buf, true);
                 }
                 bufLen = 0;
                 overflow = false;
@@ -139,13 +184,21 @@ void linkLoop() {
         }
     }
 
-    if (S.linked && millis() - S.lastRx > STALE_MS) {   // host gone silent
-        S.linked = false;
-        S.dBar = S.dPage = true;
+    uint32_t now = millis();
+
+    // transport: the USB wins whenever a player talks on it; otherwise wireless
+    if (S.mode == MODE_BOOT) {
+        if (!S.vbus || now - bootAt > USB_LISTEN_MS) setMode(MODE_NET);
+    } else if (S.mode == MODE_USB) {
+        if (!S.vbus || now - lastSerialRx > STALE_MS) setMode(MODE_NET);   // unplugged / player silent
     }
 
-    if (!S.linked && millis() - lastHello > HELLO_MS) { // beacon doubles as dump request
-        lastHello = millis();
-        sendCmd("hello " STR(PROTO_VERSION) " " STR(FW_VERSION));
+    // hello beacon on the USB while no player holds it (doubles as dump request); on VBUS only:
+    // without it there is no host to hear it
+    if (S.vbus && !(S.mode == MODE_USB && S.linked) && now - lastHello > HELLO_MS) {
+        lastHello = now;
+        serialLine(helloLine);
     }
+
+    if (S.mode == MODE_NET) netLoop();
 }
