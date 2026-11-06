@@ -315,6 +315,7 @@ class WallclockInterface (BaseInterface):
         self.dupName = False            # another player on zyre carries OUR name: never lead
         self._dupCheckAt = 0.0
         self._dupLogAt = 0.0
+        self._lastDur = 0.0             # length of the track we last reported (elected: for 'ad')
         self._orderAt = 0.0             # last ranked order executed here
         self._stopSince = None          # we play while our leader says stopped, since
         self._pauseSince = None         # we play while our leader says paused, since
@@ -369,13 +370,20 @@ class WallclockInterface (BaseInterface):
         except (TypeError, ValueError):
             return
         auto = data.get('a') is not None
-        if auto and self._staleAdvance(rank, data.get('a')):
+        if auto and self._staleAdvance(rank, data.get('a'), data.get('ad')):
             # zyre's preProcessor2 reads the event name AFTER zyre.event: renamed, it is never executed
             self.log('stale track-end advance from %s (rank %d.%d, ends %s): dropped' % (
                 rank[2], rank[0], rank[1], data.get('a') or '?'))
             data['event'] = 'wallclock-stale-advance'
+            # ...but its RANK still counts (a no-op when ours is better): near-simultaneous fallback
+            # advances, executed in a different order on each node, must still elect ONE leader
+            self._adopt(rank, 'stale advance (rank only)')
             return
         self._orderAt = time.time()
+        # Dark = "the last order I executed could not play here": a stop / pause / resume (or a play
+        # that works) clears it — a dark player that orders STOP must beat p=0. A failing play
+        # sets it again: its 'nomedia' fires after zyre.event, in the same preProcessor2 call.
+        self._dark = False
         if self._adopt(rank, ('advance ' if auto else 'order ') + str(data.get('event'))):
             return
         if auto:
@@ -401,9 +409,16 @@ class WallclockInterface (BaseInterface):
         range, restart the fleet). Tagged 'a' with the track it ends: receivers drop it when stale."""
         r = self._rank
         rank = [r[0], r[1] + 1, self._myName] if r else [self._maxTerm, 1, self._myName]
-        return {'r': rank, 'a': os.path.basename(str(source or ''))}
+        # 'ad': the length of the track it ends — a receiver judges "at its end" against the SENDER's
+        # track (a video follower's NN_ file may run longer than the leader's mp3)
+        try:
+            d = float(self.player.status('duration') or 0) if self.player else 0.0
+        except (TypeError, ValueError):
+            d = 0.0
+        d = d or self._lastDur
+        return {'r': rank, 'a': os.path.basename(str(source or '')), 'ad': round(d, 2)}
 
-    def _staleAdvance(self, rank, source):
+    def _staleAdvance(self, rank, source, adur=None):
         """A track-end advance is stale here when a later order already ruled (its rank is below
         ours), or when we are not at the end of the track it ends: we moved on (another player's
         advance ran first, or ours did while cut off), or we already replayed a `_loop` track.
@@ -421,9 +436,11 @@ class WallclockInterface (BaseInterface):
         try:
             dur = float(self.player.status('duration') or 0)
             pos = float(self.player.position() or 0)
+            end = float(adur or 0)
         except (TypeError, ValueError):
             return False
-        return dur > 3 and pos < dur - 3.0
+        end = end if end > 3 else dur
+        return end > 3 and pos < end - 3.0
 
     def order(self, event, args=None, delay_ms=0, auto=False, source=None):
         """Broadcast a zyre order; a transport order carries this node's rank under role='elected'.
@@ -464,8 +481,9 @@ class WallclockInterface (BaseInterface):
         if not node:
             return
         try:
-            dup = any(getattr(p, 'name', None) == self._myName and getattr(p, 'active', True)
-                      for p in list(node.book.values()))
+            me = getattr(node, 'uuid', None)        # the real ZyreNode books ITSELF under our name
+            dup = any(k != me and getattr(p, 'name', None) == self._myName and getattr(p, 'active', True)
+                      for k, p in list(node.book.items()))
         except Exception:
             return
         if dup and (not self.dupName or now - self._dupLogAt > 60):
@@ -555,6 +573,11 @@ class WallclockInterface (BaseInterface):
             return
         if args[0] == 'time' and args[1] is not None:
             self._latch = (float(args[1]), int(time.time() * PRECISION))
+            if self.elected:
+                try:                    # (mpv clears the media at EOF: keep the length for a track-end advance)
+                    self._lastDur = float(self.player.status('duration') or 0) or self._lastDur
+                except (TypeError, ValueError):
+                    pass
 
     def _peerIps(self):
         ips = []
@@ -888,7 +911,7 @@ class WallclockInterface (BaseInterface):
             return
         if not self.player.isPlaying() or self.player.isPaused():
             return
-        if self._lockedName:
+        if self._lockedName and self._lockedName == self._rank[2]:
             if not self.hMasterPlaying:
                 return              # its last word was "stopped": a fleet started since is an order's, not a claim's
             if not self.hLastLocked or self._lastAccept - self.hLastLocked > 30.0:

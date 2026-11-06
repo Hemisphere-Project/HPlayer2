@@ -15,7 +15,7 @@ No fleet, no mpv, no zyre/czmq. Only termcolor + pymitter:
 
     python3 -m venv /tmp/wallsync-venv
     /tmp/wallsync-venv/bin/pip install termcolor pymitter
-    /tmp/wallsync-venv/bin/python tests/desk_elected.py            # every test, ~6 min
+    /tmp/wallsync-venv/bin/python tests/desk_elected.py            # every test, ~9 min
     /tmp/wallsync-venv/bin/python tests/desk_elected.py takeover   # tests whose name matches
     /tmp/wallsync-venv/bin/python tests/desk_elected.py -v ...     # live node logs
 
@@ -223,11 +223,13 @@ class FakeZyreNode():
         self.me = me
         self.bus = ZBUS
         self.owner = None
+        self.uuid = 'uuid-%s-%x' % (me, id(self))
     @property
     def book(self):
-        """zyre's peer book: every other live player on the bus — including one with OUR name."""
-        return {id(n): FakePeer(n.name, self.bus) for n in self.bus.members
-                if n.alive and n is not self.owner}
+        """zyre's peer book, shaped like the real one: every live player on the bus keyed by its
+        uuid — the node ITSELF included (ZyreNode.__init__ books itself), and any other one that
+        carries our name."""
+        return {n.hp.zyre.node.uuid: FakePeer(n.name, self.bus) for n in self.bus.members if n.alive}
     def broadcast(self, event, args=None, delay_ms=0, at=0, extra=None):
         self.bus.broadcast(self.me, event, args, delay_ms, at, extra, owner=self.owner)
     def peerByName(self, name):
@@ -1082,6 +1084,92 @@ def t_pause_window():
     f.shutdown()
 
 
+def t_dark_player_stops():
+    # A player whose last play hit 'nomedia' (it lacks 05_extra) orders STOP: it must beat p=0, so a
+    # wanderer cut off across the stop follows it on the heal instead of restarting the fleet
+    f = Fleet([('Anna-1', 1.0), ('Anna-4', 0.998)])
+    f.add('Anna-2', rate=1.002, files=FILES[:3])
+    f['Anna-1'].order('unbuf_playindex', [4])        # 05_extra: Anna-2 has none
+    time.sleep(3)
+    check(f['Anna-2'].wc._dark and not f['Anna-2'].player.isPlaying(), 'Anna-2 is dark (no 05_extra)')
+    cut(['Anna-4'], ['Anna-1', 'Anna-2'])
+    time.sleep(1)
+    f['Anna-2'].order('stop', None, 300)
+    time.sleep(1.5)
+    check(f.emitting() == ['Anna-2'], 'the dark player that ordered the stop leads it with p=0 beats: %s' % f.emitting())
+    time.sleep(10)
+    heal()
+    time.sleep(6)
+    check(not any(n.player.isPlaying() for n in f.alive()), 'healed: the stop stands everywhere: %s' % f.tracks())
+    check(f.leaders() == ['Anna-2'], 'one leader, the stop\'s: %s' % f.leaders())
+    f.shutdown()
+
+
+def t_longer_cue_file():
+    # A video follower's NN_ cue runs 4 s longer than the leader's mp3: the leader's track-end advance
+    # is judged against the LEADER's track, so the follower switches with everyone (its tail is cut)
+    DUR.update({'01_cue.mp3': 12.0, '01_cue.mp4': 16.0, '02_next.mp3': 60.0, '02_next.mp4': 60.0})
+    f = Fleet([('Anna-1', 1.0), ('Anna-3', 0.998)], files=['01_cue.mp3', '02_next.mp3'])
+    f.add('Anna-2', rate=1.002, files=['01_cue.mp4', '02_next.mp4'])
+    f['Anna-1'].order('unbuf_playindex', [0])
+    t0 = time.time(); seen = {}
+    while time.time() - t0 < 16 and len(seen) < 3:
+        for k, n in f.nodes.items():
+            if n.player.track().startswith('02_') and k not in seen:
+                seen[k] = time.time() - t0
+        time.sleep(0.02)
+    check(len(seen) == 3 and max(seen.values()) - min(seen.values()) < 0.3,
+          'all three started 02_ together: %s' % {k: round(v, 2) for k, v in seen.items()})
+    check(f['Anna-2'].player.plays == ['01_cue.mp4', '02_next.mp4'], 'the video player joined by the advance, not late: %s' % f['Anna-2'].player.plays)
+    f.shutdown()
+
+
+def t_fallback_skew():
+    # The leader dies 3 s before a track end: every follower sends a fallback advance. With clock
+    # shifts a few ms off, Anna-1 and Anna-3 execute each other's FIRST: the dropped one's rank must
+    # still count, so the fleet elects ONE leader (the best rank) at once, not after an 8 s takeover
+    real = ZShim.preProcessor1
+    def skewed(self, data):
+        if 'at' in data and data.get('a') is not None and {self.node.name, data.get('from')} == {'Anna-1', 'Anna-3'}:
+            data['at'] -= 40000                     # 40 ms early, between Anna-1 and Anna-3 only
+        real(self, data)
+    ZShim.preProcessor1 = skewed
+    try:
+        f = Fleet([('Anna-1', 1.0), ('Anna-2', 1.002), ('Anna-3', 0.998)])
+        f['Anna-2'].order('unbuf_playindex', [0])    # 01_intro, 12 s
+        wait_for(lambda: 8.5 < f['Anna-2'].player.position() < 9.5, 12)
+        f['Anna-2'].kill()
+        t = wait_for(lambda: f['Anna-1'].player.track() == '02_ambiance_loop.mp3', 6.0)
+        check(t is not None, 'the followers advanced on their own')
+        time.sleep(1.5)
+        ranks = {k: n.wc._rank for k, n in f.nodes.items() if n.alive}
+        check(f.leaders() == ['Anna-1'] and f.emitting() == ['Anna-1'],
+              'one leader at once, the best rank: leaders %s emitting %s ranks %s' % (f.leaders(), f.emitting(), ranks))
+        f.shutdown()
+    finally:
+        ZShim.preProcessor1 = real
+
+
+def t_dark_into_stopped():
+    # Stopped by Anna-2, Anna-2 then gone; an empty-card commander orders play and never speaks;
+    # Anna-4 missed that order: a playing player takes the clock at 8 s and Anna-4 joins it
+    f = Fleet([('Anna-1', 1.0), ('Anna-2', 1.003), ('Anna-3', 0.997), ('Anna-4', 1.0)])
+    f['Anna-2'].order('unbuf_playindex', [2]); time.sleep(3)
+    f['Anna-2'].order('stop', None, 300); time.sleep(3)
+    f['Anna-2'].kill(); time.sleep(1)
+    f['Anna-1'].playlist.files = []
+    ZBUS.drop['Anna-4'] = 1
+    f['Anna-1'].order('unbuf_playindex', [2])        # 03_story, 90 s
+    t = wait_for(lambda: f['Anna-3'].wc.isLeader(), 12.0)
+    check(t is not None and 7.0 < t < 10.5, 'Anna-3 (playing) took the clock after %.1f s' % (t or 0))
+    t = wait_for(lambda: f['Anna-4'].player.track() == '03_story.mp3', 6.0)
+    check(t is not None, 'Anna-4, which missed the order, joined it')
+    time.sleep(4)
+    sp = f.spread('Anna-3')
+    check(sp < 0.1, 'in sync: spread %.0f ms' % (sp * 1000))
+    f.shutdown()
+
+
 
 def t_stop_track():
     f = Fleet([('Anna-1', 1.0), ('Anna-2', 1.002), ('Anna-3', 0.998)])
@@ -1119,6 +1207,10 @@ TESTS = [
     ('duplicate name: neither Anna-0 leads, a unique one takes the clock', t_duplicate_name),
     ('own channel: elected port/group; a fixed master is never a leader', t_own_channel),
     ('pause window: the leader\'s in-between packet resumes nobody', t_pause_window),
+    ('dark player orders stop: it beats p=0, the stop stands on the heal', t_dark_player_stops),
+    ('longer NN_ cue on a follower: it switches with the fleet', t_longer_cue_file),
+    ('fallback advances in a different order per node: one leader at once', t_fallback_skew),
+    ('dark commander into a stopped fleet, its leader gone: a player takes over', t_dark_into_stopped),
 ]
 
 for name, fn in TESTS:

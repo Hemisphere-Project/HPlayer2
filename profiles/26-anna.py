@@ -382,11 +382,10 @@ def lcd_update(self):
 	lines[1] += keypad.CHAR_PEERS +str(len(_zn.book) if _zn else 0).ljust(2, ' ')[:2]
 	lines[1] += '*' if (wallclock and wallclock.isLeader()) else ' '
 
-	# Another card carries our name: say it, in red, until one is renamed
+	# Another card carries our name: say it, in red, with the full name, until one is renamed
 	if wallclock and getattr(wallclock, 'dupName', False):
-		lines[1] = ("NAME TAKEN " + network.get_hostname())[:16]
 		self.lcd.set_color( 100, 0, 0)
-		return lines
+		return ["!! NAME TAKEN !!", network.get_hostname()[:16].ljust(16)]
 
 	# COLORS
 	if blinkCounter > 0: color = ( 100 if not media else 0 , 100, 100 if not media else 0)	# RED/GREEN: play state

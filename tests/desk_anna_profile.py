@@ -265,7 +265,8 @@ l0, l1 = upd()
 check(not l1.endswith('*'), 'a follower does not: %r' % l1)
 wc.dupName = True
 l0, l1 = upd()
-check(l1.startswith('NAME TAKEN') and kp.lcd.color == (100, 0, 0), 'a duplicate name shows on the LCD, in red: %r' % l1)
+check(l0.startswith('!! NAME TAKEN') and l1.strip() == network.get_hostname()[:16] and kp.lcd.color == (100, 0, 0),
+      'a duplicate name shows on the LCD, in red, with the FULL name: %r / %r' % (l0, l1))
 wc.dupName = False
 zy.node = None
 l0, l1 = upd()
