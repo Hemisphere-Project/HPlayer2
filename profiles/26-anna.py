@@ -105,6 +105,12 @@ def seed_settings(ev, *args):
 	if FRESH_CFG:
 		hplayer.settings.set('volume', 95)
 		hplayer.log("fresh settings file: volume 95 (the 6.8.1 fleet's level)")
+	# The media folder IS the playlist, at every boot. settings.load() (in run(), just before app-run)
+	# replays the stored 'playlist' key as do-playlist, and hplayer's own binding runs playlist.load()
+	# on it: None (a fresh card) empties the list built at import (LCD 0/0, next/play dead), and a
+	# stored list is stale once the USB sync's rsync --delete changed /data/media (index sync breaks).
+	# Rebuild from the folder now that settings are ready: this also stores the folder's list.
+	build_list()
 
 
 # Orders to the whole parc, over zyre
