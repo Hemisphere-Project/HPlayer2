@@ -216,6 +216,10 @@ class Drifter():
             if duration and duration > 3:
                 target = target % duration
             self.player.seekTo(target * 1000)
+            # The window still holds the pre-jump diffs: left in, the next
+            # tick's median reads them and jumps a second time (the W4
+            # relink's "second JUMP"). _smartJump clears it too.
+            self._diffWindow.clear()
             self.didJump = True
             jumped = True
             if self.doLog:
