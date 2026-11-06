@@ -166,20 +166,29 @@ def unbuf_playz(ev, *args):
 
 
 # Track end: ONE advance for the parc — the clock leader's (or a follower's whose leader has been
-# silent 2 s: a dead leader never ends the show). Decided by the track's name, the same on every
-# node: `_loop` replays it, `_stop` stops, anything else moves on, nothing after the last track.
+# silent 2 s while other players are heard: a dead leader never ends the show). Decided by the
+# track's name, the same on every node: `_loop` replays it, `_stop` stops, anything else moves on,
+# nothing after the last track. A follower cut off ALONE (its leader silent, nobody else heard)
+# moves on here, with no order: an order is a rank, and a rank taken alone made the player the
+# parc's clock when it came back in range (hplayer2#t-089).
 #
 @hplayer.on('playlist.end')
 def track_end(ev, *args):
-	if wallclock and not wallclock.mayAdvance():
-		return
 	idx = hplayer.playlist.index()
 	track = hplayer.playlist.trackAtIndex(idx)
 	act = end_action(track)
 	if act == 'loop':
-		broadcast('playindex', idx, auto=True, source=track)
+		target = idx
 	elif act == 'next' and idx < hplayer.playlist.size() - 1:
-		broadcast('playindex', idx + 1, auto=True, source=track)
+		target = idx + 1
+	else:
+		return
+	if not wallclock or wallclock.mayAdvance():
+		broadcast('playindex', target, auto=True, source=track)
+	elif wallclock.advanceAlone():
+		# after the parc's order buffer (300 ms, in broadcast above): in step with the advance the
+		# others execute, so the return from out of range finds this player on their timeline
+		Timer(0.3, hplayer.playlist.emit, args=('playindex', target)).start()
 
 
 # Transport actions, parc-wide (shared by keypad / http / numpad / teleco2 remote)

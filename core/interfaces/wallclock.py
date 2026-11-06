@@ -182,8 +182,16 @@ def index_pattern(idx):
 #  together), or from the first clock packet that carries it (a missed order). A leader silent
 #  for takeoverAfter is replaced by its playing, locked followers: same term, sub + 1 — so a real
 #  order always outranks a takeover, and a healed partition rejoins the side that got the
-#  latest order. Followers also follow the leader's state when they missed the order itself:
-#  its media (by basename, or by NN_ index), its stop (p=0 for stopGrace), its pause (z=1).
+#  latest order. COMPANY (hplayer2#t-089): only a follower that hears other players takes over.
+#  Every elected node says it is here ('hi', 1 Hz while it sends no clock; v=1 receivers drop it
+#  unread); a follower whose leader went quiet claims only once another player has been heard
+#  since, for companyHold, and lately (companyWindow). A player cut off alone hears nobody: it
+#  plays on, on its model of the leader, claims nothing and orders nothing (at a track end it
+#  plays the next track itself, advanceAlone) — back in range it re-aligns on the leader the fleet
+#  kept. A leader needs no company to keep its role: cut off, it emits on, and the group it lost
+#  replaces it (back, it yields to the takeover's higher sub). Followers also follow the
+#  leader's state when they missed the order itself: its media (by basename, or by NN_ index),
+#  its stop (p=0 for stopGrace), its pause (z=1).
 #
 class WallclockInterface (BaseInterface):
 
@@ -192,7 +200,7 @@ class WallclockInterface (BaseInterface):
                     masterName=None, staleness=1.0, extrapolate=4.0, modelMax=6 * 3600,
                     driftLog='/tmp/wallclock-drift.csv', durTolerance=1.0,
                     role='fixed', takeoverAfter=8.0, stopGrace=2.0, pauseGrace=1.0,
-                    mediaGrace=2.0, mediaStart=None):
+                    mediaGrace=2.0, mediaStart=None, companyWindow=3.0, companyHold=2.0):
 
         super().__init__(hplayer, "WALLCLOCK")
         self.logQuietEvents.extend(['drift'])
@@ -305,6 +313,15 @@ class WallclockInterface (BaseInterface):
         self.pauseGrace = pauseGrace
         self.mediaGrace = mediaGrace
         self.mediaStart = mediaStart    # profile hook: start this local media path (default: its playlist index)
+        # Company (#t-089): fresh evidence that other players hear us, so a player cut off alone
+        # never claims the clock. zyre's peer book cannot say it: it keeps a vanished peer 10 s.
+        self.companyWindow = companyWindow  # another player heard within this (s)...
+        self.companyHold = companyHold      # ...and since our leader went quiet, for this long (s)
+        self.helloEvery = 1.0           # presence packet period (s), while we send no clock
+        self._otherAt = 0.0             # last presence (or other emitter's clock) heard
+        self._companyFrom = None        # the first one heard since our leader went quiet
+        self._aloneNoted = False        # "cut off, no claim" logged for this silence
+        self._localAt = 0.0             # last track end played alone (advanceAlone): retires the model
         self._rankLock = threading.Lock()
         self._rank = None               # (term, sub, name) of the current leader, None = nobody leads yet
         self._maxTerm = 0               # highest term seen, in an order or a packet
@@ -359,6 +376,29 @@ class WallclockInterface (BaseInterface):
         """How long our leader has said nothing: since its last accepted packet, or since it was
         named (by an order, a takeover or a packet) — a newly named leader gets time to speak."""
         return time.time() - max(self._lastAccept, self._rankAt)
+
+    def _heardFrom(self, name, clock=False):
+        """A packet from another player: its presence, or a clock that is not our leader's (our
+        leader's own packets, duplicates included, are its voice, never company)."""
+        if clock and self._rank and name == self._rank[2]:
+            return
+        now = time.time()
+        cf = self._companyFrom
+        if cf is None or cf <= max(self._lastAccept, self._rankAt) or now - self._otherAt > self.companyWindow:
+            self._companyFrom = now     # a new run of company, since our leader went quiet
+        self._otherAt = now
+
+    def _hasCompany(self, hold=None):
+        """We are not the one cut off: another player was heard after our leader went quiet, keeps
+        being heard (companyWindow), and has been for `hold` (default companyHold). The takeover's
+        hold: a player coming back in range often hears a presence a tick before the leader's clock,
+        and the takeover is polled — that tick must never be a claim. A track end is one instant:
+        mayAdvance() takes no hold, so a dead leader's group still advances at 2 s."""
+        now = time.time()
+        cf = self._companyFrom
+        hold = self.companyHold if hold is None else hold
+        return cf is not None and cf > max(self._lastAccept, self._rankAt) \
+            and now - cf >= hold and now - self._otherAt <= self.companyWindow
 
     def _onOrder(self, ev, data=None, *args):
         """zyre.event: fires when an order EXECUTES (after its `at` buffer), on every node at once."""
@@ -514,11 +554,25 @@ class WallclockInterface (BaseInterface):
 
     def mayAdvance(self):
         """Track end: may THIS node order the next track? role='fixed': yes (unchanged). Elected:
-        the leader only — or a follower whose leader has been silent 2 s, so a dead leader never
-        ends the show. One advance instead of one per player."""
+        the leader only — or a follower whose leader has been silent 2 s while other players are
+        heard, so a dead leader never ends the show. One advance instead of one per player. A
+        follower on its own orders nothing: advanceAlone() (#t-089)."""
         if not self.elected or self._isLeader:
             return True
-        return self._silence() >= 2.0
+        return self._silence() >= 2.0 and self._hasCompany(0.0)
+
+    def advanceAlone(self):
+        """Track end on a follower that may not order the advance (mayAdvance() False): True when
+        it is on its own — its leader silent 2 s, nobody else heard — and the profile then plays the
+        next track HERE, without an order. An advance is a rank, and a rank taken alone made the
+        player the fleet's clock the moment it came back in range (bench 2026-11-06, #t-089). Its
+        model of the old track retires: a gap tick would seek the new track to the old one's clock."""
+        if not self.elected or self._isLeader or self._silence() < 2.0 or self._hasCompany(0.0):
+            return False
+        self._localAt = time.time()
+        self.log(colored('track end, %s silent %.0f s and no other player heard: next track here, no order (no claim)' % (
+            self._rank[2] if self._rank else 'no leader', self._silence()), 'yellow'))
+        return True
 
     def _rearmClockSync(self, peer, tc, name):
         # The TimeClient's own Timers are the only thing that ever starts a sampling round; when
@@ -640,6 +694,21 @@ class WallclockInterface (BaseInterface):
         seq = 0
         lastBeat = 0.0
         lastMedia = None
+        helloAt = 0.0
+
+        def hello():
+            # Presence (#t-089): our name, no clock, no seq. Elected receivers count it as company;
+            # a v=1 receiver (an older card in a mixed fleet) drops it unread.
+            data = json.dumps({'hi': 1, 'n': self._myName}).encode()
+            if self.unicast:
+                dests = [(pip, self.port) for pip in self._peerIps()]
+            else:
+                dests = [(self.group, self.port)] + ([(bcast[0], self.port)] if bcast[0] else [])
+            for d in dests:
+                try:
+                    sock.sendto(data, d)
+                except OSError:
+                    pass                # cut off: nobody to tell (the clock path logs send errors)
 
         def send(pkt):
             nonlocal seq
@@ -684,6 +753,10 @@ class WallclockInterface (BaseInterface):
                     self.log('multicast egress pinned to', self.iface, '(late: interface was not up at start)')
 
             if self.elected:
+                now = time.time()
+                if now - max(self.hLastSend, helloAt) >= self.helloEvery:
+                    helloAt = now       # a leader's clock says it already: presence only when silent
+                    hello()
                 rank = self._rank
                 if not self._isLeader or not rank or rank[2] != self._myName:
                     continue            # a follower: someone else emits
@@ -921,6 +994,7 @@ class WallclockInterface (BaseInterface):
             return
         silent = self._silence()
         if silent < self.takeoverAfter:
+            self._aloneNoted = False
             return
         if not self.player.isPlaying() or self.player.isPaused():
             return
@@ -933,6 +1007,15 @@ class WallclockInterface (BaseInterface):
             return                  # never heard a leader, and no order named this one: nothing to take over
         # (no lock yet: an ORDER named a leader that never spoke — dark, a duplicate name, dead right
         # after ordering. Every player started that order at the same `at`: our position is the show's)
+        if not self._hasCompany():
+            # Nobody heard since our leader went quiet: we may be the one cut off. Claiming here made
+            # a player out of range 25 s the fleet's clock when it came back (Anna-12, term 20.4,
+            # bench 2026-11-06, #t-089). Play on, on the model, claim nothing; our leader stays ours.
+            if not self._aloneNoted:
+                self._aloneNoted = True
+                self.log(colored('%s silent %.0f s and no other player heard: cut off? playing on alone, no claim' % (
+                    self._lockedName or self._rank[2], silent), 'yellow'))
+            return
         r = self._rank
         self._adopt((r[0], r[1] + 1, self._myName), 'takeover: %s silent %.0f s' % (self._lockedName or r[2], silent))
 
@@ -1126,6 +1209,36 @@ class WallclockInterface (BaseInterface):
         extraBase = None    # (pos, atLocal, dur, seq, cs) of the last chase-eligible packet
         baseAt = 0.0        # when extraBase was taken
         roleSeen = False    # elected: the role this loop last acted on
+        lastGap = [0.0]     # last gap tick
+
+        def gapTick():
+            # Delivery gap: keep servoing on the extrapolated clock
+            # until the freewheel budget runs out.
+            # (only for a player that plays: a slave stopped by the master's zyre 'stop' must not
+            # be restarted by its own model)
+            # (elected: nor a paused one — a model tick would resume it; nor on a model older
+            # than the last order: it is the REPLACED track's, and the new leader is silent
+            # until mpv has opened the new file — a tick would seek the new track to the old
+            # one's position; nor older than a track end played alone, for the same reason)
+            # Elected, it runs on presence packets too: they would otherwise starve it — it used
+            # to run on the socket's silence alone, and a fleet that says hello is never silent.
+            lastGap[0] = time.time()
+            if extraBase and self.drifter and time.time() - self._lastAccept > 0.2 \
+                    and self.player.isPlaying() \
+                    and not (self.elected and (self.player.isPaused() or max(self._orderAt, self._localAt) > baseAt)):
+                bpos, batLocal, bdur, bseq, bcs, bwrap = extraBase
+                clock = self._modelClock(extraBase)
+                if bdur > 3:
+                    clock = clock % bdur
+                if self._followIdx and not self._sameDur and self._myDur > 3 and clock >= self._myDur - 0.05:
+                    return                  # past our shorter file: the packet path holds us
+                res = self.drifter.tick(clock, bwrap)
+                if res:
+                    res['seq'] = bseq
+                    res['cs'] = bcs
+                    res['model'] = self._freewheeling
+                    self._telemetry(res)
+                    self.emit('drift', res)
 
         while not self.stopped.is_set():
 
@@ -1190,30 +1303,7 @@ class WallclockInterface (BaseInterface):
                         and not (self.elected and self._isLeader):
                     joined[0] = False
                     join(rebind=True)
-                # Delivery gap: keep servoing on the extrapolated clock
-                # until the freewheel budget runs out.
-                # (only for a player that plays: a slave stopped by the master's zyre 'stop' must not
-                # be restarted by its own model)
-                # (elected: nor a paused one — a model tick would resume it; nor on a model older
-                # than the last order: it is the REPLACED track's, and the new leader is silent
-                # until mpv has opened the new file — a tick would seek the new track to the old
-                # one's position)
-                if extraBase and self.drifter and time.time() - self._lastAccept > 0.2 \
-                        and self.player.isPlaying() \
-                        and not (self.elected and (self.player.isPaused() or self._orderAt > baseAt)):
-                    bpos, batLocal, bdur, bseq, bcs, bwrap = extraBase
-                    clock = self._modelClock(extraBase)
-                    if bdur > 3:
-                        clock = clock % bdur
-                    if self._followIdx and not self._sameDur and self._myDur > 3 and clock >= self._myDur - 0.05:
-                        continue                # past our shorter file: the packet path holds us
-                    res = self.drifter.tick(clock, bwrap)
-                    if res:
-                        res['seq'] = bseq
-                        res['cs'] = bcs
-                        res['model'] = self._freewheeling
-                        self._telemetry(res)
-                        self.emit('drift', res)
+                gapTick()
                 continue
             except OSError:
                 continue
@@ -1222,16 +1312,27 @@ class WallclockInterface (BaseInterface):
                 pkt = json.loads(data.decode())
             except (ValueError, UnicodeDecodeError):
                 continue
-            if not isinstance(pkt, dict) or pkt.get('v') != 1:
+            if not isinstance(pkt, dict):
                 continue
-
             name = pkt.get('n')
+            if self.elected and name and name != self._myName:
+                if pkt.get('hi'):
+                    self._heardFrom(name)           # presence: company (#t-089), never a clock
+                    if time.time() - lastGap[0] >= 0.2:
+                        gapTick()
+                    continue
+                if pkt.get('v') == 1:
+                    self._heardFrom(name, clock=True)
+            if pkt.get('v') != 1:
+                continue
             if not name or name == self._myName:
                 continue
 
             # Master lock-on / arbitration (elected: by rank, never by who was heard first)
             if self.elected:
                 if not self._electedArbitrate(pkt, name):
+                    if time.time() - lastGap[0] >= 0.2:
+                        gapTick()                   # another emitter's clock is no tick of ours either
                     continue
             elif self.masterName and name != self.masterName:
                 continue

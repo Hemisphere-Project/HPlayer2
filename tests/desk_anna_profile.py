@@ -90,13 +90,14 @@ class Wallclock():
         self.args, self.kw = a, k
         self.drifter = types.SimpleNamespace(deadZoneEnter=0.025, deadZoneExit=0.08)   # Drifter's defaults
         self.orders = []; self.advance = True; self.leading = False; self.dupName = False
-        self.autos = []
+        self.autos = []; self.alone = False
     def order(self, event, args=None, delay_ms=0, auto=False, source=None):
         self.orders.append((event, args, delay_ms))
         if auto:
             self.autos.append((event, args, os.path.basename(source or '')))
         return True
     def mayAdvance(self): return self.advance
+    def advanceAlone(self): return self.alone
     def isLeader(self): return self.leading
 
 
@@ -253,6 +254,19 @@ wc.advance = False
 hp.playlist._index = 0
 hp.emit('playlist.end')
 check(len(wc.orders) == n, 'a follower (mayAdvance False) orders nothing at the track end')
+k = len(hp.playlist.emitted)
+wc.alone = True                                 # cut off alone (#t-089): the next track here, no order
+hp.emit('playlist.end')
+check(hp.playlist.emitted[k:] == [], 'alone: nothing at once (the parc\'s 300 ms order buffer first)')
+_time.sleep(0.45)
+check(len(wc.orders) == n and hp.playlist.emitted[k:] == [('playindex', (1,))],
+      'a follower cut off alone (advanceAlone) plays the next track itself, no order: %s' % hp.playlist.emitted[k:])
+hp.playlist._index = 3
+k = len(hp.playlist.emitted)
+hp.emit('playlist.end')
+_time.sleep(0.45)
+check(len(wc.orders) == n and hp.playlist.emitted[k:] == [], "alone, end of 04_final_stop -> nothing")
+wc.alone = False
 
 # keypad LCD (the locked presses above left a "Locked !" alert up: clear it)
 g['lockAlertCounter'] = 0
