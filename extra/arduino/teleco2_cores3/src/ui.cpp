@@ -338,8 +338,10 @@ static void handleTouch() {
 
     if (T.pressed && t.isPressed()) {
         if (abs(t.y - T.startY) > 12) T.dragged = true;
-        if (T.dragged && !S.locked && S.linked && S.page == 1 && T.startY > PAGE_Y && T.startY < TAB_Y)
-            mediaScroll(t.y - T.lastY);
+        if (T.dragged && !S.locked && S.linked && T.startY > PAGE_Y && T.startY < TAB_Y) {
+            if (S.page == 1) mediaScroll(t.y - T.lastY);
+            else if (S.page == 2) peersScroll(t.y - T.lastY);
+        }
         T.lastY = t.y;
     }
 

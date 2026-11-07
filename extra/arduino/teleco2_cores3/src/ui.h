@@ -53,4 +53,5 @@ void drawPeers(M5Canvas& c);
 void tapTransport(int x, int y);        // page-local coords
 void tapMedia(int x, int y);
 void tapPeers(int x, int y);            // fw 6: pin that player (WiFi attach order)
+void peersScroll(int dyPx);
 void mediaScroll(int dyPx);
