@@ -274,10 +274,11 @@ class WallclockInterface (BaseInterface):
 
         if self.master or self.elected:
             self.drifter = None
-            # Latch (pos, at) pairs from the player status events; the send
+            # Latch (pos, at, mono) from the player status events; the send
             # loop reads the latch at its own rate. No extrapolation here:
             # raw samples out, slaves extrapolate. Single-reference tuple:
             # written by the event thread, read by the send loop.
+            # (pos, at, mono): `at` is wall us for the wire, mono ages it here.
             self._latch = None
             if self.player:
                 self.hplayer.on(self.player.name + '.status')(self._onPlayerStatus)
@@ -629,7 +630,7 @@ class WallclockInterface (BaseInterface):
         latch = self._latch
         if latch is None or abs(latch[0] - float(pos)) > 0.0005:
             return None
-        return time.time() - latch[1] / PRECISION
+        return time.monotonic() - latch[2]
 
     def _pickShift(self, peer):
         """TimeClient first (Thomas, 2026-09-25), the packets as fallback: a missing zyre peer or
@@ -649,7 +650,7 @@ class WallclockInterface (BaseInterface):
         if len(args) < 2:
             return
         if args[0] == 'time' and args[1] is not None:
-            self._latch = (float(args[1]), int(time.time() * PRECISION))
+            self._latch = (float(args[1]), int(time.time() * PRECISION), time.monotonic())
             if self.elected:
                 try:                    # (mpv clears the media at EOF: keep the length for a track-end advance)
                     self._lastDur = float(self.player.status('duration') or 0) or self._lastDur
@@ -702,7 +703,7 @@ class WallclockInterface (BaseInterface):
 
         interval = 1.0 / self.rate
         seq = 0
-        lastBeat = 0.0
+        lastBeat = LONG_AGO
         lastMedia = None
         helloAt = LONG_AGO
 
@@ -793,16 +794,16 @@ class WallclockInterface (BaseInterface):
                 base['z'] = 1 if self.player.isPaused() else 0
 
             latch = self._latch
-            now = time.time()
-            fresh = latch is not None and (now * PRECISION - latch[1]) <= PRECISION
+            wall, now = time.time(), time.monotonic()   # wall for the wire and health.py, mono for elapsed
+            fresh = latch is not None and now - latch[2] <= 1.0
             if self.elected and self.player.isPaused():
                 fresh = False           # paused: the beat below carries the exact frozen position
 
             if fresh:
-                pos, at = latch
+                pos, at, _ = latch
                 pkt = dict(base, at=at, pos=pos, p=bool(self.player.isPlaying()))
                 if send(pkt):
-                    self.hLastClockSend = now
+                    self.hLastClockSend = wall
                 continue
 
             # Player status silent. A player that says it is stopped announces it (1 Hz, p=0): the
@@ -811,13 +812,13 @@ class WallclockInterface (BaseInterface):
             if not self.player.isPlaying() and now - lastBeat >= 1.0:
                 lastBeat = now
                 pos = latch[0] if latch else 0.0
-                send(dict(base, at=int(now * PRECISION), pos=pos, p=False))
+                send(dict(base, at=int(wall * PRECISION), pos=pos, p=False))
             elif self.elected and self.player.isPaused() and now - lastBeat >= 1.0:
                 # Elected: a paused leader says so (1 Hz, z=1, its frozen position), so a follower
                 # that missed the pause pauses too instead of chasing its model of a running clock.
                 lastBeat = now
                 pos = self.player.position()
-                send(dict(base, at=int(now * PRECISION), pos=float(pos) if pos else 0.0, p=True))
+                send(dict(base, at=int(wall * PRECISION), pos=float(pos) if pos else 0.0, p=True))
 
         sock.close()
 

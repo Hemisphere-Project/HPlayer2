@@ -186,7 +186,7 @@ slave.drifter.doLog = False
 # into the master's (simulated) clock: at = real_now + CS
 def feeder():
     while not stopFeed.is_set():
-        master._latch = (mPlayer.position(), int(time.time() * PRECISION) + CS_US)
+        master._latch = (mPlayer.position(), int(time.time() * PRECISION) + CS_US, time.monotonic())
         stopFeed.wait(0.05)
 stopFeed = threading.Event()
 
