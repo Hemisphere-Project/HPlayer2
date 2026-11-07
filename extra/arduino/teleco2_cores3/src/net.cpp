@@ -83,7 +83,9 @@ void netBegin() {
     String s = prefs.getString("ssid", DEFAULT_SSID);
     strlcpy(ssid, s.length() ? s.c_str() : DEFAULT_SSID, sizeof(ssid));
     strlcpy(lastUsed, prefs.getString("last", "").c_str(), sizeof(lastUsed));
-    if (prefs.getBytes("bssid", bssid, 6) == 6) {
+    // isKey first: a missing key makes ESP-IDF print an [E] line on the USB (a fresh flash erases
+    // the whole NVS: the merged image writes 0xFF over it)
+    if (prefs.isKey("bssid") && prefs.getBytes("bssid", bssid, 6) == 6) {
         chan = prefs.getInt("chan", 0);
         haveFast = chan > 0;
     }

@@ -5,7 +5,7 @@
 // 10 min without WiFi on battery -> the screen says so, then the AXP2101 powers the remote off.
 // MODE_USB keeps fw 5's screen: never dims, never re-locks by itself.
 
-#define BRIGHT_DIM          64          // was 24: "too dim, it feels like the device is off" (Thomas, bench 2026-11-07)
+#define BRIGHT_DIM          48          // 24 read as off, 64 a bit much (Thomas, bench 2026-11-07)
 #define DIM_MS              20000UL
 #define LOCK_ON_DIM         0           // Thomas 2026-11-06: no; re-lock after LOCK_AFTER_IDLE_MS
 #define LOCK_AFTER_IDLE_MS  120000UL
