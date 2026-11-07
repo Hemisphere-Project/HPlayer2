@@ -68,7 +68,10 @@ class MpvPlayer(BasePlayer):
         '--no-terminal',
         '--no-config',
         '--profile=low-latency',
-        '--log-file=/tmp/mpv.log',
+        # no --log-file by default: mpv writes that file at DEBUG level whatever -v says, and on a
+        # 102 MB tmpfs it ate 70 MB in a day of seek storm (W1/W2, 2026-09-29) — HPlayer2 then
+        # could not even start (`No space left on device` in color.sh). Opt in for a debug session
+        # with HPLAYER2_MPV_LOG=/run/mpv.log in the environment.
     ]
 
     def __init__(self, hplayer, name):
@@ -76,6 +79,8 @@ class MpvPlayer(BasePlayer):
 
         self._out_dim = {}                       # osd-dimensions/w,h → status 'output' ("1024x768")
         self._mpv_command = self._BASE_ARGS.copy()
+        if os.environ.get('HPLAYER2_MPV_LOG'):
+            self._mpv_command.append('--log-file=' + os.environ['HPLAYER2_MPV_LOG'])
         if sys.platform.startswith('linux'):
             self._mpv_command.append('--ao=alsa')
             # dedicated player platform (Pi-tools audiohub contract):
@@ -301,7 +306,8 @@ class MpvPlayer(BasePlayer):
             self._mpv_send('{ "command": ["observe_property", 9, "container-fps"] }')
             closeToTheEnd = False
             nearendEmitted = False
-            
+            endEmitted = False
+
             self.emit('status', self.status())
 
             # Receive
@@ -338,9 +344,10 @@ class MpvPlayer(BasePlayer):
                                     continue
                                 self.update('isPlaying', not mpvsays['data'])
 
-                                if self.status('isPlaying'): 
+                                if self.status('isPlaying'):
                                     closeToTheEnd = False
                                     nearendEmitted = False
+                                    endEmitted = False
                                     self.emit('playing', self.status('media'))
                                     # self.log('play')
 
@@ -402,8 +409,16 @@ class MpvPlayer(BasePlayer):
                                             self._applyPan(self._pan_current)
 
                             elif mpvsays['name'] == 'eof-reached':
+                                # Trust mpv's EOF on its own. It used to count only when the last
+                                # time-pos update had landed within 0.2 s of the duration
+                                # (closeToTheEnd); when that update lands earlier — about 1 end in 8
+                                # on TAUPAKI's 239 s WAVs, 2026-10-06 — core-idle arrived first,
+                                # 'stopped' went out without 'media-end', the playlist never saw its
+                                # end and the set sat paused at EOF for hours, until the next power
+                                # cut. endEmitted keeps it to one END per file (reset on 'playing').
                                 if 'data' in mpvsays and mpvsays['data'] == True:
-                                    if closeToTheEnd:
+                                    if not endEmitted and self.status('media'):
+                                        endEmitted = True
                                         closeToTheEnd = False
                                         self.update('isPaused', False)
                                         self.update('isPlaying', False)

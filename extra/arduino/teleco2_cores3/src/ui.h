@@ -44,6 +44,7 @@
 
 void uiBegin();
 void uiLoop();
+void uiPowerOff();                      // full-screen notice before the 10-min no-WiFi power-off
 
 // pages.cpp
 void drawTransport(M5Canvas& c);
@@ -51,4 +52,6 @@ void drawMedia(M5Canvas& c);
 void drawPeers(M5Canvas& c);
 void tapTransport(int x, int y);        // page-local coords
 void tapMedia(int x, int y);
+void tapPeers(int x, int y);            // fw 6: pin that player (WiFi attach order)
+void peersScroll(int dyPx);
 void mediaScroll(int dyPx);

@@ -106,6 +106,56 @@ def test_parse_running_state_chunk():
     r = receivers[0]
     assert r['mac'] == 'AA:BB:CC:DD:EE:FF' and r['layer'] == 'main' and r['version'] == '2.0'
     assert r['last_seen'] == 1000 and r['index'] == 9
+    assert r['sync_quality'] == 0xFF                 # pre-2.0.1: no trailer -> unknown
+
+
+def test_parse_running_state_pre_201_wire_frame():
+    """A whole RUNNING_STATE payload (after F0 7D 22) as a pre-2.0.1 master node puts it on the
+    wire: chunk 1 of 2, one 42-byte record, laid out by Nowde v2.0.0 sendRunningState. Literal
+    bytes, so encode7 cannot agree with itself here."""
+    d = [0x0C, 0x00, 0x36, 0x6E, 0x00,                       # uptime 3600000 ms
+         0x01, 0x02, 0x01, 0x02, 0x01,                       # synced, total, chunk, chunks, n
+         0x38, 0x24, 0x6F, 0x28, 0x1A, 0x31, 0x44, 0x68,
+         0x00, 0x70, 0x6C, 0x61, 0x79, 0x65, 0x72, 0x32,
+         0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+         0x00, 0x00, 0x32, 0x2E, 0x30, 0x00, 0x00, 0x00,
+         0x20, 0x00, 0x00, 0x00, 0x00, 0x00, 0x7A, 0x01,
+         0x00, 0x03]
+    meta, receivers = parse_running_state(d)
+    assert meta == {'uptime': 3600000, 'synced': True, 'total': 2, 'chunk': 1, 'chunks': 2}
+    assert len(receivers) == 1
+    r = receivers[0]
+    assert r['mac'] == '24:6F:28:9A:B1:C4' and r['layer'] == 'hplayer2' and r['version'] == '2.0'
+    assert r['last_seen'] == 250 and r['index'] == 3 and r['sync_quality'] == 0xFF
+
+
+def _running_state_record(mac_last, index, trailer):
+    return ([0xA0, 0xB1, 0xC2, 0xD3, 0xE4, mac_last] + list(b'main'.ljust(16, b'\x00'))
+            + list(b'2.0.1'.ljust(8, b'\x00')) + [0, 0, 0x01, 0xF4] + [1, index] + trailer)
+
+
+def test_parse_running_state_reads_every_record_size():
+    """42 (pre-2.0.1), 43 (2.0.1 syncQuality) and 45 (v2.2 syncGaps) encoded bytes per record,
+    one and two records per chunk: the stride follows the record, the fields never move."""
+    for trailer, quality in (([], 0xFF), ([2], 2), ([1, 0x01, 0x2C], 1)):
+        recs = [_running_state_record(0x01, 4, trailer), _running_state_record(0x02, 5, trailer)]
+        for n in (1, 2):
+            d = encode7([0, 0, 0x27, 0x10]) + [1, n, 0, 1, n]
+            for rec in recs[:n]:
+                d += encode7(rec)
+            meta, receivers = parse_running_state(d)
+            assert meta['total'] == n
+            assert [r['mac'][-2:] for r in receivers] == ['01', '02'][:n]
+            assert [r['index'] for r in receivers] == [4, 5][:n]
+            assert all(r['last_seen'] == 500 and r['sync_quality'] == quality for r in receivers)
+
+
+def test_parse_running_state_empty_and_short():
+    meta, receivers = parse_running_state(encode7([0, 0, 0, 1]) + [0, 0, 0, 1, 0])
+    assert meta['total'] == 0 and receivers == []
+    short = encode7(_running_state_record(0x01, 4, []))[:41]          # one byte shy of mac..index
+    assert parse_running_state(encode7([0, 0, 0, 1]) + [1, 1, 0, 1, 1] + short)[1] == []
+    assert parse_running_state([0] * 9) == (None, [])
 
 
 def test_media_index_of():

@@ -216,10 +216,10 @@ def test_bare_hello_needs_the_beacon_to_repeat_before_any_flash():
     t.port = "/dev/ttyACM0"
     t.onConnect()
     t.onLine("hello 1")
-    assert t.flashed == [] and t._helloWait        # the radar box says exactly this, once
+    assert t.flashed == [] and t.usb._helloWait        # the radar box says exactly this, once
     t.onLine("hello 1")
     assert t.flashed == [("/dev/ttyACM0", 0)]       # a fw<=1 remote repeats it: flash allowed
-    assert t._helloWait is None                     # and dumped
+    assert t.usb._helloWait is None                     # and dumped
 
 
 def test_hello_with_fw_is_the_remote_at_once():
@@ -228,7 +228,7 @@ def test_hello_with_fw_is_the_remote_at_once():
     t.onConnect()
     t.onLine("hello 1 5")
     assert t.flashed == [("/dev/ttyACM0", 5)]
-    assert t._helloWait is None
+    assert t.usb._helloWait is None
 
 
 def test_radar_frame_rejects_the_port():
@@ -248,12 +248,13 @@ def test_silence_rejects_on_the_default_filter(monkeypatch):
     t.onConnect()
     time.sleep(0.01)
     t.tick()
-    assert t._rejectReason and t._helloWait         # rejected, nothing sent
+    assert t._rejectReason and t.usb._helloWait         # rejected, nothing sent
     assert t._txQueue.empty()
 
 
 def test_teleco2_filter_setting_overrides_and_is_trusted(monkeypatch):
     monkeypatch.setattr(teleco2_module, "HELLO_WAIT", 0)
+    monkeypatch.setattr(teleco2_module, "DUMP_WAIT", 0)
     hp = FakeHPlayer()
     t = make_teleco2(hp)
     assert hp.settings._settings['teleco2-filter'] == ''   # seeded before settings.load()
@@ -269,6 +270,31 @@ def test_teleco2_filter_setting_overrides_and_is_trusted(monkeypatch):
     t.tick()
     assert t._rejectReason is None                  # trusted: silence gets the dump anyway
     assert not t._txQueue.empty()
+
+
+def test_tcp_session_is_never_probed(monkeypatch):
+    monkeypatch.setattr(teleco2_module, "HELLO_WAIT", 0)
+    t = make_teleco2()                              # default filter: the USB link would probe
+    t.port = "/dev/ttyACM0"                         # a USB link is up beside it
+    sent = []
+    s = teleco2_module.Teleco2Session(t, 'tcp', sent.append)
+    s.onConnect()
+    assert not s._probing
+    s.onLine("T 120,1500,0")                        # a radar-shaped line over TCP is just junk
+    s.onLine("hello 1")                             # one bare hello is enough: no beacon rule
+    assert t._rejectReason is None and t.flashed == []
+    assert s._helloWait is None and sent            # dumped at once
+
+
+def test_trusted_silence_still_dumps_at_ten_seconds(monkeypatch):
+    clock = [1000.0]
+    monkeypatch.setattr(teleco2_module.time, "time", lambda: clock[0])
+    t = make_teleco2(filter="SER=F4:12:FA:00:00:01")
+    t.port = "/dev/ttyACM0"
+    t.onConnect()
+    clock[0] += 10.5
+    t.tick()
+    assert t._rejectReason is None and not t._txQueue.empty()   # as before #t-033
 
 
 def test_radar_rejects_a_remote_beacon_not_its_own_hello():

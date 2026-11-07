@@ -1,6 +1,7 @@
-# TELECO2 — HPlayer2 USB remote (M5Stack CoreS3)
+# TELECO2 — HPlayer2 remote (M5Stack CoreS3)
 
-Touchscreen remote that plugs over USB-C into any HPlayer2 player.
+Touchscreen remote that plugs over USB-C into any HPlayer2 player, or (fw 6) runs on its
+battery over WiFi.
 Speaks **protocol v1** — authoritative spec in `core/interfaces/teleco2.py` (host side).
 
 - **Status bar**: scrolling current-media title, peer count, wifi rssi, volume.
@@ -12,6 +13,28 @@ Speaks **protocol v1** — authoritative spec in `core/interfaces/teleco2.py` (h
   "LOCKED" alert with the unlock hint. No dimming — the screen stays readable.
 - **Hotplug**: powered by the player's USB port; shows "waiting for HPlayer2..." until
   the host talks, greys out after 8 s of silence (player rebooting), recovers alone.
+
+## Wireless (fw 6, hplayer2#t-090)
+
+- **USB wins**: VBUS plus a player talking on the USB = USB mode, WiFi **off** (fw 5 behaviour:
+  no dimming, no automatic re-lock). VBUS without a player (a charger, a laptop) stays wireless
+  and charges. One transport is alive at a time.
+- **On WiFi**: joins the show's SSID (learned from a player's `net` over USB, `pisync` by default;
+  open networks only, a hidden SSID is joined by name). Discovery: UDP `find` to port 3739,
+  players answer `here` (name, port, leader, signal). Attach order: the **pinned** player (tap it
+  on PEERS; tap again to unpin) → the current one → the last used → the clock leader if its
+  signal is ≥ 50 → the best signal. One TCP session (port 3740, protocol v1 lines, `hb` every
+  1 s); no host line for 3 s = dead: buttons disabled, never queued, probe and attach again.
+  Never a byte on the wallclock's 3738.
+- **Status bar**: battery % (amber ≤ 15, red ≤ 5, a bolt while charging), the player's name, the
+  transport (USB / WiFi arcs) with its signal, SYNC. States: NO WIFI → SEARCHING → LINKING.
+- **Power** (on WiFi): dims after 20 s idle — the waking touch only wakes —, re-locks after 2 min
+  idle; 10 min without WiFi on battery: a one-minute countdown (a touch postpones it), then the
+  screen says so and the AXP2101 powers off (power button to restart). Speaker, mic, IMU and the
+  5 V output stay off; CPU 160 MHz; WiFi modem sleep. `bat <pct> <chg>` goes to the player every
+  30 s (its log). Bench build with a 1-minute power-off: `PLATFORMIO_BUILD_FLAGS="-DOFF_AFTER_S=60"`.
+- **Release**: the v6 image must reach **every** player before any remote runs wireless — a player
+  still shipping v5 auto-flashes a v6 remote back to v5 (the host flashes on `!=`).
 
 ## Build / flash (PlatformIO)
 
@@ -70,4 +93,6 @@ boards, other project hardware). Host side (`core/interfaces/teleco2.py`):
 - the per-player `teleco2-filter` setting is the manual escape hatch — key it
   on the USB **serial string** (`SER=<chip MAC>`), never on VID:PID. A filter
   set there (or passed by the profile) is trusted: no probing, and a silent
-  device still gets the state dump after 15 s.
+  device still gets the state dump after 10 s, as before;
+- all of this is the USB link's: a TCP session (WiFi) answered the player's
+  `here`, so it is never probed and no radar box can sit behind it.

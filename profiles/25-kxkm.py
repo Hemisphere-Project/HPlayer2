@@ -245,7 +245,7 @@ for f in glob.glob('/tmp/txt2img*'): os.remove(f)   # clear old msgs
 def textdispatchM(ev, *args):
     zyre = hplayer.interface('zyre')
     peersList = list(zyre.peersList())
-    peersList.remove(zyre.node.zyre.uuid())
+    peersList.remove(zyre.node.uuid)
     if len(peersList) == 0: return
 
     global peers_counter_dispatch

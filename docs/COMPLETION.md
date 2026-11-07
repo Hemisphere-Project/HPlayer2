@@ -35,7 +35,7 @@ source /path/to/HPlayer2/scripts/hplayer2-completion.bash
 
 After setup, you can use tab completion:
 ```bash
-./hplayer2 25-ann<TAB>     # Completes to 25-annatv
+./hplayer2 26-an<TAB>      # Completes to 26-anna
 ./hplayer2 d<TAB>          # Shows: default, decaz
 ./hplayer2 bie<TAB>        # Shows: biennale24, biennale24-midi, biennale24-rtc
 ```

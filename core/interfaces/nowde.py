@@ -53,7 +53,13 @@ CMD_QUERY_RUNNING_STATE = 0x03
 CMD_SET_ROLE = 0x08
 CMD_SET_LOCAL_LAYER = 0x09
 CMD_SET_LOG = 0x0A
+CMD_SET_LR = 0x0B          # 2.0.3+: long-range PHY switch. Sent with the node's CURRENT value it is
+                           # the only host-initiated node reboot (esp_restart 300 ms later): the
+                           # radio re-inits, the USB re-enumerates, we relink. NEVER send a value
+                           # the mesh does not already carry (an LR-only master becomes invisible).
 CMD_MEDIA_SYNC = 0x10
+MEDIASYNC_FLAG_VOLUME = 0x01     # 2.0.4 MEDIA_SYNC tail: the volume byte is meaningful
+MEDIASYNC_FLAG_MUTE = 0x02       # reserved
 CMD_CHANGE_RECEIVER_LAYER = 0x11
 CMD_HELLO = 0x20
 CMD_CONFIG_STATE = 0x21
@@ -100,15 +106,24 @@ def decode7(enc):
     return out
 
 
-def build_media_sync(layer, index, position_ms, playing):
-    """MEDIA_SYNC payload (without F0/F7): 7D 10 layer(16) index(1) pos(5) state(1) = 25 bytes."""
+def build_media_sync(layer, index, position_ms, playing, volume=None):
+    """MEDIA_SYNC payload (without F0/F7): 7D 10 layer(16) index(1) pos(5) state(1) = 25 bytes,
+    plus the 2.0.4 tail volume(1) flags(1) when a volume is given (27 bytes).
+
+    The tail is APPENDED so a 2.0.3 node ignores it (it reads fixed offsets and accepts any frame
+    from 27 bytes on the wire); a 2.0.4 node reads it only when the frame is long enough. So the
+    node and the host can be updated in either order, and a fleet with the link off is byte-identical
+    to 2.0.3 traffic."""
     layer_bytes = (str(layer)[:16] + '\x00' * 16)[:16].encode('ascii', errors='replace')
     index = max(0, min(127, int(index)))
     position_ms = max(0, int(position_ms)) & 0xFFFFFFFF
     pos_raw = [(position_ms >> 24) & 0xFF, (position_ms >> 16) & 0xFF,
                (position_ms >> 8) & 0xFF, position_ms & 0xFF]
-    return ([SYSEX_MANUFACTURER_ID, CMD_MEDIA_SYNC] + list(layer_bytes) + [index]
-            + encode7(pos_raw) + [1 if playing else 0])
+    out = ([SYSEX_MANUFACTURER_ID, CMD_MEDIA_SYNC] + list(layer_bytes) + [index]
+           + encode7(pos_raw) + [1 if playing else 0])
+    if volume is not None:
+        out += [max(0, min(100, int(volume))), MEDIASYNC_FLAG_VOLUME]
+    return out
 
 
 def build_change_receiver_layer(mac, layer):
@@ -136,6 +151,8 @@ def parse_hello(d):
         info['board'] = BOARD_NAMES.get(d[17], 'unknown')
     if len(d) >= 19:                       # 2.0.1: this node's own lock quality
         info['sync_quality'] = d[18]       # 0 none, 1 coarse (following, mesh off), 2 locked
+    if len(d) >= 20:                       # 2.0.3: long-range PHY switch as the node runs it
+        info['lr'] = bool(d[19])
     return info
 
 
@@ -195,8 +212,14 @@ def seq_subscribed(text, our_client, node_client):
     return re.search(r'Connected From:\s*%d:\d+' % node_client, block) is not None
 
 
+RUNNING_STATE_RECORD_MIN = 42           # pre-2.0.1 record: mac..mediaIndex, 36 raw -> 42 encoded
+
+
 def parse_running_state(d):
-    """One chunk. Returns (meta, [receiver dicts])."""
+    """One chunk. Returns (meta, [receiver dicts]).
+    The firmware only ever grows a record by appending a trailer (2.0.1 syncQuality: 37 raw ->
+    43 encoded; v2.2 syncGaps: 39 -> 45), so the record size is read off the chunk, never
+    assumed: a fixed 43 dropped every pre-2.0.1 record whole and the slave table read empty."""
     if len(d) < 10:
         return None, []
     up = decode7(d[0:5])
@@ -205,13 +228,12 @@ def parse_running_state(d):
     n = d[9]
     receivers = []
     idx = 10
+    size = (len(d) - idx) // n if n else 0
+    if size < RUNNING_STATE_RECORD_MIN:
+        return meta, receivers
     for _ in range(n):
-        if idx + 43 > len(d):              # 2.0.1: 37 raw -> 43 encoded (was 36 -> 42)
-            break
-        r = decode7(d[idx:idx + 43])
-        idx += 43
-        if len(r) < 36:
-            break
+        r = decode7(d[idx:idx + size])
+        idx += size
         mac = r[0:6]
         receivers.append({
             'mac': ':'.join('%02X' % b for b in mac), 'mac_bytes': mac,
@@ -252,7 +274,32 @@ class NowdeInterface(BaseInterface):
         'nowde-jumpfix':       500,         # slave: seek-latency compensation ms (300 RockPro64, ~1000 laptop)
         'nowde-dance':         False,       # slave: Drifter smart-join instead of blind seeks
         'nowde-nodelog':       False,       # v2 node: stream its own log into ours (SET_LOG / LOG frames)
+        # 2.0.4 master-driven volume. MASTER: 'off' | 'absolute' -- absolute puts this player's
+        # `volume` in every MEDIA_SYNC, so the whole mesh runs at the master's level (a lost frame
+        # costs nothing: the next packet, 100 ms later, repeats it). SLAVE: obey the CC#7 that its
+        # node emits from that level. Both off by default: nothing changes until they are set.
+        'nowde-volume-link':   'off',
+        'nowde-volume-follow': False,
+        # 2026-09-29 (MBA garden, W1-W6 after two master-radio deaths): a slave in doubt goes SILENT,
+        # then resets its node and tries to catch back; a master hearing nobody resets its node.
+        # SLAVE `nowde-silence-stop`: playing while the node reports sync_quality 0 (link lost, or
+        #   the master stopped and we missed the CC#100=0 edge) or answers no HELLO, for this many
+        #   seconds -> stop. The master's CC#100 (repeated every second while it plays) resumes us.
+        #   The measured data: every sq=0 episode while playing was final until a reboot; the
+        #   node's own link-lost threshold is 10 s; so 180 s is generous, not tight. 0 = off.
+        # BOTH `nowde-node-reset`: seconds after which the node is soft-reset (SET_LR, same value)
+        #   -- master: RUNNING_STATE has listed no receiver that long (W3 24/09 16:54 and 28/09
+        #   15:14: ESP-NOW TX wedged, every send NO_MEM, cured by exactly this reset on 29/09);
+        #   slave: it should be playing (the silence guard stopped it, or its own schedule is open
+        #   on a SANE RTC) yet the node hears nothing that long. At most one reset per 15 min.
+        #   0 = off.
+        'nowde-silence-stop':  180,
+        'nowde-node-reset':    300,
     }
+    VOLUME_SETTLE = 0.5             # master: carry a level only once it has held still this long
+    VOLUME_PERSIST_DELAY = 2.0      # slave: apply live, write the cfg only after this much quiet
+    NODE_RESET_MIN_GAP = 900.0      # never two soft resets of the node closer than this
+    HELLO_SILENCE = 30.0            # slave: no HELLO for this long = the node is not answering (probe is 2 s)
 
     def __init__(self, hplayer, player=None, port_name=None, max_retry=0, mode='auto'):
         if _MIDO_IMPORT_ERROR:
@@ -301,9 +348,24 @@ class NowdeInterface(BaseInterface):
         self._lastPoll = 0.0
         self._lastProbe = 0.0
         self._lastStatus = 0.0
-        self._lastSent = None           # (index, playing) of the last MEDIA_SYNC
+        self._lastSent = None           # (index, playing, volume) of the last MEDIA_SYNC
+        self._volRaw = None             # master: the slider's current value (may still be moving)
+        self._volRawSince = 0.0         # master: since when it has held that value
+        self._volCarried = None         # master: the settled level actually put on the wire
+        self._volApplied = None         # slave: level currently applied to the player (CC#7)
+        self._volPending = None         # slave: level waiting to be written to the cfg
+        self._volLastSeen = 0.0
         self._stopSince = None          # master: when the player last went not-playing
         self._assigned = set()          # macs we already re-layered
+        # silence guard / node reset (see DEFAULTS)
+        self._lastHelloAt = 0.0         # last HELLO on this link
+        self._lastWatch = 0.0
+        self._sqZeroSince = None        # slave: since when the node reports no sync while we play
+        self._guardStopped = False      # slave: we stopped by ourselves; no CC#100 has spoken since
+        self._silentSince = None        # slave: since when we should play but the node hears nothing
+        self._tableEmptySince = None    # master: since when RUNNING_STATE lists no receiver
+        self._lastNodeReset = 0.0       # both: last soft reset we asked the node for
+        self._wasSlave = (mode == 'slave')   # the role survives a link loss for the guard's purpose
 
         # Slave sync state (the chase-lock servo lives in the shared Drifter)
         self.jumpFix = 500       # seek-latency compensation (300ms RockPro64 on loop, 1000ms laptop)
@@ -357,6 +419,7 @@ class NowdeInterface(BaseInterface):
         if self.role == role:
             return
         self.role = role
+        self._wasSlave = (role == 'slave')
         self.log(colored(f"role: {role.upper()} ({source})", 'cyan'))
         self.emit('role', role)
         if role == 'master' and self.out:
@@ -445,15 +508,38 @@ class NowdeInterface(BaseInterface):
                 index, playing = self._lastSent[0], True
         else:
             self._stopSince = None
+        volume = None
+        if str(self._cfg('nowde-volume-link')) == 'absolute':
+            try:
+                raw = max(0, min(100, int(self.hplayer.settings.get('volume'))))
+            except (TypeError, ValueError):
+                raw = None
+            if raw is not None:
+                # Debounce the SOURCE, not just the slaves' cfg writes: dragging the master's
+                # slider walks through tens of values, and each distinct one would otherwise go out
+                # at once (it is part of `changed`) and be applied by five players. A level is put
+                # on the wire only once it has held still for VOLUME_SETTLE; until then the
+                # previous one keeps being carried, so the fleet hears one clean step ~0.5 s after
+                # the slider stops instead of the whole drag. The first level after the link is
+                # switched on (or after a restart) is carried immediately.
+                if raw != self._volRaw:
+                    self._volRaw = raw
+                    self._volRawSince = now
+                if self._volCarried is None:
+                    self._volCarried = raw
+                elif raw != self._volCarried and now - self._volRawSince >= self.VOLUME_SETTLE:
+                    self._volCarried = raw
+                volume = self._volCarried
         interval = self.SYNC_INTERVAL if playing else self.SYNC_IDLE_INTERVAL
-        changed = (index, playing) != self._lastSent
+        changed = (index, playing, volume) != self._lastSent
         if not (force or changed or now - self._lastSyncSend >= interval):
             return
-        if self._send(build_media_sync(self._cfg('nowde-layer'), index, position_ms, playing)):
+        if self._send(build_media_sync(self._cfg('nowde-layer'), index, position_ms, playing, volume)):
             self._lastSyncSend = now
             if changed:
-                self.log(f"MEDIA_SYNC layer={self._cfg('nowde-layer')} index={index} state={'playing' if playing else 'stopped'}")
-                self._lastSent = (index, playing)
+                self.log(f"MEDIA_SYNC layer={self._cfg('nowde-layer')} index={index} state={'playing' if playing else 'stopped'}"
+                         + (f" volume={volume}" if volume is not None else ""))
+                self._lastSent = (index, playing, volume)
 
     def _on_player_edge(self, ev, *args):
         if self.isMaster():
@@ -481,6 +567,7 @@ class NowdeInterface(BaseInterface):
             if not info:
                 return
             self.node.update(info)
+            self._lastHelloAt = time.time()
             self.log(f"HELLO v{info['version']} up={info['uptime']}ms boot={info['boot_reason']}"
                      + (f" role={info['role']} board={info['board']}" if 'role' in info else " (v1 node)"))
             self.emit('hello', info)
@@ -547,7 +634,7 @@ class NowdeInterface(BaseInterface):
             slaves_locked = None
         self.emit('status', {
             'linked': self.isLinked(), 'role': self.role, 'port': self._resolved_port_name,
-            'node': {k: v for k, v in self.node.items() if k in ('version', 'role', 'board', 'layer')},
+            'node': {k: v for k, v in self.node.items() if k in ('version', 'role', 'board', 'layer', 'lr')},
             'mesh_synced': self.mesh_synced, 'slaves': len(self.receivers),
             'sync_quality': own_quality,
             'locked': (own_quality == 2) if own_quality is not None else None,
@@ -569,14 +656,22 @@ class NowdeInterface(BaseInterface):
                         if now - self._lastPoll >= self.POLL_INTERVAL:
                             self._lastPoll = now
                             self._probe()
+                        self._master_watch(now)
                     else:
                         if now - self._lastProbe >= self.PROBE_INTERVAL:
                             self._lastProbe = now
                             self._probe()
+                        self._volume_persist_tick()   # 2.0.4: commit a settled linked volume
+                        self._slave_watch(now)
                         if (self.mode == 'auto' and self.role is None
                                 and now - self._connected_at > self.PROBE_TIMEOUT):
                             self._set_role('slave', 'no HELLO, assuming v1 node')
                     self._push_status()
+                else:
+                    # Link down (node re-enumerating, or gone for good): the guard must still run —
+                    # a slave whose node vanished while it played would otherwise play on forever,
+                    # unsynced, with nothing left to say stop (fuzz F3, 2026-09-29).
+                    self._slave_watch(time.time())
             except Exception as err:
                 self.log(colored(f"emitter error: {err}", 'red'))
             self.stopped.wait(0.02)
@@ -611,6 +706,8 @@ class NowdeInterface(BaseInterface):
             elif message.type == 'control_change':
                 if message.control == 100 and not self.isMaster():
                     self.handle_media_selection(message.value)
+                elif message.control == 7 and not self.isMaster() and self._cfg('nowde-volume-follow'):
+                    self.handle_linked_volume(message.value)
             # 'start' / 'stop' real-time messages from v2 nodes: CC#100 already carries the
             # transition, nothing to do here.
 
@@ -661,9 +758,23 @@ class NowdeInterface(BaseInterface):
                         self._probe()
 
                 # Monitor connection health
+                enum_errors = 0
                 while not self.stopped.is_set() and self.port is not None:
-                    # Check if port still exists in available ports
-                    available_ports = mido.get_input_names()
+                    # Check if port still exists in available ports. The enumeration itself can
+                    # fail for a moment (`MidiInAlsa::getPortName: error looking for port name!`,
+                    # W6 2026-09-23 12:44) while the node is fine — a HELLO arrived in the same
+                    # second. That used to tear the link down; now only three failures in a
+                    # row count as a lost port.
+                    try:
+                        available_ports = mido.get_input_names()
+                        enum_errors = 0
+                    except Exception as err:
+                        enum_errors += 1
+                        self.log(colored(f"port enumeration failed ({enum_errors}/3): {err}", 'yellow'))
+                        if enum_errors >= 3:
+                            break
+                        self.stopped.wait(self.CONNECTION_CHECK_INTERVAL)
+                        continue
                     if target_port not in available_ports:
                         self.log(colored(f"WARNING: MIDI port '{target_port}' disconnected!", 'red'))
                         break
@@ -698,20 +809,41 @@ class NowdeInterface(BaseInterface):
         self._close_ports()
         self.log("listener stopped")
 
+    PORT_CLOSE_TIMEOUT = 3.0
+
     def _close_ports(self):
         for attr in ('port', 'out'):
             p = getattr(self, attr)
             if p is not None:
-                try:
-                    p.close()
-                except Exception as close_err:
-                    self.log(f"error closing {attr}: {close_err}")
                 setattr(self, attr, None)
+                # rtmidi's close() can block for good on a port whose device is going away:
+                # on W6 (2026-09-23 12:44 → power-off ~00:15) the listener never came back
+                # from here, so no relink was ever attempted and the slave freewheeled ~11 h
+                # while usbfix re-enumerated the node four times for nothing. Close off-thread
+                # with a deadline; past it, abandon the handle (a leaked thread beats a dead link).
+                def _do_close(p=p, attr=attr):
+                    try:
+                        p.close()
+                    except Exception as close_err:
+                        self.log(f"error closing {attr}: {close_err}")
+                t = threading.Thread(target=_do_close, name='nowde-close-' + attr, daemon=True)
+                try:
+                    t.start()
+                except RuntimeError as err:
+                    self.log(colored(f"cannot close {attr} off-thread ({err}): abandoning it", 'red'))
+                    continue
+                t.join(self.PORT_CLOSE_TIMEOUT)
+                if t.is_alive():
+                    self.log(colored(f"closing {attr} hung > {self.PORT_CLOSE_TIMEOUT:.0f} s: abandoned, relinking anyway", 'red'))
         self._resolved_port_name = None
         self.receivers = []
         self.mesh_synced = False
         self.lastCC = None          # the next node's first CC#100 must act, even if it repeats ours
         self.isStopped = False
+        self._lastHelloAt = 0.0     # a new link starts its own silence clocks (`_guardStopped` survives:
+        self._sqZeroSince = None    # a relink does not mean the master spoke)
+        self._silentSince = None
+        self._tableEmptySince = None
         if self.mode == 'auto':
             self.role = None        # the next node may be another role
 
@@ -727,7 +859,11 @@ class NowdeInterface(BaseInterface):
             attempts += 1
             ports_display = ", ".join(available) if available else "none"
             total = self.max_retry if self.max_retry else "inf"
-            self.log(f"retry {attempts}/{total}: waiting for MIDI input {self._port_filter_label()} (available: {ports_display})")
+            # A player without a node retried every 5 s for weeks: 17 000 lines a day, each one
+            # followed by the log delimiter — the journal of every non-Nowde player was 90 % this
+            # (2026-09-18). Say it three times, then once every 5 minutes.
+            if attempts <= 3 or attempts % 60 == 0:
+                self.log(f"retry {attempts}/{total}: waiting for MIDI input {self._port_filter_label()} (available: {ports_display})")
 
             if self.max_retry and attempts >= self.max_retry:
                 break
@@ -758,6 +894,51 @@ class NowdeInterface(BaseInterface):
 
     # ------------------------------------------------------------------ slave leg
 
+    def handle_linked_volume(self, value):
+        """CC#7 from our node = the master's absolute level (2.0.4). Apply it to the player at once;
+        persist it to the cfg only after VOLUME_PERSIST_DELAY without a CHANGE.
+
+        The quiet period must ignore repeats: the node resends the level every second so a host that
+        just booted catches up, and counting those as activity kept the timer alive for ever — the
+        cfg was never written (W4, 2026-09-22: mpv at 50, cfg stuck at 55).
+
+        The master repeats the level every second and sends it at 10 Hz while playing, and
+        `settings.set` writes the cfg file on every change: persisting each value would mean tens of
+        card writes per second on every slave during a slider drag. So the live value goes straight
+        to the player and the file is written once the dragging stops (a slave that reboots then
+        comes up at the last level it saw, and the master corrects it within a second anyway)."""
+        try:
+            v = max(0, min(100, int(value)))
+        except (TypeError, ValueError):
+            return
+        if v == self._volApplied:
+            return          # a repeat (the node resends every second so a fresh host catches up):
+                            # nothing to apply, and it must NOT restart the settle timer below
+        self._volApplied = v
+        self._volPending = v
+        self._volLastSeen = time.time()     # only a CHANGE counts as "still moving"
+        if self.player:
+            try:
+                # respect a local mute exactly as hplayer's own do-volume handler does
+                muted = bool(self.hplayer.settings.get('mute'))
+                self.player._applyVolume(0 if muted else v)      # live, no cfg write
+            except Exception as e:
+                self.log(colored(f"volume-link: cannot apply {v}: {e}", 'yellow'))
+        self.log(f"CC#7={v}: volume from the master")
+
+    def _volume_persist_tick(self):
+        """Called from the interface thread: commit a settled linked volume to the cfg."""
+        if self._volPending is None:
+            return
+        if time.time() - self._volLastSeen < self.VOLUME_PERSIST_DELAY:
+            return
+        v, self._volPending = self._volPending, None
+        try:
+            if int(self.hplayer.settings.get('volume')) != v:
+                self.hplayer.settings.set('volume', v)   # one cfg write, once the drag is over
+        except (TypeError, ValueError):
+            self.hplayer.settings.set('volume', v)
+
     def handle_media_selection(self, cc_value):
         """Handle CC#100 for media selection"""
         # Only process if CC value changed
@@ -765,6 +946,8 @@ class NowdeInterface(BaseInterface):
             return
 
         self.lastCC = cc_value
+        self._guardStopped = False      # the master spoke: whatever it says, we are no longer in doubt
+        self._silentSince = None
 
         if cc_value == 0:
             # Stop playback
@@ -808,6 +991,115 @@ class NowdeInterface(BaseInterface):
                 self.isStopped = True
                 self.lastPattern = None
 
+    # ------------------------------------------------------------------ silence guard / node reset
+
+    def _cfg_seconds(self, key):
+        try:
+            return max(0.0, float(self._cfg(key) or 0))
+        except (TypeError, ValueError):
+            return 0.0
+
+    def _node_soft_reset(self, reason, now=None):
+        """Reboot the node from here: SET_LR with the value it already carries (2.0.3+ restarts on
+        any SET_LR). The radio re-inits, USB re-enumerates (~3 s), the listener relinks by itself.
+        Refused when the node's LR flag is unknown: guessing it could split the mesh."""
+        lr = self.node.get('lr')
+        if lr is None or not self.out:
+            self.log(colored(f"node reset wanted ({reason}) but the node's LR flag is unknown: not sent", 'yellow'))
+            return False
+        self._lastNodeReset = now if now is not None else time.time()
+        self.log(colored(f"NODE SOFT RESET: {reason} -> SET_LR {1 if lr else 0} (unchanged value; the node restarts)", 'red'))
+        self.emit('node-reset', reason)
+        return bool(self._send(build_simple(CMD_SET_LR, 1 if lr else 0)))
+
+    def _schedule_open_on_sane_clock(self):
+        """True only when this player's own schedule is enabled, an RTC is present, the clock is
+        sane and the window is open -- the slave's window is a plausibility check, never a trigger
+        (the schedule interface fails OPEN on a missing/insane clock, so each guard is re-asserted)."""
+        s = self.hplayer.interface('schedule')
+        if not s:
+            return False
+        try:
+            return bool(s._cfgBool('schedule-enable') and s.rtcPresent and s._clockSane() and s.isOpen())
+        except Exception:
+            return False
+
+    def _slave_watch(self, now):
+        """Once a second on a slave: (1) the silence guard -- playing with no sync for too long ->
+        stop; (2) the reset rule -- we should be playing but the node hears nothing -> reset it."""
+        if now - self._lastWatch < 1.0:
+            return
+        self._lastWatch = now
+        # While the link is down `_close_ports` has reset the role (mode auto): a slave that lost its
+        # node is still a slave for this purpose.
+        slave = self.isSlave() or (self.role is None and self._wasSlave)
+        if not slave or not self.player:
+            return
+        linked = self.out is not None
+        sq = self.node.get('sync_quality')
+        hello_age = (now - self._lastHelloAt) if (self._lastHelloAt and self.node.get('version')) else None
+        node_silent = (not linked) or (sq == 0) or (hello_age is not None and hello_age > self.HELLO_SILENCE)
+        playing = bool(self.player.isPlaying()) and not self.isStopped
+
+        grace = self._cfg_seconds('nowde-silence-stop')
+        if grace > 0 and playing and node_silent:
+            if self._sqZeroSince is None:
+                self._sqZeroSince = now
+            elif now - self._sqZeroSince >= grace:
+                why = (f"node link down for {int(now - self._sqZeroSince)} s" if not linked
+                       else f"node reports no sync for {int(now - self._sqZeroSince)} s" if sq == 0
+                       else f"no HELLO from the node for {int(hello_age)} s")
+                self.log(colored(f"SILENCE GUARD: {why} while playing -> stopping (the master's CC#100 resumes us)", 'red'))
+                self.player.stop()
+                self.isStopped = True
+                self.lastCC = 0
+                self.lastPattern = None
+                self._guardStopped = True
+                self._sqZeroSince = None
+                self._silentSince = now
+                self.emit('silence-stop', why)
+                return
+        else:
+            self._sqZeroSince = None
+
+        reset_after = self._cfg_seconds('nowde-node-reset')
+        if reset_after <= 0 or playing or not linked:     # no link = nothing to reset (usbfix's job)
+            self._silentSince = None
+            return
+        expected = self._guardStopped or self._schedule_open_on_sane_clock()
+        if expected and node_silent:
+            if self._silentSince is None:
+                self._silentSince = now
+            elif (now - self._silentSince >= reset_after
+                    and now - self._lastNodeReset >= self.NODE_RESET_MIN_GAP):
+                why = ('stopped by the silence guard' if self._guardStopped else 'own schedule open on a sane clock')
+                if self._node_soft_reset(f"slave should be playing ({why}) but the node hears no master for {int(now - self._silentSince)} s", now):
+                    self._silentSince = now
+        else:
+            self._silentSince = None
+
+    def _master_watch(self, now):
+        """Once a second on a master: RUNNING_STATE listing no receiver for `nowde-node-reset` s ->
+        soft-reset the node. At any hour the powered slaves beacon every second, so an empty table
+        is abnormal by itself; the one benign case (every slave unpowered) costs an idle node reboot
+        per 15 min. The 24/09 and 28/09 deaths were both this shape (TX wedged, NO_MEM on every send)."""
+        if now - self._lastWatch < 1.0:
+            return
+        self._lastWatch = now
+        reset_after = self._cfg_seconds('nowde-node-reset')
+        if reset_after <= 0:
+            return
+        if self.receivers:
+            self._tableEmptySince = None
+            return
+        if self._tableEmptySince is None:
+            self._tableEmptySince = now
+            return
+        if (now - self._tableEmptySince >= reset_after
+                and now - self._lastNodeReset >= self.NODE_RESET_MIN_GAP):
+            if self._node_soft_reset(f"receiver table empty for {int(now - self._tableEmptySince)} s", now):
+                self._tableEmptySince = now
+
     def handle_timecode(self, ev, *args):
         """Feed the external MTC/OSC clock to the shared chase-lock servo."""
         if self.player is None or self.drifter is None:
@@ -826,7 +1118,18 @@ class NowdeInterface(BaseInterface):
         else:
             clock = round(float(args[0]), 2)  # osc.time -> seconds
 
-        self.drifter.tick(clock)
+        # The node knows nothing about the media: a slave node that lost its master free-runs its
+        # clock past the loop point (601, 707 ... 37 146 s seen on W2/W4, 25-29/09). The Drifter
+        # already wraps a diff and a seek target onto the loop when it knows the duration -- the
+        # Nowde path just never passed it. Without it every tick was a seek past EOF: a stop /
+        # play / seek storm at 1 Hz that filled /tmp and took HPlayer2 down. With it, a freewheel
+        # is a coherent progression, and the silence guard decides when it ends.
+        duration = 0.0
+        try:
+            duration = float(self.player.status().get('duration') or 0)
+        except Exception:
+            duration = 0.0
+        self.drifter.tick(clock, duration)
 
     def _restart_on_loop(self):
         """Drifter stall hook: the local video ended while the master clock

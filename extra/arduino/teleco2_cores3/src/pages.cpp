@@ -2,6 +2,7 @@
 #include "state.h"
 #include "link.h"
 #include "ui.h"
+#include "net.h"
 
 //
 // TRANSPORT page — outlined deck keys + 7-seg volume + segmented progress
@@ -212,8 +213,32 @@ void tapMedia(int x, int y) {
 }
 
 //
-// PEERS page — LED square + mono name + link state
+// PEERS page — LED square + mono name + link state. Rows in a STABLE order (by name): the attached
+// player is marked " *", the pinned one " PIN" — an operator learns "row 2 = Anna-02" (bench
+// 2026-11-07: attached-first reshuffled the rows after every attach, and a pin landed one row off).
+// Drag to scroll: a 14-player fleet does not fit the 7 rows.
 //
+
+static uint8_t order[PEERS_MAX];
+static int peersTop = 0;            // first visible row
+static int peersAccum = 0;
+
+static int sortPeers() {
+    int n = S.peersN;
+    for (int i = 0; i < n; i++) order[i] = i;
+    for (int i = 1; i < n; i++) {   // insertion sort by name (zero-padded Anna-01..14 sort right)
+        uint8_t k = order[i];
+        int j = i - 1;
+        while (j >= 0 && strcmp(S.peers[order[j]].nm, S.peers[k].nm) > 0) {
+            order[j + 1] = order[j];
+            j--;
+        }
+        order[j + 1] = k;
+    }
+    int visible = PAGE_H / ROW_H;
+    peersTop = constrain(peersTop, 0, max(0, n - visible));
+    return n;
+}
 
 void drawPeers(M5Canvas& c) {
     c.setFont(F_MONO);
@@ -229,26 +254,45 @@ void drawPeers(M5Canvas& c) {
     static const uint16_t LK_COL[4] = {C_RED, C_DIM, C_AMBER, C_GREEN};
     static const char* LK_TXT[4] = {"GONE", "SILENT", "EVASIVE", "OK"};
 
+    int n = sortPeers();
     char txt[40];
     int visible = PAGE_H / ROW_H;
-    for (int r = 0; r < visible && r < S.peersN; r++) {
+    for (int r = 0; r < visible && peersTop + r < n; r++) {
         int y = r * ROW_H;
-        const Peer& p = S.peers[r];
+        const Peer& p = S.peers[order[peersTop + r]];
+        bool pin = S.pinned[0] && !strcmp(p.nm, S.pinned);
         c.fillRect(8, y + ROW_H / 2 - 5, 10, 10, LK_COL[p.lk & 3]);
         c.drawRect(7, y + ROW_H / 2 - 6, 12, 12, C_LINE);
-        snprintf(txt, sizeof(txt), "%s%s", p.nm, p.me ? " *" : "");
+        snprintf(txt, sizeof(txt), "%s%s%s", p.nm, p.me ? " *" : "", pin ? " PIN" : "");
         c.setTextColor(p.me ? C_CYAN : C_PAPER);
         c.drawString(txt, 28, y + ROW_H / 2);
         c.setTextColor(LK_COL[p.lk & 3]);
         c.setTextDatum(middle_right);
-        c.drawString(LK_TXT[p.lk & 3], SCREEN_W - 10, y + ROW_H / 2);
+        c.drawString(LK_TXT[p.lk & 3], SCREEN_W - 14, y + ROW_H / 2);
         c.setTextDatum(middle_left);
     }
-    if (S.peersN > visible) {
-        snprintf(txt, sizeof(txt), "+%d", S.peersN - visible);
-        c.setTextColor(C_DIM);
-        c.setTextDatum(middle_right);
-        c.drawString(txt, SCREEN_W - 10, PAGE_H - 8);
-        c.setTextDatum(middle_left);
+    if (n > visible) {              // scrollbar, as on MEDIA
+        int sbH = max(12, PAGE_H * visible / n);
+        int sbY = (PAGE_H - sbH) * peersTop / (n - visible);
+        c.fillRect(SCREEN_W - 5, sbY, 4, sbH, C_DIM);
     }
+}
+
+void peersScroll(int dyPx) {
+    peersAccum += dyPx;
+    int rows = peersAccum / ROW_H;
+    if (rows != 0) {
+        peersAccum -= rows * ROW_H;
+        int visible = PAGE_H / ROW_H;
+        peersTop = constrain(peersTop - rows, 0, max(0, (int)S.peersN - visible));
+        S.dPage = true;
+    }
+}
+
+// tap a peer: pin it (the WiFi attach order tries it first); tap it again: unpin
+void tapPeers(int x, int y) {
+    int n = sortPeers();
+    int r = peersTop + y / ROW_H;
+    if (y >= 0 && r < n)
+        netPin(S.peers[order[r]].nm);
 }

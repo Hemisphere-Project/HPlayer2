@@ -1,11 +1,14 @@
 from .base import BaseInterface
 from ..module import safe_print
+from ..engine import network
 import importlib
 import time
 import random
 from time import sleep
 import json
-from threading import Timer, Lock
+from threading import Timer, Lock, Thread
+import queue
+import sys
 
 from ctypes import string_at, create_string_buffer
 from sys import getsizeof
@@ -61,18 +64,40 @@ def zlist_strlist(zlist):
 
 PING_PEER = 1000
 
+#
+#  REAPER: tear peers down off the zyre actor thread
+#
+#  Peer.stop() waits up to 1 s for its TimeClient and 1 s for its Subscriber. Called from the
+#  node's actor on ENTER/EXIT, that froze the one thread that also answers every slave's clock
+#  samples and zyre's own heartbeats: during a link-flap storm (Kouagou01-64, 2026-09-25 05:49,
+#  hundreds of ENTER/EXIT a minute for kouagou03) each teardown made the next flap likelier and
+#  starved every slave's clock sync. One long-lived worker, a queue, never a thread per peer.
+_reapQ = queue.Queue()
+_reaper = [None]
+
+def _reapLoop():
+    while True:
+        peer = _reapQ.get()
+        try:
+            peer.stop()
+        except Exception as e:
+            safe_print('peer teardown error (ignored):', e)
+
+def reap(peer):
+    peer.active = False             # out of every lookup right now, torn down in the background
+    if _reaper[0] is None or not _reaper[0].is_alive():
+        t = Thread(target=_reapLoop, name='zyre-reaper', daemon=True)
+        try:
+            t.start()
+            _reaper[0] = t
+        except RuntimeError:
+            peer.stop()             # no thread to spare: tear down inline, as before
+            return
+    _reapQ.put(peer)
+
 PRECISION = 1000000
 SAMPLER_SIZE = 100
 KEEP_SAMPLE = [0.001, 0.3]
-
-# Wall-clock step detection (s). A hard step on either machine's
-# CLOCK_REALTIME shifts every measured peer clockshift by the step size, and
-# nothing notices until the 120s refresh fires - so the fleet chases a wrong
-# master position for up to two minutes. Kept well under the pi-tools
-# datesync deadband (3s) so a correction that IS applied out there is always
-# caught here, and far above any scheduling jitter between two reads taken
-# microseconds apart.
-CLOCK_STEP = 0.25
 
 #
 #  Round Trip REQ-REP Time sample
@@ -80,8 +105,7 @@ CLOCK_STEP = 0.25
 class TimeSample():
     def __init__(self, sock):
         self.sock = sock
-        self.MT1 = time.monotonic()                    # local ELAPSED reference
-        self.LT1 = int(time.time()*PRECISION)          # wall instant, for the shift
+        self.LT1 = int(time.time()*PRECISION)
         msg = Zmsg()
         msg.addstr( str(self.LT1).encode() )
         Zmsg.send( msg, self.sock)
@@ -89,16 +113,10 @@ class TimeSample():
     def recv(self):
         if not self.sock:
             return
-        self.MT2 = time.monotonic()
+        self.LT2 = int(time.time()*PRECISION)
         self.ST = int(Zmsg.recv(self.sock).popstr().decode())
         self.sock = None
-        # RTT is a LOCAL elapsed measurement: monotonic. A wall step mid
-        # round-trip used to inflate it by the step size, which poisons the
-        # SELECTION too - compute() sorts and weights the sampler by RTT.
-        self.RTT = int((self.MT2 - self.MT1) * PRECISION)
-        # CS is by definition a WALL difference between the two machines:
-        # the local wall instant at send, plus half the (now clean) elapsed
-        # round trip, is when the peer read its own wall clock as ST.
+        self.RTT = self.LT2 - self.LT1
         self.CS = self.ST - (self.RTT/2) - self.LT1
 
 
@@ -110,29 +128,63 @@ class TimeClient():
         self.client_ip = ip
         self.url = ("tcp://"+self.client_ip+":"+port).encode()
         self.clockshift = 0
-        self._actor_fn = zactor_fn(self.actor_fn) # ctypes function reference must live as long as the actor.
+        self.status = 0
+        self._refresh = None
+        self._terminated = False
+        self._actor_fn = zactor_fn(self.actor_fn_guarded) # ctypes function reference must live as long as the actor.
         self.done = True
+        self.failures = 0           # failed rounds in a row
         self.start()
+
+    def actor_fn_guarded(self, pipe, args):
+        try:
+            self.actor_fn(pipe, args)
+        except Exception as e:
+            safe_print("\t", "["+self.client_ip+"]", "clock round error:", e)
+            self.done = True
+            if not self._terminated:
+                self._arm(10)
 
     def start(self):
         if not self.done: 
             self.stop()
         
+        self._terminated = False
         self.actor = Zactor(self._actor_fn, create_string_buffer(b"Sync request"))
         self.done = False
-        
-        self._refresh = Timer(120, self.start)
-        self._refresh.start()
+        self._arm(120)
+
+    def _arm(self, delay):
+        # Schedule the next round. A Timer that cannot start (`can't start new thread`) used to
+        # raise out of here — from __init__ (Peer.sync) that left the peer with no TimeClient
+        # while the actor just launched sampled for nobody: kouagou03 freewheeled ~60 h that way
+        # (2026-09-21 23:28, a link-loss rebuild storm). Never raise: an unarmed client reports
+        # stalled() and wallclock re-arms it.
+        if self._refresh:
+            self._refresh.cancel()
+        self._refresh = None
+        t = Timer(delay, self.start)
+        try:
+            t.start()
+            self._refresh = t
+        except RuntimeError as e:
+            safe_print("\t", "["+self.client_ip+"]", "refresh timer unavailable (" + str(e) + "): waiting for a re-arm")
+
+    def stalled(self):
+        # round over, not stopped, and nothing scheduled to start the next one
+        return self.done and not self._terminated and not (self._refresh and self._refresh.is_alive())
 
     def stop(self):
+        self._terminated = True
         if not self.done:
             self.actor.sock().send(b"s", b"$TERM")
             retry = 0
             while not self.done and retry < 10:
                 sleep(0.1)
                 retry += 1
-        if self._refresh:
-            self._refresh.cancel()
+        t, self._refresh = self._refresh, None      # a stopped client holds no finished Timer (3.13+: 8 MB each)
+        if t:
+            t.cancel()
 
 
     # CLIENT TimeSync REQ Zactor
@@ -178,6 +230,12 @@ class TimeClient():
         self.compute(sampler)
         req_sock.__del__()
         self.done = True
+        # A round that did not fill the sampler (master's time server not answering yet at a
+        # fleet power-on, boot-storm packet loss) used to wait the full 120 s refresh before
+        # trying again — a wall slave shows black that whole time (no clockshift, no chase, no
+        # self-start). Retry a failed round after 10 s instead; a good round keeps the 120 s pace.
+        if self.status != 1 and not self._terminated:
+            self._arm(10)
 
 
     #  COMPUTE average Clock Shift
@@ -206,9 +264,18 @@ class TimeClient():
 
             self.clockshift = cs
             self.status = 1
+            self.failures = 0
         else:
-            self.status = 0
-            safe_print("\t", "["+self.client_ip+"]", "ERROR: sampler not full.. something might be broken")
+            # A failed round says the LINK was bad for 5 s, not that the shift we measured is wrong:
+            # two Pi clocks drift microseconds a minute. Keep a good shift and its status; only a
+            # client that never had one stays at 0. (Resetting it made every lossy minute on
+            # kouagou03 look like "no clock", 2026-09-25.)
+            self.failures += 1
+            if self.status != 1:
+                self.status = 0
+            if self.failures in (1, 10) or self.failures % 60 == 0:
+                safe_print("\t", "["+self.client_ip+"]", "ERROR: sampler not full.. something might be broken",
+                           "(%d in a row%s)" % (self.failures, ', keeping the last good shift' if self.status == 1 else ''))
 
 
 
@@ -224,7 +291,7 @@ class Subscriber():
 
         self.sub = Zsock.new_sub(("tcp://"+ip+":"+port).encode(), topic.encode())
 
-        self._actor_fn = zactor_fn(self.actor_fn) # ctypes function reference must live as long as the actor.
+        self._actor_fn = zactor_fn(self.actor_fn_guarded) # ctypes function reference must live as long as the actor.
         self.done = True
         self.start()
 
@@ -238,11 +305,17 @@ class Subscriber():
         self.done = False
         
     def stop(self):
-        self.actor.sock().send(b"s", b"$TERM")
-        retry = 0
-        while not self.done and retry < 10:
-            sleep(0.1)
-            retry += 1
+        # Only a running actor gets $TERM: a send into a finished actor's pipe has no peer and can
+        # block (same trap as ZyreNode.stop, kmini-001 2026-09-04).
+        if not self.done:
+            try:
+                self.actor.sock().send(b"s", b"$TERM")
+            except Exception:
+                pass
+            retry = 0
+            while not self.done and retry < 10:
+                sleep(0.1)
+                retry += 1
         self.sub.__del__()
 
     def subscribe(self, topic):
@@ -257,16 +330,18 @@ class Subscriber():
 
         fastfail = 0
         while True:
-            # STOP program
-            if self.interface.stopped.is_set():
+            # STOP program (was `self.interface`, which a Subscriber does not have: every subscriber
+            # actor died on its first loop from 2025-03 to 2026-09 — no peer.* pub/sub, and every
+            # teardown waited its full second on an actor that would never answer)
+            if self.node.interface.stopped.is_set():
                 break
 
             # POLL
-            now = time.monotonic()      # how long the poll BLOCKED: elapsed
+            now = time.time()
             sock = poller.wait(500)
 
             if not sock:
-                if time.monotonic() - now < 0.1:
+                if time.time() - now < 0.1:
                     # Same EINTR-vs-broken ambiguity as the node poller —
                     # and killing the whole app for one peer's subscriber is
                     # scorched earth. Debounce, then let THIS subscriber die;
@@ -274,7 +349,7 @@ class Subscriber():
                     # rides its own multicast, so the wall keeps beating.
                     fastfail += 1
                     if fastfail >= 5:
-                        self.interface.log('subscriber broken (5x fast-empty).. dropping this subscriber')
+                        self.node.interface.log('subscriber broken (5x fast-empty).. dropping this subscriber')
                         break
                 else:
                     fastfail = 0
@@ -309,6 +384,12 @@ class Subscriber():
 
         safe_print("Subscriber terminated")
         self.done = True
+
+    def actor_fn_guarded(self, pipe, args):
+        try:
+            self.actor_fn(pipe, args)
+        finally:
+            self.done = True
 
 
 #
@@ -355,11 +436,12 @@ class Peer():
         # safe_print('stopping peer')
         self.active = False
 
-        if self.timerLink:
+        t, self.timerLink = self.timerLink, None
+        if t:
             # safe_print(' - cancel timelink')
-            self.timerLink.cancel()
+            t.cancel()
 
-        if self.timeclient: 
+        if self.timeclient:
             # safe_print(' - stop timeclient')
             self.timeclient.stop()
 
@@ -369,26 +451,54 @@ class Peer():
             
 
     def linker(self, l):
+        # The Timer that called us is self.timerLink: once its work is done, drop it — on CPython
+        # 3.13+ a finished Timer kept in an attribute keeps its 8 MB stack (hplayer2#t-075).
+        t, self.timerLink = self.timerLink, None
+        if t:
+            t.cancel()
         if not self.active: return
 
-        if self.timerLink:
-            self.timerLink.cancel()
-        
         if l != self.link:
             self.link = l
-            self.node.interface.emit('peer.link', {'name': self.name, 'data': self.link})
-        
+            if not self.node.muted(self.name):      # a storm mutes one name's link events (t-078)
+                self.node.interface.emit('peer.link', {'name': self.name, 'data': self.link})
+
         if self.link < 3:
             self.timerLink = Timer(PING_PEER*1.5/1000.0, self.linker, args=[l+1])
-            self.timerLink.start()
+            try:
+                self.timerLink.start()
+            except RuntimeError as e:
+                # `can't start new thread` (seen on kouagou02/03 during link-loss storms,
+                # 2026-09-18..21): without this the link state machine stalled below 3 for good.
+                # Step the link now instead of in PING_PEER*1.5 ms — a peer is still a peer.
+                self.timerLink = None
+                self.node.interface.log('peer', self.name, 'link timer unavailable (' + str(e) + '): linking now')
+                self.linker(l+1)
 
-    def sync(self):
+    SYNC_MIN_INTERVAL = 30.0    # s between two TimeClients for one peer (JOIN storms)
+
+    def sync(self, force=False):
         if not self.active: return
         if not self.ts_port: return
-        self.timeclient = TimeClient(self.ip, self.ts_port)
+        tc = self.timeclient
+        now = time.time()
+        # A JOIN storm (link flapping) used to build a new TimeClient — a Zactor thread and a
+        # Timer thread — on every JOIN. A healthy client stays; a new one at most every 30 s
+        # unless the caller insists.
+        if tc and not force and not tc.stalled() and now - getattr(self, '_syncAt', 0) < self.SYNC_MIN_INTERVAL:
+            return
+        if tc and not force and tc.status == 1 and not tc.stalled():
+            return
+        self._syncAt = now
+        if tc:
+            tc.stop()      # a second JOIN (or a wallclock re-sync) must not leave the old one sampling
+        try:
+            self.timeclient = TimeClient(self.ip, self.ts_port)
+        except RuntimeError as e:
+            self.timeclient = None
+            self.node.interface.log('peer', self.name, 'time client unavailable (' + str(e) + '): wallclock will retry')
 
     def clockshift(self):
-        shift = 0
         if self.timeclient:
             return self.timeclient.clockshift
         return 0
@@ -417,6 +527,21 @@ class ZyreNode ():
         # Peers book
         self.book = {}
         self.topics = []
+        self.enters = 0        # ENTER/EXIT counters: the health monitor reads the flap rate
+        self.exits = 0
+        self.startedAt = time.time()
+        self.gone = {}         # uuid -> (Peer, when): EXITed peers kept GONE_GRACE s for a flap-back
+        # ENTER/EXIT storm breaker (hplayer2#t-078). zyre's HELLO ping-pong: a HELLO from a peer
+        # already `ready` makes zyre_node remove and re-require it, and require sends a HELLO
+        # back — two crossed HELLOs after a link event (kouagou03's dongle resets, a node rebuilt
+        # on the same endpoint) flip one peer name at the round-trip rate, 40–80 ENTER/EXIT per
+        # second for 10–40 min, until a message is lost (kouagou02 <-> kouagou03, 2026-09-29/30:
+        # 30–45 k flips per 10 min, ~15 episodes a day). Count the flips per name; past
+        # STORM_FLIPS in STORM_WINDOW s, mute that peer's link events and ask the supervisor for a
+        # node rebuild after a random delay: a new uuid on the same endpoint resets both peer
+        # tables, the random delay keeps the two sides from crossing HELLOs again.
+        self._flips = {}       # name -> [t, …] of its ENTER/EXIT within STORM_WINDOW
+        self._muted = {}       # name -> link events muted until (time)
 
         # Publisher
         self.pub_cache  = {}
@@ -441,57 +566,131 @@ class ZyreNode ():
         self.zyre.set_expired_timeout(PING_PEER*10)
 
         self.zyre.start()
+        # zyre_uuid() is not a getter in libzyre 2.0.1: it frees the cached string and asks the zyre actor
+        # again. Called from two threads at once it double-frees -> SIGSEGV. Read it once, here, single-threaded;
+        # other threads (health, publish) read this cached copy and never touch zyre for it.
+        self.uuid = self.zyre.uuid()
         self.zyre.join(b"broadcast")
         self.zyre.join(b"sync")
 
+        # Every other zyre_*() that talks to the zyre actor pipe (whispers, shouts, own_groups, join, leave)
+        # may be called from several threads (Régie, mpv listeners, OSC, keypad): serialize them.
+        self._zyre_lock = Lock()
+
         # Add self to book
-        self.book[self.zyre.uuid()] = Peer(self, {
-            'uuid':         self.zyre.uuid(),
+        self.book[self.uuid] = Peer(self, {
+            'uuid':         self.uuid,
             'name':         self.zyre.name().decode(),
             'ip':           '127.0.0.1',
             'ts_port':      get_port(self.timereply),
             'pub_port':     get_port(self.publisher)
-        }) 
-        self.book[self.zyre.uuid()].subscribe(self.topics)
+        })
+        self.book[self.uuid].subscribe(self.topics)
 
-        # (wall, monotonic) taken at the same instant - see _checkClockStep.
-        # BEFORE the Zactor below: it starts the poller thread, which calls
-        # _checkClockStep on its first pass.
-        self._clockPair = (time.time(), time.monotonic())
+        # ZMQ sockets are not thread-safe: only the actor thread touches self.publisher and pub_cache.
+        # Other threads (mpv listeners, Régie, timers) hand their publish to the actor through its pipe,
+        # and that pipe's caller end is itself shared, so every send on it holds this lock.
+        # Two players stopping in the same millisecond used to publish concurrently -> SIGSEGV (HPO 2026-10-15).
+        self._pipe_lock = Lock()
 
         # Start Poller
-        self._actor_fn = zactor_fn(self.actor_fn) # ctypes function reference must live as long as the actor.
+        self._actor_fn = zactor_fn(self.actor_fn_guarded) # ctypes function reference must live as long as the actor.
         if netiface:
             netiface = create_string_buffer(str.encode(netiface))
         self.actor = Zactor(self._actor_fn, netiface)
+        Zsock.set_sndtimeo(self.actor.sock(), 200)     # a dead actor must drop a publish, never block the caller
         self.done = False
         self.broken = False    # set by actor_fn on confirmed poller failure
 
+        # TimeServer on its own thread: the slaves' clock samples must be answered even while
+        # this node's actor is busy with an ENTER/EXIT storm (it used to share that thread).
+        self._tsStop = False
+        self._tsDone = False
+        self._tsThread = Thread(target=self._timeServer, name='zyre-timeserver', daemon=True)
+        self._tsThread.start()
 
-    # Watch the wall clock against the monotonic clock: they advance together
-    # unless CLOCK_REALTIME is STEPPED (RTC read at boot, ntp/datesync
-    # correction, a manual date -s). On a step, every peer clockshift we hold
-    # is stale by the step size, so re-sample now instead of waiting out the
-    # 120s refresh. start() does the whole job: it stops the running actor,
-    # cancels the pending refresh Timer and re-arms a fresh sampling round.
-    # Called from the node poller loop, which ticks at >= 2Hz even when idle.
-    def _checkClockStep(self):
-        wall, mono = time.time(), time.monotonic()
-        pWall, pMono = self._clockPair
-        self._clockPair = (wall, mono)
+    GONE_GRACE = 20.0
+    STORM_WINDOW = 5.0              # s
+    STORM_FLIPS = 20                # ENTER+EXIT of one name within the window (normal: 2 per link event)
+    STORM_MUTE = 60.0               # s without link events for that name once a storm is detected
+    STORM_REBUILD_INTERVAL = 120.0  # s between two storm rebuilds (a rebuild starts a new node)
 
-        step = (wall - pWall) - (mono - pMono)
-        if abs(step) < CLOCK_STEP:
+    def _flip(self, name):
+        """One ENTER or EXIT of `name` (called on the actor thread). Detects the storm, mutes the
+        name's link events and requests one node rebuild after a random 1–5 s delay."""
+        now = time.time()
+        l = self._flips.setdefault(name, [])
+        l.append(now)
+        while l and now - l[0] > self.STORM_WINDOW:
+            del l[0]
+        if self._muted.get(name, 0.0) > now:
             return
+        if len(l) < self.STORM_FLIPS:
+            return
+        self._muted[name] = now + self.STORM_MUTE
+        last = getattr(self.interface, '_stormRebuiltAt', 0.0)
+        if now - last > self.STORM_REBUILD_INTERVAL:
+            delay = random.uniform(1.0, 5.0)
+            self.interface._stormRebuiltAt = now
+            self.interface.log('peer', name, 'ENTER/EXIT storm: %d flips in %.0f s — muting its link events %.0f s, rebuilding the node in %.1f s'
+                               % (len(l), self.STORM_WINDOW, self.STORM_MUTE, delay))
+            self.interface.requestRebuild('zyre storm: %s flipped %d times in %.0f s' % (name, len(l), self.STORM_WINDOW), delay=delay)
+        else:
+            self.interface.log('peer', name, 'ENTER/EXIT storm: %d flips in %.0f s — muting its link events %.0f s (node rebuilt %.0f s ago, not again yet)'
+                               % (len(l), self.STORM_WINDOW, self.STORM_MUTE, now - last))
 
-        self.interface.log('wall clock stepped by', round(step, 3),
-                            's: re-sampling peer clock shifts')
-        for peer in list(self.book.values()):
-            if peer.active and peer.timeclient:
-                # never from this thread: start() joins the running sampler
-                # actor (up to 1s per peer) and the poller must keep polling.
-                Timer(0, peer.timeclient.start).start()
+    def muted(self, name):
+        until = self._muted.get(name, 0.0)
+        if until and until <= time.time():
+            del self._muted[name]
+            return False
+        return bool(until)
 
+    def _expireGone(self):
+        now = time.time()
+        for k in [k for k, (p, t) in self.gone.items() if now - t > self.GONE_GRACE]:
+            reap(self.gone.pop(k)[0])
+
+    def _samePeer(self, peer, e):
+        try:
+            return (peer.ip == extract_ip(e.peer_addr())
+                    and str(peer.ts_port) == e.header(b"TS-PORT").decode()
+                    and str(peer.pub_port) == e.header(b"PUB-PORT").decode())
+        except Exception:
+            return False
+
+    def _timeServer(self):
+        poller = Zpoller(self.timereply, None)
+        try:
+            while not self._tsStop and not self.interface.stopped.is_set():
+                t = time.time()
+                sock = poller.wait(250)
+                if not sock and time.time() - t < 0.05:
+                    sleep(0.05)             # an interrupted / broken poller must not spin a core
+                if sock == self.timereply:
+                    Zmsg.recv(self.timereply)
+                    msg = Zmsg()
+                    msg.addstr(str(int(time.time()*PRECISION)).encode())
+                    Zmsg.send(msg, self.timereply)
+                elif not sock:
+                    continue
+        except Exception as e:
+            self.interface.log('time server stopped:', e)
+        self._tsDone = True
+
+
+    # An exception escaping the actor used to end it silently ("Exception ignored while calling
+    # ctypes callback"): Kouagou01-64 ran 12 h with a dead node after one `can't start new thread`
+    # (2026-09-25 23:54) — no zyre events, no time server, peers expired — and nothing noticed,
+    # because the supervisor only watched for a broken poller. Now the node is flagged broken and
+    # the supervisor rebuilds it in place.
+    def actor_fn_guarded(self, pipe, netiface):
+        try:
+            self.actor_fn(pipe, netiface)
+        except BaseException as e:
+            self.interface.log('node actor died (' + type(e).__name__ + ': ' + str(e) + ').. flagging node for rebuild')
+            self.broken = True
+            self.done = True
 
     # ZYRE Zactor
     def actor_fn(self, pipe, netiface):
@@ -501,7 +700,7 @@ class ZyreNode ():
         internal_pipe = Zsock(pipe, False) # We don't own the pipe, so False.
 
         # Poller
-        poller = Zpoller(self.zyre.socket(), internal_pipe, self.publisher, self.timereply, None)
+        poller = Zpoller(self.zyre.socket(), internal_pipe, self.publisher, None)
 
         # RUN
         self.interface.log('Node started')
@@ -515,16 +714,12 @@ class ZyreNode ():
                 self.interface.log('stopping node')
                 break
 
-            # A step on CLOCK_REALTIME invalidates every peer clockshift:
-            # catch it here, where the loop already ticks at >= 2Hz.
-            self._checkClockStep()
-
             # POLL
-            now = time.monotonic()      # how long the poll BLOCKED: elapsed
+            now = time.time()
             sock = poller.wait(500)
 
             if not sock:
-                if time.monotonic() - now < 0.1:
+                if time.time() - now < 0.1:
                     # Instant-empty return: an interrupted wait (EINTR-class)
                     # or a genuinely broken poller. One-shot detection used to
                     # kill the WHOLE APP on RF churn (wifi wall bench,
@@ -555,22 +750,33 @@ class ZyreNode ():
 
                 # ENTER: add to book for external contact (i.e. TimeSync)
                 if e.type() == b"ENTER":
-                    newpeer = Peer(self, e) 
-                    existing = None
+                    self.enters += 1
+                    self._flip(e.peer_name().decode(errors='replace'))
+                    self._expireGone()
+                    # The same process coming back (a link flap: EXIT then ENTER of one uuid, the
+                    # Kouagou01-64 storm) gets its Peer back — clock client and subscriber intact —
+                    # instead of a new Peer, Subscriber and TimeClient (threads) per flap.
+                    old = self.book.get(uuid)
+                    if not old and uuid in self.gone:
+                        old = self.gone.pop(uuid)[0]
+                        if self._samePeer(old, e):
+                            old.active = True
+                            self.book[uuid] = old
+                            old.linker(3)
+                            continue
+                        reap(old)
+                        old = None
+                    if old and old.active and self._samePeer(old, e):
+                        old.linker(3)
+                        continue
 
-                    if uuid in self.book:
-                        # print ('UUID already exist: replacing')  ## PROBLEM : Same name may appear with different uuid (not a real problem, only if crash and restart with new uuid in a short time..)
-                        self.book[uuid].stop()
-                        existing=uuid
-                    
-                    for p in self.book.values():
-                        if p.name == newpeer.name:
-                            # print ('Name already exist: replacing')
-                            p.stop()
-                            existing=p.uuid
-                    
-                    if existing:
-                        del self.book[existing]
+                    newpeer = Peer(self, e)
+                    # Replace any stale entry for this uuid or this NAME (a rebuilt node comes back
+                    # with a new uuid). Torn down by the reaper: never block this thread (see reap).
+                    for k in [k for k, p in self.book.items() if k == uuid or (p.name == newpeer.name and k != self.uuid)]:
+                        reap(self.book.pop(k))
+                    for k in [k for k, (p, _) in self.gone.items() if p.name == newpeer.name]:
+                        reap(self.gone.pop(k)[0])
 
                     self.book[uuid] = newpeer
                     self.book[uuid].subscribe(self.topics)
@@ -588,10 +794,14 @@ class ZyreNode ():
 
                 # EXIT
                 elif e.type() == b"EXIT":
+                    self.exits += 1
+                    self._flip(self.book[uuid].name if uuid in self.book else e.peer_name().decode(errors='replace'))
+                    self._expireGone()
                     if uuid in self.book:
-                        self.book[uuid].linker(0)
-                        self.book[uuid].stop()
-                        del self.book[uuid]
+                        peer = self.book.pop(uuid)
+                        peer.linker(0)
+                        peer.active = False             # out of lookups (and the link timer stops climbing)
+                        self.gone[uuid] = (peer, time.time())
 
                 # JOIN
                 elif e.type() == b"JOIN":
@@ -618,7 +828,11 @@ class ZyreNode ():
                     if e.type() == b"SHOUT": data['group'] = e.group().decode()
                     else: data['group'] = 'whisper'
 
-                    self.preProcessor1(data)
+                    try:
+                        self.preProcessor1(data)
+                    except Exception as err:
+                        # an exception escaping this ctypes callback would end the actor (node deaf)
+                        self.interface.log('ERROR processing', data, err)
 
 
             #
@@ -641,31 +855,37 @@ class ZyreNode ():
                     #     self.interface.log('XPUB lvc empty for', topic.decode())
 
             #
-            # TIMESERVER event
-            #
-            elif sock == self.timereply:
-                msgin = Zmsg.recv(self.timereply)
-                msg = Zmsg()
-                msg.addstr(str(int(time.time()*PRECISION)).encode())
-                Zmsg.send( msg, self.timereply )
-
-            #
             # INTERNAL commands
             #
             elif sock == internal_pipe:
                 msg = Zmsg.recv(internal_pipe)
-                if not msg or msg.popstr() == b"$TERM":
+                if not msg:
+                    break
+                cmd = msg.popstr()
+                if cmd == b"$TERM":
                     # safe_print('ZYRE Node TERM')
                     break
-                    
+
+                # PUBLISH requested by another thread (see publish)
+                elif cmd == b"PUB":
+                    topic = msg.popstr()
+                    payload = msg.popstr()
+                    out = Zmsg()
+                    out.addstr(topic)
+                    out.addstr(self.uuid)
+                    out.addstr(payload)
+                    self.pub_cache[topic] = Zmsg.dup(out)
+                    Zmsg.send(out, self.publisher)
+
         internal_pipe.__del__()
         self.interface.log('node stopped')   # WEIRD: print helps the closing going smoothly..
         self.done = True
 
     def stop(self):
         self.interface.log('stopping peers')
-        for peer in self.book.values():
+        for peer in list(self.book.values()) + [p for p, _ in list(self.gone.values())]:
             peer.stop()
+        self.gone = {}
 
         self.interface.log('stopping node')
         # The actor usually leaves by itself (its loop breaks on `stopped`), and czmq
@@ -674,11 +894,18 @@ class ZyreNode ():
         # every `systemctl stop` until the 90 s SIGKILL (kmini-001, 2026-09-04). Only
         # ask a still-running actor to leave, and give it a bounded second.
         if not self.done:
-            self.actor.sock().send(b"ss", b"$TERM")
+            with self._pipe_lock:
+                self.actor.sock().send(b"s", b"$TERM")
             retry = 0
             while not self.done and retry < 10:
                 sleep(0.1)
                 retry += 1
+
+        self._tsStop = True
+        retry = 0
+        while not self._tsDone and retry < 10:
+            sleep(0.1)
+            retry += 1
 
         # self.zyre.stop()        # HANGS !
         self.zyre.__del__()
@@ -691,7 +918,7 @@ class ZyreNode ():
             return self.book[uuid]
 
     def peerByName(self, name):
-        for peer in self.book.values():
+        for peer in list(self.book.values()):     # snapshot: the actor thread adds/removes peers
             if peer.active and peer.name == name:
                 return peer
 
@@ -702,25 +929,25 @@ class ZyreNode ():
     def subscribe(self, topics):
         if not isinstance(topics, list): topics = [topics]
         self.topics = list(set(self.topics) | set(topics))    # merge lists and remove duplicates
-        for peer in self.book.values():
+        for peer in list(self.book.values()):     # snapshot (see peerByName)
             peer.subscribe(self.topics)
 
     def publish(self, topic, args=None):
-        topic = topic.encode()
-        
+        # Called from any thread: never touch self.publisher here, let the actor send it.
+        if self.done:
+            return
         msg = Zmsg()
-        msg.addstr(topic)
-        msg.addstr(self.zyre.uuid())
+        msg.addstr(b"PUB")
+        msg.addstr(topic.encode())
         msg.addstr(json.dumps(args).encode())
-
-        self.pub_cache[topic] = Zmsg.dup(msg)
-        Zmsg.send(msg, self.publisher)
+        with self._pipe_lock:
+            Zmsg.send(msg, self.actor.sock())
 
     #
     # ZYRE send messages
     #
 
-    def makeMsg(self, event, args=None, delay_ms=0, at=0):
+    def makeMsg(self, event, args=None, delay_ms=0, at=0, extra=None):
         data = {}
         data['event'] = event
         data['args'] = []
@@ -740,41 +967,50 @@ class ZyreNode ():
                 data['at'] = 0
             data['at'] += int(time.time()*PRECISION + delay_ms * PRECISION / 1000)
 
+        # extra top-level fields (the wallclock leader rank 'r', hplayer2#t-086): receivers that
+        # do not know a field ignore it
+        if extra:
+            data.update(extra)
+
         return json.dumps(data).encode()
 
-    def whisper(self, uuid, event, args=None, delay_ms=0, at=0):
-        data = self.makeMsg(event, args, delay_ms, at)
-        if uuid == self.zyre.uuid():
+    def whisper(self, uuid, event, args=None, delay_ms=0, at=0, extra=None):
+        data = self.makeMsg(event, args, delay_ms, at, extra)
+        if uuid == self.uuid:
             data = json.loads(data.decode())
             data['from'] = 'self'
             data['group'] = 'whisper'
             self.preProcessor1(data)
         else:
-            self.zyre.whispers(uuid, data)
+            with self._zyre_lock:
+                self.zyre.whispers(uuid, data)
 
-    def shout(self, group, event, args=None, delay_ms=0, at=0):
-        data = self.makeMsg(event, args, delay_ms, at)
-        self.zyre.shouts(group.encode(), data)
+    def shout(self, group, event, args=None, delay_ms=0, at=0, extra=None):
+        data = self.makeMsg(event, args, delay_ms, at, extra)
+        with self._zyre_lock:
+            self.zyre.shouts(group.encode(), data)
 
-        # if own group -> send to self too !
-        groups = zlist_strlist( self.zyre.own_groups() )
+            # if own group -> send to self too !
+            groups = zlist_strlist( self.zyre.own_groups() )
         if group in groups:
             data = json.loads(data.decode())
             data['from'] = 'self'
             data['group'] = group
             self.preProcessor1(data)
 
-    def broadcast(self, event, args=None, delay_ms=0, at=0):
-        self.shout('broadcast', event, args, delay_ms, at)
+    def broadcast(self, event, args=None, delay_ms=0, at=0, extra=None):
+        self.shout('broadcast', event, args, delay_ms, at, extra)
         
-    def tomyself(self, event, args=None, delay_ms=0, at=0):
-        self.whisper(self.zyre.uuid(), event, args, delay_ms, at)
+    def tomyself(self, event, args=None, delay_ms=0, at=0, extra=None):
+        self.whisper(self.uuid, event, args, delay_ms, at, extra)
 
     def join(self, group):
-        self.zyre.join(group.encode())
+        with self._zyre_lock:
+            self.zyre.join(group.encode())
 
     def leave(self, group):
-        self.zyre.leave(group.encode())
+        with self._zyre_lock:
+            self.zyre.leave(group.encode())
 
     #
     # ZYRE messages processor
@@ -788,12 +1024,6 @@ class ZyreNode ():
                 data['at'] -= self.peer(data['from']).clockshift()
             at = data['at'] / PRECISION
             delay =  at - time.time()
-            # 'at' is a WALL instant (the peer's, shifted into ours), and it
-            # is only meaningful at THIS read. Everything downstream - the
-            # Timer, the busy loop, the accuracy log - is elapsed time, so
-            # pin the deadline to the monotonic clock here, once. A step in
-            # between used to fire the event early or late by the step size.
-            atMono = time.monotonic() + delay
 
             if delay <= -10:
                 self.interface.log('WARNING event already passed by', delay, 's, its very late !! might be out of sync !')
@@ -815,24 +1045,21 @@ class ZyreNode ():
                 
                 # event is programmed in the future
                 self.interface.log('programmed event in', delay, 's')
-                t = Timer( delay-0.03, self.preProcessor2, args=[data, atMono])
+                t = Timer( delay-0.03, self.preProcessor2, args=[data, at])
                 t.start()
                 self.interface.emit('planned', data)
 
         else:
             self.preProcessor2(data)
 
-    def preProcessor2(self, data, atMono=None):
-
-        # busy loop until time is reached (monotonic deadline: see above)
-        while atMono is not None and atMono-time.monotonic() >= 0.0005:
+    def preProcessor2(self, data, at=0):
+        
+        # busy loop until time is reached
+        while at > 0 and at-time.time() >= 0.0005:
             time.sleep(0.0005)
-            # self.interface.log('busy loop', atMono-time.monotonic())
-
-        # only the scheduled path has a deadline to be accurate against; the
-        # direct path used to log the epoch itself as an 'accuracy'
-        if atMono is not None:
-            self.interface.log('zyre processor sync accuracy', (time.monotonic()-atMono)*1000, 'ms')
+            # self.interface.log('busy loop', at-time.time())
+        
+        self.interface.log('zyre processor sync accuracy', (time.time()-at)*1000, 'ms')
         self.interface.emit('event', *[data])
         self.interface.emit(data['event'], *data['args'])
 
@@ -852,61 +1079,125 @@ class ZyreInterface (BaseInterface):
             raise RuntimeError("zyre interface dependencies are unavailable")
         super().__init__(hplayer, "ZYRE")
         self.iface = netiface
+        # Handlers are registered HERE, on the main thread at construction, not in listen():
+        # registering listeners from the interface thread while the main thread is emitting
+        # (settings.load() at startup) mutates pymitter's listener tree under its own iteration
+        # — `RuntimeError: dictionary changed size during iteration`, HPlayer2 down at its first
+        # start and back on systemd's restart 20 s later (Tapuaki01 cold start, 2026-09-21).
+        # They resolve self.node at call time and do nothing while it is not up.
+        self._installHandlers()
 
-    def listen(self):
-        self.node = ZyreNode(self, self.iface)
+    def _installHandlers(self):
+        def node():
+            return getattr(self, 'node', None)
 
         # Publish self status
         @self.hplayer.on('*.playing')
         @self.hplayer.on('*.paused')
         @self.hplayer.on('*.stopped')
         def st(ev, *args):
-            # safe_print('peer.status', self.hplayer.statusPlayers())
-            self.node.publish('peer.status', self.hplayer.statusPlayers())
+            n = node()
+            if n:
+                n.publish('peer.status', self.hplayer.statusPlayers())
 
         # Publish self settings
         @self.hplayer.on('settings.updated')
         def se(ev, settings):
-            self.node.publish('peer.settings', settings)
-            
+            n = node()
+            if n:
+                n.publish('peer.settings', settings)
+
         # Publish when self do play seq
         @self.hplayer.on('*.playingseq')
-        def se(ev, *args):
-            self.node.publish('peer.playingseq', args)
+        def seq(ev, *args):
+            n = node()
+            if n:
+                n.publish('peer.playingseq', args)
 
         # Subscribe to peers
         @self.hplayer.on('*.peers.subscribe')
         def mon(ev, topics):
-            self.node.subscribe(topics)
+            n = node()
+            if n:
+                n.subscribe(topics)
 
         # Trig peers link status
         @self.hplayer.on('*.peers.getlink')
         def links(ev):
-            for peer in self.node.book.values():
+            n = node()
+            if not n:
+                return
+            for peer in list(n.book.values()):
                 self.emit('peer.link', {'name': peer.name, 'data': peer.link})
 
         # Triggers event on peers
         @self.hplayer.on('*.peers.triggers')
         def trig(ev, *args):
+            n = node()
+            if not n:
+                self.log('peers.triggers while the node is not up: dropped')
+                return
             delay = args[1] if len(args) > 1 else 0
             at = int(time.time()*PRECISION + delay * PRECISION / 1000)
             for ev in args[0]:
                 if not 'synchro' in ev:
                     ev['synchro'] = False
                 data = None
-                if 'data' in ev: 
+                if 'data' in ev:
                     data = ev['data']
                 if 'peer' in ev:
-                    peer = self.node.peerByName(ev['peer'])
+                    peer = n.peerByName(ev['peer'])
                     if peer:
                         self.log('whisper', ev['peer'], ev['event'], data, at if ev['synchro'] else 0)
-                        self.node.whisper( peer.uuid, ev['event'], data, 0, at if ev['synchro'] else 0)
+                        n.whisper( peer.uuid, ev['event'], data, 0, at if ev['synchro'] else 0)
                     else:
                         self.log('peer is missing', ev['peer'])
                 else:
-                    self.node.broadcast(ev['event'], data, 0, at if ev['synchro'] else 0)
-        
-        
+                    n.broadcast(ev['event'], data, 0, at if ev['synchro'] else 0)
+
+    # A node started on an interface that has no address yet never beacons: on a fleet
+    # power-on the slaves' HPlayer2 comes up before the master's DHCP has answered, zyre
+    # is started on a bare eth0/wlan0 and the wallclock waits for discovery forever — the
+    # 6-screen wall came up master-only after every full power cycle (atafuwa, 2026-09-14).
+    # Wait for the address (bounded), and rebuild the node if the address changes later.
+    IP_WAIT = 90.0
+
+    def _ifaceIp(self):
+        if not self.iface:
+            return None
+        ip = network.get_ip(self.iface)
+        return ip if ip and ip != '127.0.0.1' else None
+
+    def _waitIfaceIp(self):
+        if not self.iface:
+            return None
+        ip = self._ifaceIp()
+        if ip:
+            return ip
+        self.log('no address on', self.iface, 'yet: waiting up to', int(self.IP_WAIT), 's before starting the node')
+        t0 = time.time()
+        while not ip and time.time() - t0 < self.IP_WAIT and self.isRunning() and not self.stopped.is_set():
+            self.stopped.wait(1)
+            ip = self._ifaceIp()
+        self.log(('address on ' + self.iface + ': ' + ip + ' after %.0f s' % (time.time() - t0)) if ip
+                 else (self.iface + ' still has no address after ' + str(int(self.IP_WAIT)) + ' s: starting the node anyway'))
+        return ip
+
+    def requestRebuild(self, why, delay=0.0):
+        """Ask the supervisor to rebuild the node in place (e.g. the wallclock hears the master's
+        clock but no zyre peer appears for a minute: a master rebooted or swapped under running
+        slaves keeps our address, so the address-change rebuild never fires — LACROIX 2026-09-15).
+        `delay` postpones it (the storm breaker's random 1–5 s, t-078)."""
+        self._rebuildAt = time.time() + delay
+        self._rebuildWhy = why
+
+    def listen(self):
+        self._rebuildWhy = None
+        self._rebuildAt = 0.0
+        self._boundIp = self._waitIfaceIp()
+        self.node = ZyreNode(self, self.iface)
+        # (the hplayer event handlers live in _installHandlers(), registered at construction)
+
         self.log( "interface ready")
 
         # Supervise the node: on a confirmed poller failure (RF churn /
@@ -922,9 +1213,34 @@ class ZyreInterface (BaseInterface):
             self.stopped.wait(2)
             if not self.isRunning():
                 break
+            # address appeared or changed under the node (late DHCP lease, renewed lease
+            # with another address): the beacon is bound to the old one -> rebuild, not
+            # counted as a failure
+            ip = self._ifaceIp()
+            why = self._rebuildWhy if time.time() >= self._rebuildAt else None
+            if (self.iface and ip and ip != self._boundIp) or why:
+                if why:
+                    self.log('rebuilding zyre node in place:', why)
+                    self._rebuildWhy = None
+                else:
+                    self.log('address on', self.iface, 'changed', self._boundIp, '->', ip, ': rebuilding zyre node')
+                self._boundIp = ip or self._boundIp
+                try:
+                    self.node.stop()
+                except Exception as e:
+                    self.log('old node teardown error (continuing):', e)
+                if self.stopped.is_set() or not self.isRunning():
+                    break
+                try:
+                    self.node = ZyreNode(self, self.iface)
+                except Exception as e:
+                    self.log('zyre node rebuild FAILED:', e, '— exiting for a clean app restart')
+                    self.hplayer.request_shutdown(exit_code=1, force_delay=10.0)
+                    break
+                continue
             if not getattr(self.node, 'broken', False):
                 continue
-            now = time.monotonic()      # a 10min WINDOW: elapsed
+            now = time.time()
             recoveries = [t for t in recoveries if now - t < 600]
             recoveries.append(now)
             if len(recoveries) > 3:
@@ -957,9 +1273,11 @@ class ZyreInterface (BaseInterface):
         self.log( "done.")
 
     def activeCount(self):
-        return len(self.node.book)
+        node = getattr(self, 'node', None)      # not built until listen() has an address (up to 90 s)
+        return len(node.book) if node else 0
 
     def peersList(self):
-        return self.node.book
+        node = getattr(self, 'node', None)
+        return node.book if node else {}
 
         

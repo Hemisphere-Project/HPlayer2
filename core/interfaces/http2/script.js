@@ -808,74 +808,40 @@ $(document).ready(function() {
         });
     })();
 
-    // --- Schedule panel (biennale-2026-module-radar #t-005; the grid hplayer2#t-082) ---
-    // RTC-gated weekly grid: per day, any number of slots {open, close, volume}. The
-    // interface fails OPEN without a real clock (never gates), so the panel makes that
-    // explicit rather than pretend. Until a grid is saved, the legacy single window
-    // (schedule-open/-close/-days) is what applies, so that is what the grid shows.
+    // --- Sync options panel (2026-09-10): loop gap + volume link, read on the master ---
     (function() {
-        var DAYS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
-        var shown = null;       // JSON of the grid on screen: an echo of our own edit never re-renders it
+        socket.on('settings.updated', function(msg) {
+            if (msg['loop-gap'] !== undefined && !$('#loop_gap').is(':focus')) $('#loop_gap').val(msg['loop-gap']);
+            if (msg['volume-link'] !== undefined) $('#volume_link').val(msg['volume-link'] || 'off');
+        });
+        $('#loop_gap').on('change', function() { trigger('loop-gap', parseFloat(this.value) || 0); });
+        $('#volume_link').on('change', function() { trigger('volume-link', this.value); });
+    })();
 
-        function isGrid(g) {
-            return Array.isArray(g) && g.length === 7 && g.every(Array.isArray);
-        }
-        function legacyGrid(msg) {
-            var m = String(msg['schedule-days'] || '1111111');
-            if (m.length !== 7) m = '1111111';
-            var o = msg['schedule-open'] || '10:00', c = msg['schedule-close'] || '19:00';
-            return DAYS.map(function(_, d) {
-                return m.charAt(d) === '0' ? [] : [{'open': o, 'close': c, 'volume': null}];
-            });
-        }
-        function slotEl(s) {
-            var el = $('<span class="schedule-slot mr-3 mb-1 d-inline-flex align-items-center" />');
-            $('<input type="time" step="60" class="slot-open" />').val(s['open'] || '').appendTo(el);
-            $('<span class="mx-1">&ndash;</span>').appendTo(el);
-            $('<input type="time" step="60" class="slot-close" />').val(s['close'] || '').appendTo(el);
-            $('<span class="ml-2 mr-1">vol</span>').appendTo(el);
-            $('<input type="number" class="slot-volume" min="0" max="100" step="1" placeholder="&mdash;" />')
-                .val(s['volume'] === null || s['volume'] === undefined ? '' : s['volume']).appendTo(el);
-            $('<a href="#" class="slot-del ml-1" title="remove this slot">&times;</a>').appendTo(el);
-            return el;
-        }
-        function render(g) {
-            var box = $('#schedule_grid').empty();
-            DAYS.forEach(function(name, d) {
-                var row = $('<div class="schedule-day-row d-flex flex-wrap align-items-center mb-1" />')
-                            .attr('data-day', d).appendTo(box);
-                $('<span class="badge badge-secondary mr-2 schedule-dayname" />').text(name).appendTo(row);
-                var slots = $('<span class="schedule-slots d-inline-flex flex-wrap" />').appendTo(row);
-                (g[d] || []).forEach(function(s) { slotEl(s).appendTo(slots); });
-                if (!(g[d] || []).length) $('<span class="schedule-closed mr-3">closed</span>').appendTo(slots);
-                $('<a href="#" class="slot-add" title="add a slot">+ slot</a>').appendTo(row);
-            });
-        }
-        function read() {
-            var g = [];
-            $('#schedule_grid .schedule-day-row').each(function() {
-                var day = [];
-                $(this).find('.schedule-slot').each(function() {
-                    var v = $(this).find('.slot-volume').val();
-                    day.push({'open': $(this).find('.slot-open').val(),
-                              'close': $(this).find('.slot-close').val(),
-                              'volume': v === '' ? null : Math.max(0, Math.min(100, parseInt(v, 10) || 0))});
-                });
-                g.push(day);
-            });
-            return g;
-        }
-        function save() {
-            var g = read();
-            shown = JSON.stringify(g);
-            trigger('schedule-grid', g);
-        }
-
+    // --- Schedule panel (biennale-2026-module-radar #t-005) ---
+    // RTC-gated daily playback window. The interface fails OPEN without a real
+    // clock (never gates), so the panel makes that explicit rather than pretend.
+    (function() {
         socket.on('settings.updated', function(msg) {
             if (msg['schedule-enable'] !== undefined) $('#schedule_enable').prop('checked', !!msg['schedule-enable']);
-            var g = isGrid(msg['schedule-grid']) ? msg['schedule-grid'] : legacyGrid(msg);
-            var j = JSON.stringify(g);
-            if (j !== shown) { shown = j; render(g); }
+            if (msg['schedule-open'] !== undefined) $('#schedule_open').val(msg['schedule-open']);
+            if (msg['schedule-close'] !== undefined) $('#schedule_close').val(msg['schedule-close']);
+            if (msg['schedule-reboot'] !== undefined) $('#schedule_reboot').prop('checked', !!msg['schedule-reboot']);
+            if (msg['schedule-volumes'] !== undefined) {
+                var vols = Array.isArray(msg['schedule-volumes']) ? msg['schedule-volumes'] : [];
+                $('.schedule-volume').each(function() {
+                    if (this === document.activeElement) return;    // never overwrite a field being typed in
+                    var v = vols[parseInt($(this).data('day'), 10)];
+                    $(this).val(v === null || v === undefined ? '' : v);
+                });
+            }
+            if (msg['schedule-days'] !== undefined) {
+                var m = String(msg['schedule-days'] || '1111111');
+                if (m.length !== 7) m = '1111111';
+                $('.schedule-day').each(function() {
+                    $(this).prop('checked', m.charAt(parseInt($(this).data('day'), 10)) === '1');
+                });
+            }
         });
         socket.on('schedule-status', function(st) {
             var rtc = $('#schedule_rtc'), status = $('#schedule_status');
@@ -896,37 +862,30 @@ $(document).ready(function() {
             else {
                 // A closed DAY is a different reason for silence than a closed hour — say which,
                 // so "silent on a Monday" never reads as a fault.
-                var why;
-                if (st['open']) {
-                    why = 'OPEN — playing' + (st['slot'] ? ' · slot ' + st['slot'] : '');
-                    if (st['volume'] !== null && st['volume'] !== undefined) why += ' · volume ' + st['volume'];
-                } else {
-                    why = st['dayOpen'] === false ? 'closed TODAY (day off) — silent' : 'CLOSED — silent';
-                    if (st['next']) why += ' · next ' + st['next'];
-                }
+                var why = st['open'] ? 'window OPEN — playing'
+                        : (st['dayOpen'] === false ? 'closed TODAY (day off) — silent'
+                                                   : 'window CLOSED — silent');
+                if (st['open'] && st['volume'] !== null && st['volume'] !== undefined) why += ' · volume ' + st['volume'];
+                if (st['reboot']) why += ' · clean-slate reboot ' + (st['rebootSlots'] || 'inactive today');
                 status.text(why).removeClass('rtc-warn').addClass('rtc-ok');
             }
         });
         $('#schedule_enable').on('change', function() { trigger('schedule-enable', this.checked); });
-        $('#schedule_grid').on('change', 'input', save);
-        $('#schedule_grid').on('click', '.slot-del', function(e) {
-            e.preventDefault();
-            var slots = $(this).closest('.schedule-slots');
-            $(this).closest('.schedule-slot').remove();
-            if (!slots.find('.schedule-slot').length) $('<span class="schedule-closed mr-3">closed</span>').appendTo(slots);
-            save();
+        $('#schedule_reboot').on('change', function() { trigger('schedule-reboot', this.checked); });
+        $('.schedule-volume').on('change', function() {
+            var vols = [];
+            for (var d = 0; d < 7; d++) {
+                var s = $('.schedule-volume[data-day="' + d + '"]').val();
+                vols.push(s === '' ? null : Math.max(0, Math.min(100, parseInt(s, 10) || 0)));
+            }
+            trigger('schedule-volumes', vols);
         });
-        $('#schedule_grid').on('click', '.slot-add', function(e) {
-            e.preventDefault();
-            var slots = $(this).closest('.schedule-day-row').find('.schedule-slots');
-            var last = slots.find('.schedule-slot').last();
-            // a new slot starts where the last one ends (or at 10:00), two hours long
-            var o = last.length ? last.find('.slot-close').val() || '10:00' : '10:00';
-            var h = (parseInt(o.split(':')[0], 10) + 2) % 24;
-            var c = (h < 10 ? '0' : '') + h + ':' + o.split(':')[1];
-            slots.find('.schedule-closed').remove();
-            slotEl({'open': o, 'close': c, 'volume': null}).appendTo(slots);
-            save();
+        $('#schedule_open').on('change', function() { trigger('schedule-open', this.value); });
+        $('#schedule_close').on('change', function() { trigger('schedule-close', this.value); });
+        $('.schedule-day').on('change', function() {
+            var m = '';
+            for (var d = 0; d < 7; d++) m += $('.schedule-day[data-day="' + d + '"]').prop('checked') ? '1' : '0';
+            trigger('schedule-days', m);
         });
     })();
 

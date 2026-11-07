@@ -63,6 +63,14 @@ class Drifter():
         # wallclock — mixed fleets (hub and non-hub players) stay aligned.
         self.offset = 0.0
 
+        # Position age (opt-in; the elected wallclock plugs it): posAge(pos) -> seconds since
+        # `pos` was the player's true position, or None. mpv's position() is the LAST time-pos
+        # event, and those come every ~40 ms (25 fps video) to 55-80 ms (audio). The clock is
+        # extrapolated to now, so clock - pos reads `age` too late: +20..40 ms of bias, and the
+        # servo parks a follower that far AHEAD (Anna bench, 2026-11-06). With posAge, both
+        # sides are compared at the same instant. None = the historic servo (fixed role, nowde).
+        self.posAge = None
+
         # ── Smart join (danceMode) ──────────────────────────────────────
         # Benchmarked 2026-07-23 (extra/bench: N100/vaapi + RPi/mmal, GOP
         # 1s..single-keyframe): keyframe-mode seeks are instant but land a
@@ -101,7 +109,7 @@ class Drifter():
         # and profiles re-arm on that event — wiping the measurement here
         # would lose the seek-latency learning on every join. A genuinely
         # new play >2s later still discards the stale jump.
-        if self._pendingJump is not None and time.monotonic() - self._pendingJump['t0'] > 2.0:
+        if self._pendingJump is not None and time.time() - self._pendingJump['t0'] > 2.0:
             self._pendingJump = None
 
     # Freewheel: back to speed 1.0, clear servo state (clock lost / master gone)
@@ -128,7 +136,7 @@ class Drifter():
         target = clock + self._seekLatEst
         if duration and duration > 3:
             target = target % duration
-        self._pendingJump = {'t0': time.monotonic()}    # a 2s freshness WINDOW: elapsed
+        self._pendingJump = {'t0': time.time()}
         self._diffWindow.clear()
         if self.doLog:
             self.log("timedelay=" + colored(round(diff, 2), "red"),
@@ -174,6 +182,10 @@ class Drifter():
         self.lastPos = pos
 
         diff = clock - pos
+        if self.posAge is not None:
+            age = self.posAge(pos)
+            if age is not None and 0.0 <= age < 0.5:
+                diff -= age * self.lastSpeed        # our position NOW, like the clock
 
         # Wrap-aware shortest path: on looping media the clock and the player
         # wrap independently; +-duration jumps around the loop point are not
@@ -216,6 +228,10 @@ class Drifter():
             if duration and duration > 3:
                 target = target % duration
             self.player.seekTo(target * 1000)
+            # The window still holds the pre-jump diffs: left in, the next
+            # tick's median reads them and jumps a second time (the W4
+            # relink's "second JUMP"). _smartJump clears it too.
+            self._diffWindow.clear()
             self.didJump = True
             jumped = True
             if self.doLog:

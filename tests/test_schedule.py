@@ -4,7 +4,7 @@ import pytest
 
 import core.interfaces.schedule as schedmod
 from core.engine.hplayer import HPlayer2
-from core.interfaces.schedule import ScheduleInterface, clean_grid
+from core.interfaces.schedule import ScheduleInterface
 
 # 2026-10-12 is a Monday: day d of that week is 12 + d (Mon=0 .. Sun=6)
 def at(day, hm):
@@ -12,6 +12,21 @@ def at(day, hm):
     return datetime(2026, 10, 12 + day, int(h), int(m))
 
 MON, TUE, WED, THU, FRI, SAT, SUN = range(7)
+
+# the MBA garden's window: 10:00-18:00, closed on Tuesdays, louder on the weekend
+GARDEN = dict(schedule_open='10:00', schedule_close='18:00', schedule_days='1011111')
+WEEKEND = [35, None, 35, 35, 35, 50, 50]
+
+
+@pytest.fixture(autouse=True)
+def fresh_settings():
+    """Settings._settings is a CLASS dict, shared by every HPlayer2 of the process: put it back
+    after each test, or one test's schedule-volumes leaks into the next."""
+    from core.engine.settings import Settings
+    saved = dict(Settings._settings)
+    yield
+    Settings._settings.clear()
+    Settings._settings.update(saved)
 
 
 @pytest.fixture
@@ -41,19 +56,8 @@ def make(**settings):
     return sched, events
 
 
-def slot(o, c, v=None):
-    return {'open': o, 'close': c, 'volume': v}
-
-
-def week(**days):
-    g = [[] for _ in range(7)]
-    for name, slots in days.items():
-        g[('mon', 'tue', 'wed', 'thu', 'fri', 'sat', 'sun').index(name)] = slots
-    return g
-
-
-def test_legacy_single_window_still_applies_without_a_grid(clock):
-    sched, _ = make(schedule_open='10:00', schedule_close='18:00', schedule_days='1011111')
+def test_the_window_gates_as_before(clock):
+    sched, _ = make(**GARDEN)
     for when, expect in [(at(MON, '09:59'), False), (at(MON, '10:00'), True),
                          (at(MON, '17:59'), True), (at(MON, '18:00'), False),
                          (at(TUE, '12:00'), False), (at(WED, '12:00'), True)]:
@@ -61,114 +65,104 @@ def test_legacy_single_window_still_applies_without_a_grid(clock):
         assert sched.isOpen() is expect, when
 
 
-def test_legacy_window_past_midnight_closes_at_its_end(clock):
-    # Sunday 22:00-02:00 only: plays into Monday morning, and NOT through Monday noon
-    sched, _ = make(schedule_open='22:00', schedule_close='02:00', schedule_days='0000001')
-    for when, expect in [(at(SAT, '23:00'), False), (at(SUN, '21:59'), False),
-                         (at(SUN, '23:00'), True), (at(SUN + 1, '01:59'), True),
-                         (at(SUN + 1, '02:00'), False), (at(SUN + 1, '12:00'), False)]:
-        clock.now = when
-        assert sched.isOpen() is expect, when
-
-
-def test_legacy_degenerate_window_fails_open(clock):
-    sched, _ = make(schedule_open='10:00', schedule_close='10:00')
-    clock.now = at(MON, '03:00')
+def test_a_clock_nobody_set_fails_open_and_carries_no_day_volume(clock):
+    sched, events = make(schedule_volumes=WEEKEND, **GARDEN)
+    clock.now = datetime(2000, 1, 1, 3, 0)      # a Saturday, at night: would be closed
     assert sched.isOpen() is True
     assert sched.currentSlot() is None
+    sched._evaluate()
+    assert [e for e in events if e[0] == 'schedule.slot'] == []
 
 
-def test_several_slots_a_day_each_with_its_volume(clock):
-    sched, _ = make(schedule_grid=week(mon=[slot('10:00', '12:00', 30), slot('14:00', '18:00', 50)]))
-    clock.now = at(MON, '11:00')
-    assert sched.isOpen() and sched.currentSlot()['volume'] == 30
-    clock.now = at(MON, '13:00')
-    assert not sched.isOpen() and sched.currentSlot() is None
-    clock.now = at(MON, '15:00')
-    assert sched.currentSlot() == {'day': MON, 'open': '14:00', 'close': '18:00', 'volume': 50}
-    clock.now = at(TUE, '11:00')
-    assert not sched.isOpen()                    # an empty day is a closed day
-
-
-def test_past_midnight_slot_belongs_to_the_day_it_started(clock):
-    sched, _ = make(schedule_grid=week(fri=[slot('20:00', '01:00', 40)]))
-    clock.now = at(SAT, '00:30')                 # Saturday has no slot of its own
-    assert sched.isOpen() and sched.currentSlot()['day'] == FRI
-    clock.now = at(SAT, '01:00')
-    assert not sched.isOpen()
-    clock.now = at(FRI, '00:30')                 # Thursday has nothing spilling into Friday
-    assert not sched.isOpen()
-
-
-def test_grid_wins_over_the_legacy_keys(clock):
-    sched, _ = make(schedule_open='10:00', schedule_close='18:00',
-                    schedule_grid=week(mon=[slot('20:00', '22:00')]))
-    clock.now = at(MON, '12:00')
-    assert not sched.isOpen()
-    clock.now = at(MON, '21:00')
-    assert sched.isOpen()
-
-
-def test_disabled_or_no_rtc_never_gates(clock):
-    sched, _ = make(schedule_grid=week(mon=[slot('10:00', '12:00', 30)]))
-    clock.now = at(MON, '20:00')
-    sched.rtcPresent = False                     # requireRtc: no trustworthy clock
-    assert sched.isOpen() and sched.currentSlot() is None
+def test_no_rtc_or_disabled_never_gates_nor_sets_a_volume(clock):
+    sched, _ = make(schedule_volumes=WEEKEND, **GARDEN)
+    clock.now = at(SAT, '12:00')
+    sched.rtcPresent = False
+    assert sched.isOpen() is True and sched.currentSlot() is None
     sched.rtcPresent = True
     sched.hplayer.settings.set('schedule-enable', False)
-    assert sched.isOpen() and sched.currentSlot() is None
+    assert sched.isOpen() is True and sched.currentSlot() is None
 
 
-def test_clean_grid_coerces_and_drops_what_it_cannot_read():
-    raw = ('[[{"open":"10:00","close":"12:00","volume":"35"},{"open":"bad","close":"12:00"},'
-           '{"open":"13:00","close":"13:00"},{"open":"14:00","close":"25:00"},'
-           '{"open":"14:00","close":"16:00","volume":""},{"open":"16:00","close":"17:00","volume":250}],'
-           '[],[],[],[],[],[]]')
-    g = clean_grid(raw)
-    assert g[0] == [slot('10:00', '12:00', 35), slot('14:00', '16:00'), slot('16:00', '17:00', 100)]
-    assert g[1:] == [[]] * 6
-    assert clean_grid(None) is None
-    assert clean_grid([[]] * 6) is None          # not a week -> the legacy window applies
-    assert clean_grid('not json') is None
-
-
-def test_evaluate_emits_edges_and_slots(clock):
-    sched, events = make(schedule_grid=week(mon=[slot('10:00', '12:00', 30), slot('12:00', '14:00'),
-                                                 slot('16:00', '18:00', 50)]))
-    clock.now = at(MON, '11:00')
-    sched._evaluate()                            # booted inside a slot: no edge, its volume applies
-    assert events == [('schedule.slot', {'day': MON, 'open': '10:00', 'close': '12:00', 'volume': 30})]
-    events.clear()
-    clock.now = at(MON, '11:30')
-    sched._evaluate()
-    assert events == []                          # same slot: nothing
+def test_the_slot_carries_the_day_volume(clock):
+    sched, _ = make(schedule_volumes=WEEKEND, **GARDEN)
+    clock.now = at(SAT, '12:00')
+    assert sched.currentSlot() == {'day': SAT, 'open': '10:00', 'close': '18:00', 'volume': 50}
     clock.now = at(MON, '12:00')
-    sched._evaluate()                            # back-to-back: a new slot, no close/open
-    assert events == [('schedule.slot', {'day': MON, 'open': '12:00', 'close': '14:00', 'volume': None})]
-    events.clear()
-    clock.now = at(MON, '14:00')
+    assert sched.currentSlot()['volume'] == 35
+    clock.now = at(TUE, '12:00')
+    assert sched.currentSlot() is None          # closed day
+
+
+def test_no_day_volumes_means_volume_none(clock):
+    sched, _ = make(**GARDEN)
+    clock.now = at(SAT, '12:00')
+    assert sched.currentSlot()['volume'] is None
+
+
+@pytest.mark.parametrize('raw, sat', [
+    ('[35, null, 35, 35, 35, 50, 50]', 50),     # JSON string (http / osc)
+    ([35, '', 35, 35, 35, '60', 50], 60),        # numeric string
+    ([0, 0, 0, 0, 0, 150, 0], 100),              # clamped
+    ([0, 0, 0, 0, 0, -3, 0], 0),
+    ([0, 0, 0, 0, 0, 'loud', 0], None),          # unreadable = keep
+    ([0, 0, 0, 0, 0, ''], None),                 # not 7 values = none at all
+    ('not json', None),
+    (None, None),
+])
+def test_day_volumes_are_coerced(clock, raw, sat):
+    sched, _ = make(schedule_volumes=raw, **GARDEN)
+    assert sched.dayVolume(SAT) == sat
+
+
+def test_slot_is_emitted_before_open_on_the_edge_and_once(clock):
+    sched, events = make(schedule_volumes=WEEKEND, **GARDEN)
+    clock.now = at(SAT, '09:59')
+    sched._evaluate()                            # baseline: closed, nothing emitted
+    assert events == []
+    clock.now = at(SAT, '10:00')
     sched._evaluate()
-    assert events == [('schedule.close', None)]
-    events.clear()
-    clock.now = at(MON, '16:00')
+    assert [e[0] for e in events] == ['schedule.slot', 'schedule.open']
+    assert events[0][1]['volume'] == 50
+    clock.now = at(SAT, '10:00')
+    sched._evaluate()                            # same window: nothing new
+    clock.now = at(SAT, '18:00')
     sched._evaluate()
-    assert events == [('schedule.open', None),
-                      ('schedule.slot', {'day': MON, 'open': '16:00', 'close': '18:00', 'volume': 50})]
+    assert [e[0] for e in events] == ['schedule.slot', 'schedule.open', 'schedule.close']
 
 
-def test_day_span_for_the_clean_slate_reboot(clock):
-    # once a day: before the first slot, after the last; a past-midnight end counts for its day
-    sched, _ = make(schedule_grid=week(mon=[slot('14:00', '18:00'), slot('10:00', '12:00')],
-                                       fri=[slot('10:00', '12:00'), slot('20:00', '01:00')]))
-    assert sched.daySpan(MON) == (600, 1080)
-    assert sched.daySpan(FRI) == (600, 1500)
-    assert sched.daySpan(TUE) is None
+def test_a_boot_inside_the_window_takes_the_day_volume(clock):
+    sched, events = make(schedule_volumes=WEEKEND, **GARDEN)
+    clock.now = at(SUN, '14:00')
+    sched._evaluate()                            # first tick: baseline open, no open edge...
+    assert events == [('schedule.slot', {'day': SUN, 'open': '10:00', 'close': '18:00', 'volume': 50})]
 
 
-def test_next_opening_is_reported(clock):
-    sched, _ = make(schedule_grid=week(mon=[slot('10:00', '12:00'), slot('14:00', '18:00')],
-                                       wed=[slot('09:00', '10:00')]))
-    grid = sched.grid()
-    assert sched._nextOpen(grid, at(MON, '13:00')) == '14:00'
-    assert sched._nextOpen(grid, at(MON, '19:00')) == 'Wed 09:00'
-    assert sched._nextOpen(grid, at(WED, '11:00')) == 'Mon 10:00'
+def test_editing_today_volume_reapplies_it_live(clock):
+    sched, events = make(schedule_volumes=WEEKEND, **GARDEN)
+    clock.now = at(SAT, '14:00')
+    sched._evaluate()
+    sched.hplayer.settings.set('schedule-volumes', [35, None, 35, 35, 35, 70, 50])
+    sched._evaluate()
+    sched.hplayer.settings.set('schedule-volumes', [35, None, 35, 35, 40, 70, 50])   # Friday: not today
+    sched._evaluate()
+    assert [e[1]['volume'] for e in events if e[0] == 'schedule.slot'] == [50, 70]
+
+
+def test_crossing_midnight_window_belongs_to_its_start_day_and_closes(clock):
+    sched, _ = make(schedule_open='22:00', schedule_close='02:00', schedule_days='0000001',
+                    schedule_volumes=[10, 20, 30, 40, 50, 60, 70])
+    clock.now = at(SUN, '23:00')
+    assert sched.currentSlot()['volume'] == 70
+    clock.now = at(SUN, '23:00').replace(day=19, hour=1)    # Monday 01:00: still Sunday's
+    assert sched.currentSlot() == {'day': SUN, 'open': '22:00', 'close': '02:00', 'volume': 70}
+    clock.now = at(MON, '12:00')                # between a close and the next open: closed
+    assert sched.isOpen() is False              # (read open before: master's #t-082 fix)
+
+
+def test_the_clean_slate_times_are_unchanged(clock):
+    sched, _ = make(schedule_reboot=True, schedule_volumes=WEEKEND, **GARDEN)
+    clock.now = at(SAT, '08:00')
+    assert sched._rebootSlots() == [('before open', 590), ('after close', 1085)]
+    clock.now = at(TUE, '08:00')
+    assert sched._rebootSlots() == []
