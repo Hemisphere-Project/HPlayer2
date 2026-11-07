@@ -12,6 +12,10 @@ from collections import deque
 
 PRECISION = 1000000     # us - same clock base as the zyre TimeClient
 
+# A step of OUR wall clock past this (s) restarts the packet clock offset: zyre.CLOCK_STEP's value
+# and reasoning (under the 3 s datesync deadband, far above two back-to-back reads' jitter).
+WALL_STEP = 0.25
+
 # Transport orders that move the clock leadership under role='elected' (the zyre event name,
 # without the profile's 'unbuf_' prefix). Volume and the rest are not orders: they never move it.
 ORDER_EVENTS = ('play', 'playindex', 'playz', 'playpause', 'next', 'prev', 'stop', 'pause', 'resume')
@@ -821,6 +825,21 @@ class WallclockInterface (BaseInterface):
     # SLAVE side
     #
 
+    def _wallStepped(self):
+        """True once per step of OUR wall clock (CLOCK_REALTIME against monotonic, past WALL_STEP).
+        Read on the receive thread, the one that feeds self._pkt: the reset it triggers never races
+        an add(). zyre's node does the same check for its TimeClients (ZyreNode._checkClockStep)."""
+        wall, mono = time.time(), time.monotonic()
+        prev = getattr(self, '_clockPair', None)
+        self._clockPair = (wall, mono)
+        if prev is None:
+            return False
+        step = (wall - prev[0]) - (mono - prev[1])
+        if abs(step) < WALL_STEP:
+            return False
+        self.log('wall clock stepped by', round(step, 3), 's: packet clock offset restarted')
+        return True
+
     # rate-limited log (once per 5s per message)
     def _quietLog(self, msg):
         now = time.time()
@@ -1363,6 +1382,11 @@ class WallclockInterface (BaseInterface):
             if self.elected:
                 self._leaderIdle = not pkt.get('p', False) or bool(pkt.get('z'))
             self._rejoins = 0
+            # A step of OUR wall clock moves every (tx - recv) by the step size. Past 1 s, add()
+            # starts over by itself; under it, the max filter keeps the pre-step offset for its
+            # whole 30 s window after a forward step. Restart it at the step instead.
+            if self._wallStepped():
+                self._pkt.reset()
             self._pkt.add(pkt.get('tx', pkt.get('at', 0)), int(self._lastAccept * PRECISION))
             extraBase = None    # re-set below only if this packet is chase-eligible
             if self._freewheeling:
