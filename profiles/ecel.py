@@ -153,7 +153,9 @@ def lcd_update(self):
 		
 		media = os.path.basename(media)[:-4]
 		skroller3 = max(0, (player.position()*scrollSpeed) % len(media) - introDuration * scrollSpeed)
-		offset = min( int(skroller3), len(media)-15 +len(lines[0]) )
+		# clamp at 0 (hplayer2#t-083): a name shorter than the window made the offset negative,
+		# and media[negative:] showed only its tail — `01_intro` read `ro`
+		offset = max(0, min( int(skroller3), len(media)-15 +len(lines[0]) ))
 		lines[0] += media[offset:]
 
 	else:
