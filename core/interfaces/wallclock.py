@@ -263,6 +263,7 @@ class WallclockInterface (BaseInterface):
 
         # Health view (read by the health interface): plain attributes, written by this thread
         self.hLastSend = 0.0            # master: last packet sent (clock or heartbeat)
+        self._sentAt = LONG_AGO         # the same send, on the monotonic clock (hello cadence)
         self.hLastClockSend = 0.0       # master: last packet carrying a live position
         self.hLastAccept = 0.0          # slave: last packet accepted from our master
         self.hMasterPlaying = False     # slave: last packet said the master plays
@@ -298,13 +299,13 @@ class WallclockInterface (BaseInterface):
             self._csStuckSince = None   # clock client missing or stalled since (re-arm after 30 s)
             self._lastQuiet = {}
             self._ring = []
-            self._lastSummary = time.time()
+            self._lastSummary = time.monotonic()
             self._csvFile = None
             # Cue following (numbered media): the master's NN_ prefix is the cue, every
             # slave plays its OWN NN_ file — the wired twin of the Nowde CC#100 contract.
             self._followIdx = 0         # cue currently followed (0 = master plays un-numbered media)
             self._noMedia = 0           # cue we have no file for (stay stopped, re-check every 5 s)
-            self._noMediaAt = 0.0       # last time we looked for that cue's file
+            self._noMediaAt = LONG_AGO       # last time we looked for that cue's file
             self._holdEnd = False       # our file is shorter: ended, waiting for the master to loop/change
             self._myDur = 0.0           # duration of our current cue file (kept while stopped)
             self._sameDur = True        # our file and the master's share one length (seamless loop ok)
@@ -313,7 +314,7 @@ class WallclockInterface (BaseInterface):
             self._noPeerSince = None    # master clock heard but no zyre peer since (rebuild request)
             self._pkt = PacketClock()   # fallback clock offset, from the packets themselves
             self._rejoins = 0           # silent-socket re-joins (log throttle)
-            self._rejoinLogAt = 0.0
+            self._rejoinLogAt = LONG_AGO
             self._legacyStalled = None  # the profile's stall hook, restored when leaving cue mode
 
         # Elected clock leader (role='elected'): see ROLES above
@@ -341,7 +342,7 @@ class WallclockInterface (BaseInterface):
         self._leaderIdle = False        # our leader's last accepted packet said stopped or paused
         self._dark = False              # our last play hit 'nomedia': as leader, send no clock
         self.dupName = False            # another player on zyre carries OUR name: never lead
-        self._dupCheckAt = 0.0
+        self._dupCheckAt = LONG_AGO
         self._dupLogAt = 0.0
         self._lastDur = 0.0             # length of the track we last reported (elected: for 'ad')
         self._orderAt = LONG_AGO             # last ranked order executed here
@@ -523,7 +524,7 @@ class WallclockInterface (BaseInterface):
     def _checkDupName(self):
         """Another player on zyre carries our name (an unstamped card: two `Anna-0`): two clocks under
         one name would desync the fleet silently. Never lead while it lasts; say it loudly."""
-        now = time.time()
+        now = time.monotonic()
         if now - self._dupCheckAt < 2.0:
             return
         self._dupCheckAt = now
@@ -589,7 +590,7 @@ class WallclockInterface (BaseInterface):
         # clock sync forever (kouagou03, 60 h from 2026-09-21 23:28). This thread runs on every
         # master packet anyway: after 30 s of a missing or stalled client, re-arm it from here.
         stuck = tc is None or (hasattr(tc, 'stalled') and tc.stalled())
-        now = time.time()
+        now = time.monotonic()
         if not stuck:
             self._csStuckSince = None
             return
@@ -679,7 +680,7 @@ class WallclockInterface (BaseInterface):
 
         def pin():
             ip = network.get_ip(self.iface) if self.iface else network.get_ip()
-            lastPin[0] = time.time()
+            lastPin[0] = time.monotonic()
             if self.iface:
                 bcast[0] = subnet_broadcast(self.iface, ip)
             if ip and ip != '127.0.0.1':
@@ -703,7 +704,7 @@ class WallclockInterface (BaseInterface):
         seq = 0
         lastBeat = 0.0
         lastMedia = None
-        helloAt = 0.0
+        helloAt = LONG_AGO
 
         def hello():
             # Presence (#t-089): our name, no clock, no seq. Elected receivers count it as company;
@@ -746,7 +747,7 @@ class WallclockInterface (BaseInterface):
                 self._sendErr('unicast', e)
             if ok:
                 seq = (seq + 1) & 0xffffffff
-                self.hLastSend = time.time()
+                self.hLastSend, self._sentAt = time.time(), time.monotonic()
             return ok
 
         while not self.stopped.is_set():
@@ -755,15 +756,15 @@ class WallclockInterface (BaseInterface):
                 break                   # shutting down: no last word — a "stopped" beat from a leader on
                                         # its way out would read as a stopped fleet, and nobody would take over
 
-            if time.time() - lastPin[0] > (2.0 if not pinned[0] else 30.0):
+            if time.monotonic() - lastPin[0] > (2.0 if not pinned[0] else 30.0):
                 was = pinned[0]
                 pin()
                 if pinned[0] and not was:
                     self.log('multicast egress pinned to', self.iface, '(late: interface was not up at start)')
 
             if self.elected:
-                now = time.time()
-                if now - max(self.hLastSend, helloAt) >= self.helloEvery:
+                now = time.monotonic()
+                if now - max(self._sentAt, helloAt) >= self.helloEvery:
                     helloAt = now       # a leader's clock says it already: presence only when silent
                     hello()
                 rank = self._rank
@@ -822,8 +823,8 @@ class WallclockInterface (BaseInterface):
 
     def _sendErr(self, what, e):
         k = '_sendErrAt_' + what
-        if time.time() - getattr(self, k, 0) > 60:
-            setattr(self, k, time.time())
+        if time.monotonic() - getattr(self, k, LONG_AGO) > 60:
+            setattr(self, k, time.monotonic())
             self.log(what, 'send error:', e)
 
     #
@@ -847,8 +848,8 @@ class WallclockInterface (BaseInterface):
 
     # rate-limited log (once per 5s per message)
     def _quietLog(self, msg):
-        now = time.time()
-        if self._lastQuiet.get(msg, 0) + 5 < now:
+        now = time.monotonic()
+        if self._lastQuiet.get(msg, LONG_AGO) + 5 < now:
             self._lastQuiet[msg] = now
             self.log(msg)
 
@@ -908,7 +909,7 @@ class WallclockInterface (BaseInterface):
                 self._csvFile = None
 
         # 60s summary: p50/p95/max |diff|, lock ratio, jumps
-        now = time.time()
+        now = time.monotonic()
         if now - self._lastSummary >= 60 and len(self._ring) > 0:
             self._lastSummary = now
             diffs = sorted([abs(r['diff']) * 1000 for r in self._ring])
@@ -945,7 +946,7 @@ class WallclockInterface (BaseInterface):
             if self._noMedia != idx:
                 self._noMedia = idx
                 self.log(colored('cue %d: no %s media here -> stopped, looking again every 5 s' % (idx, pattern), 'yellow'))
-            self._noMediaAt = time.time()
+            self._noMediaAt = time.monotonic()
             if self.player.isPlaying():
                 self.player.stop()
             return False
@@ -1207,8 +1208,8 @@ class WallclockInterface (BaseInterface):
                 if rebind:
                     # every 5 s while the master is silent: log the first few, then once a minute
                     self._rejoins += 1
-                    if self._rejoins <= 3 or time.time() - self._rejoinLogAt > 60:
-                        self._rejoinLogAt = time.time()
+                    if self._rejoins <= 3 or time.monotonic() - self._rejoinLogAt > 60:
+                        self._rejoinLogAt = time.monotonic()
                         self.log('multicast group re-joined on ' + (ip or '0.0.0.0') + ' (fresh socket, #%d)' % self._rejoins)
                 elif noted[0]:
                     self.log('multicast group joined on ' + (ip or '0.0.0.0') + ' (late: interface was not up at start)')
@@ -1233,7 +1234,7 @@ class WallclockInterface (BaseInterface):
         extraBase = None    # (pos, atLocal, dur, seq, cs) of the last chase-eligible packet
         baseAt = 0.0        # when extraBase was taken
         roleSeen = False    # elected: the role this loop last acted on
-        lastGap = [0.0]     # last gap tick
+        lastGap = [LONG_AGO]     # last gap tick
 
         def gapTick():
             # Delivery gap: keep servoing on the extrapolated clock
@@ -1246,7 +1247,7 @@ class WallclockInterface (BaseInterface):
             # one's position; nor older than a track end played alone, for the same reason)
             # Elected, it runs on presence packets too: they would otherwise starve it — it used
             # to run on the socket's silence alone, and a fleet that says hello is never silent.
-            lastGap[0] = time.time()
+            lastGap[0] = time.monotonic()
             if extraBase and self.drifter and time.monotonic() - self._lastAccept > 0.2 \
                     and self.player.isPlaying() \
                     and not (self.elected and (self.player.isPaused() or max(self._orderAt, self._localAt) > baseAt)):
@@ -1342,7 +1343,7 @@ class WallclockInterface (BaseInterface):
             if self.elected and name and name != self._myName:
                 if pkt.get('hi'):
                     self._heardFrom(name)           # presence: company (#t-089), never a clock
-                    if time.time() - lastGap[0] >= 0.2:
+                    if time.monotonic() - lastGap[0] >= 0.2:
                         gapTick()
                     continue
                 if pkt.get('v') == 1:
@@ -1355,7 +1356,7 @@ class WallclockInterface (BaseInterface):
             # Master lock-on / arbitration (elected: by rank, never by who was heard first)
             if self.elected:
                 if not self._electedArbitrate(pkt, name):
-                    if time.time() - lastGap[0] >= 0.2:
+                    if time.monotonic() - lastGap[0] >= 0.2:
                         gapTick()                   # another emitter's clock is no tick of ours either
                     continue
             elif self.masterName and name != self.masterName:
@@ -1414,7 +1415,7 @@ class WallclockInterface (BaseInterface):
                 # The master's clock is heard, so the link is up — only discovery is missing. A master
                 # rebooted or swapped under running slaves leaves it that way for good (LACROIX,
                 # 2026-09-15): after a minute ask zyre to rebuild its node, and again every minute.
-                now = time.time()
+                now = time.monotonic()
                 if not self._noPeerSince:
                     self._noPeerSince = now
                 elif now - self._noPeerSince > 60.0:
@@ -1532,8 +1533,8 @@ class WallclockInterface (BaseInterface):
                     # Keep looking: media arrives while the cue is playing (an http2 upload
                     # replaces the file — it is absent for a moment, S04-24-P stayed dark
                     # for an hour on 2026-09-10 because only a cue change re-checked).
-                    if time.time() - self._noMediaAt > 5.0:
-                        self._noMediaAt = time.time()
+                    if time.monotonic() - self._noMediaAt > 5.0:
+                        self._noMediaAt = time.monotonic()
                         if self._startCue(midx, 'media appeared'):
                             continue
                     self.drifter.release()
