@@ -80,13 +80,16 @@ static int toPct(int dbm) {             // -100 dBm -> 0, -50 dBm -> 100
 
 void netBegin() {
     prefs.begin("teleco2", false);
-    String s = prefs.getString("ssid", DEFAULT_SSID);
-    strlcpy(ssid, s.length() ? s.c_str() : DEFAULT_SSID, sizeof(ssid));
-    strlcpy(lastUsed, prefs.getString("last", "").c_str(), sizeof(lastUsed));
-    // isKey first: a missing key makes ESP-IDF print an [E] line on the USB (a fresh flash erases
-    // the whole NVS: the merged image writes 0xFF over it)
+    // isKey first, on every key: a missing key makes Preferences print an [E] line on the USB (a
+    // fresh flash erases the whole NVS: the merged image writes 0xFF over it). A player drops the
+    // line unread; a clean boot reads better on a monitor.
+    if (prefs.isKey("ssid")) {
+        String s = prefs.getString("ssid", DEFAULT_SSID);
+        strlcpy(ssid, s.length() ? s.c_str() : DEFAULT_SSID, sizeof(ssid));
+    }
+    if (prefs.isKey("last")) strlcpy(lastUsed, prefs.getString("last", "").c_str(), sizeof(lastUsed));
     if (prefs.isKey("bssid") && prefs.getBytes("bssid", bssid, 6) == 6) {
-        chan = prefs.getInt("chan", 0);
+        chan = prefs.isKey("chan") ? prefs.getInt("chan", 0) : 0;
         haveFast = chan > 0;
     }
     WiFi.persistent(false);             // our NVS keys, not the driver's
