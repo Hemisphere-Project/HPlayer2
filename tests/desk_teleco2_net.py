@@ -23,6 +23,7 @@ ni.ifaddresses = lambda iface: {}
 sys.modules['netifaces'] = ni
 
 from core.engine import network
+real_get_rssi = network.get_rssi
 network.get_hostname = lambda: 'Anna-07'
 network.get_ip = lambda iface=None: '10.8.0.107'
 network.get_essid = lambda iface=None: 'pisync'
@@ -155,6 +156,23 @@ def find(probeport, timeout=1.0):
         return None
     finally:
         u.close()
+
+
+# ─── 0. the signal is a percentage (0..100), whatever iw says ────────────────────────────────
+print('== network.get_rssi: a percentage, capped ==')
+_which, _out = network.shutil.which, network.subprocess.check_output
+network.shutil.which = lambda c: '/usr/sbin/iw'
+try:
+    got = {}
+    for dbm in (-13, -40, -60, -85, -95):
+        network.subprocess.check_output = lambda cmd, stderr=None, d=dbm: ('Connected to aa:bb\n\tsignal: %d dBm\n' % d).encode()
+        got[dbm] = real_get_rssi('wint')
+    network.subprocess.check_output = lambda cmd, stderr=None: b'Not connected.\n'
+    got['none'] = real_get_rssi('wint')
+finally:
+    network.shutil.which, network.subprocess.check_output = _which, _out
+check(got == {-13: 100, -40: 100, -60: 56, -85: 0, -95: 0, 'none': 0},
+      'next to the router (-13 dBm) reads 100, not 160; -60 -> 56; out of range / not connected -> 0: %s' % got)
 
 
 # ─── 1. the USB path is byte-identical to da75d1c's ──────────────────────────────────────────

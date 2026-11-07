@@ -147,7 +147,9 @@ def get_rssi(iface):
 
     minVal = -85
     maxVal = -40
-    return round(max(0, (rssi-minVal)*100/(maxVal-minVal)))
+    # capped: a player next to its router reads -15 dBm -> 155 uncapped (the profiles wrapped every
+    # LCD call in min(100, ..); the teleco2 "here"/"net" lines did not: "rssi":160, bench 2026-11-07)
+    return round(min(100, max(0, (rssi-minVal)*100/(maxVal-minVal))))
 
 def has_interface(iface):
     return iface in ni.interfaces()
