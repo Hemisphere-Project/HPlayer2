@@ -266,6 +266,12 @@ void netLoop() {
             S.noWifiSince = now;
             S.heard = 0;
             S.dBar = S.dPage = true;
+            // a fresh loss: first retry in 1 s, on the last AP and channel (a short drop comes back
+            // there). The retry clock still held the LAST attempt: it fired at once, into the driver's
+            // own disconnect ("sta is connecting"), and counted a failure — the fast path was lost
+            // (bench pass F, 2026-11-07)
+            wifiFails = 0;
+            wifiTryAt = now - WIFI_RETRY_MS + 1000;
         }
         if (now - wifiTryAt > WIFI_RETRY_MS) {
             if (wifiFails < 255) wifiFails++;
