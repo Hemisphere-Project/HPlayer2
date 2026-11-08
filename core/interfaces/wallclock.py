@@ -613,9 +613,12 @@ class WallclockInterface (BaseInterface):
 
     def _modelClock(self, base):
         """The master's position now, from the last chase-eligible packet, wrapped at the media
-        length. (Two Pi crystals drift ~0.1 s per hour of outage: the rejoin trims it away.)"""
-        bpos, batLocal, bdur, bseq, bcs, bwrap = base
-        elapsed = (time.time() * PRECISION - batLocal) / PRECISION
+        length. (Two Pi crystals drift ~0.1 s per hour of outage: the rejoin trims it away.)
+        The packet was aged once on arrival against the wall clock (its `at` is the master's
+        wall time); the time since then is monotonic, so a step of our wall clock during the
+        outage does not move the model."""
+        bpos, bage, brecv, bdur, bseq, bcs, bwrap = base
+        elapsed = bage + (time.monotonic() - brecv)
         clock = bpos + elapsed
         if bdur > 3:
             clock = clock % bdur
@@ -1232,7 +1235,7 @@ class WallclockInterface (BaseInterface):
         self._openCsv()
         self.log('slave: chasing wall clock on port', self.port)
 
-        extraBase = None    # (pos, atLocal, dur, seq, cs) of the last chase-eligible packet
+        extraBase = None    # (pos, age, recvMono, dur, seq, cs, wrap) of the last chase-eligible packet
         baseAt = 0.0        # when extraBase was taken
         roleSeen = False    # elected: the role this loop last acted on
         lastGap = [LONG_AGO]     # last gap tick
@@ -1252,7 +1255,7 @@ class WallclockInterface (BaseInterface):
             if extraBase and self.drifter and time.monotonic() - self._lastAccept > 0.2 \
                     and self.player.isPlaying() \
                     and not (self.elected and (self.player.isPaused() or max(self._orderAt, self._localAt) > baseAt)):
-                bpos, batLocal, bdur, bseq, bcs, bwrap = extraBase
+                bpos, bage, brecv, bdur, bseq, bcs, bwrap = extraBase
                 clock = self._modelClock(extraBase)
                 if bdur > 3:
                     clock = clock % bdur
@@ -1495,8 +1498,12 @@ class WallclockInterface (BaseInterface):
             # Estimate master position at local now:
             # packet timestamp -> local clock (zyre clockshift), then extrapolate.
             # Delivery delay/jitter cancels out by construction.
+            # Aged ONCE, here, on the wall clock (the only clock `at` can be compared to); the
+            # gap model carries on from this instant on the monotonic clock (_modelClock).
             atLocal = pkt.get('at', 0) - cs
-            clock = pkt.get('pos', 0.0) + (time.time() * PRECISION - atLocal) / PRECISION
+            recvMono = time.monotonic()
+            age = (time.time() * PRECISION - atLocal) / PRECISION
+            clock = pkt.get('pos', 0.0) + age
             if mdur > 3:
                 clock = clock % mdur
             if getattr(self, '_modelCheck', None):
@@ -1594,7 +1601,7 @@ class WallclockInterface (BaseInterface):
                 self.drifter.release()
                 continue
 
-            extraBase = (pkt.get('pos', 0.0), atLocal, mdur, s, cs, wrapDur)   # chase-eligible: gaps extrapolate from here
+            extraBase = (pkt.get('pos', 0.0), age, recvMono, mdur, s, cs, wrapDur)   # chase-eligible: gaps extrapolate from here
             baseAt = time.monotonic()
             res = self.drifter.tick(clock, wrapDur)
             if res:
