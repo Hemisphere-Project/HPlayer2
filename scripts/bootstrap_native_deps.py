@@ -60,7 +60,10 @@ def apply_patches(name: str, path: Path) -> None:
     """Apply scripts/patches/<name>-*.patch to a freshly reset clone (idempotent).
 
     The clones are reset to FETCH_HEAD on every run, so the patches are re-applied
-    each time; one that is already in (or upstreamed) is skipped via --reverse --check.
+    each time; one that is already in (or upstreamed verbatim) is skipped via
+    --reverse --check. A fix upstreamed in a different form applies neither way and
+    stops the bootstrap at `git apply`: drop the patch then (czmq's ziflist MAC bound,
+    upstream as ef8850a, was the first).
     """
     for patch in sorted(PATCHES.glob(f"{name}-*.patch")):
         check = ["git", "apply", "--reverse", "--check", str(patch)]
