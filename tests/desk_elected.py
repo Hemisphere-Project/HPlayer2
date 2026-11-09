@@ -1249,6 +1249,30 @@ def t_cached_position():
     f.shutdown()
 
 
+def t_fixed_cached_position():
+    # hplayer2#t-097: the role='fixed' follower (the Biennale walls) compares like with like too.
+    # The fixed master stamps `at` on its time-pos event exactly like the elected leader, so a
+    # follower that reads its own cached position un-aged parks ~half an event interval ahead.
+    Fleet([])
+    DUR['loop.mp4'] = 60.0
+    m = Node('WALL-MASTER', role='fixed', master=True, loop=True, mpvLike=True).start()
+    s = Node('WALL-SLAVE', role='fixed', master=False, loop=True, mpvLike=True).start()
+    samples = _record_ticks(s, m)
+    m.player.play('/data/media/loop.mp4'); s.player.play('/data/media/loop.mp4')
+    time.sleep(8)
+    t0 = time.time()
+    time.sleep(6)
+    win = [x for x in samples if x[0] >= t0]
+    check(len(win) > 40, '%d servo ticks on WALL-SLAVE in a 6 s window' % len(win))
+    bias = statistics.median([x[1] - x[2] for x in win])
+    check(abs(bias) < 0.008,
+          "fixed: the servo's diff IS the true offset: median bias %+.1f ms (mpv-like cached position)"
+          % (bias * 1000))
+    off = statistics.median([x[2] for x in win])
+    check(abs(off) < 0.030, 'fixed: WALL-SLAVE on the master, true offset %+.1f ms' % (off * 1000))
+    m.kill(); s.kill(); time.sleep(0.4)
+
+
 def t_tight_deadzone_join():
     f = Fleet([('Anna-1', 1.0), ('Anna-2', 1.0001)], mpvLike=True)
     a, b = f['Anna-1'], f['Anna-2']
@@ -1492,6 +1516,7 @@ TESTS = [
     ('fallback advances in a different order per node: one leader at once', t_fallback_skew),
     ('dark commander into a stopped fleet, its leader gone: a player takes over', t_dark_into_stopped),
     ('mpv-like cached position: the follower servo compares like with like', t_cached_position),
+    ('fixed mpv-like cached position: the fixed slave compares like with like', t_fixed_cached_position),
     ('mpv-like join with a 10/30 ms dead zone: on the leader, no hunting', t_tight_deadzone_join),
     ('lone roamer (#t-089): out 25 s, it claims nothing; the fleet keeps its leader', t_lone_roamer),
     ('lone roamer across a track end: it moves on by itself, no order, no rank', t_roamer_track_end),

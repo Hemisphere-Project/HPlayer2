@@ -272,21 +272,23 @@ class WallclockInterface (BaseInterface):
         self.hCsSource = None           # slave: 'zyre' | 'packets'
         self.hMismatch = 0.0            # slave: last time the master's media was not ours to chase
 
+        # Latch (pos, at, mono) from the player status events, on EVERY node with a player.
+        # A master's send loop reads it at its own rate: no extrapolation here, raw samples
+        # out, slaves extrapolate. A follower ages its own cached position with it
+        # (_ownPosAge): role='fixed' followers too, since hplayer2#t-097 — the fixed master
+        # stamps `at` the same way the elected leader does. Single-reference tuple: written
+        # by the event thread, read by the send loop / the servo.
+        # (pos, at, mono): `at` is wall us for the wire, mono ages it here.
+        self._latch = None
+        if self.player:
+            self.hplayer.on(self.player.name + '.status')(self._onPlayerStatus)
         if self.master or self.elected:
             self.drifter = None
-            # Latch (pos, at, mono) from the player status events; the send
-            # loop reads the latch at its own rate. No extrapolation here:
-            # raw samples out, slaves extrapolate. Single-reference tuple:
-            # written by the event thread, read by the send loop.
-            # (pos, at, mono): `at` is wall us for the wire, mono ages it here.
-            self._latch = None
-            if self.player:
-                self.hplayer.on(self.player.name + '.status')(self._onPlayerStatus)
         if not self.master:
             # danceMode: joining slaves seek-ahead + pause + timed-resume
             # instead of chaining blind jumps (113s -> ~10s join, 2026-07-23)
             self.drifter = Drifter(self.player, log=self.log, danceMode=True) if self.player else None
-            if self.drifter and self.elected:
+            if self.drifter:
                 self.drifter.posAge = self._ownPosAge   # compare like with like (see _ownPosAge)
             self._lockedName = None
             self._lastSeq = None
@@ -625,11 +627,12 @@ class WallclockInterface (BaseInterface):
         return clock
 
     def _ownPosAge(self, pos):
-        """Seconds since our player's position `pos` was true (elected only, via Drifter.posAge).
-        The leader stamps `at` when its time-pos event arrives, and the follower extrapolates
-        that to now. But our own position() is the cached LAST event, 40-80 ms apart on mpv, so
-        it must be aged the same way, or every follower locks ~half an event interval ahead.
-        The latch holds the same event (same thread, same value): None when it does not."""
+        """Seconds since our player's position `pos` was true (every follower, via Drifter.posAge).
+        The leader (elected, or the fixed master) stamps `at` when its time-pos event arrives,
+        and the follower extrapolates that to now. But our own position() is the cached LAST
+        event, 40-80 ms apart on mpv, so it must be aged the same way, or every follower locks
+        ~half an event interval ahead. The latch holds the same event (same thread, same
+        value): None when it does not."""
         latch = self._latch
         if latch is None or abs(latch[0] - float(pos)) > 0.0005:
             return None
@@ -650,6 +653,8 @@ class WallclockInterface (BaseInterface):
     #
 
     def _onPlayerStatus(self, ev, *args):
+        """Every node with a player: the master sends this latch, a follower ages its own
+        cached position with it (_ownPosAge)."""
         if len(args) < 2:
             return
         if args[0] == 'time' and args[1] is not None:
