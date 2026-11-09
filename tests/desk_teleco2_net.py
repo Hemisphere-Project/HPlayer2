@@ -66,7 +66,7 @@ class Playlist():
     def export(self): return list(self.items)
 
 class Settings():
-    def __init__(self): self.v = {'volume': 80, 'mute': False, 'loop': -1}
+    def __init__(self): self.v = self._settings = {'volume': 80, 'mute': False, 'loop': -1}
     def get(self, k): return self.v.get(k)
 
 class Peer():
