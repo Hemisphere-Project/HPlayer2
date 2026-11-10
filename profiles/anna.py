@@ -1,5 +1,6 @@
 from core.engine.hplayer import HPlayer2
 from core.engine import network
+from core.engine import usbsync
 
 import os, sys, types, platform, time
 from threading import Timer
@@ -27,8 +28,11 @@ if keypad.lcd: keypad.lcd.set_color( 100, 0, 100)
 keypad.draw( [".:: HPlayer2 ::.", "   Starting "+keypad.CHAR_LOVE+"   "] )
 time.sleep(2.0)  	# wait for USB to get ready
 
-# RSync USB (on start)
+# USB sync (on start): stage -> check -> swap, core/engine/usbsync.py (hplayer2#t-092).
+# An interrupted copy never empties /data/media; a swap cut by a power loss is finished first, stick or not.
 #
+usbsync.recover(base_path[0], log=hplayer.log)
+
 # usbCount = len([name for name in os.listdir('/data/usb') if os.path.isfile( os.path.join('/data/usb', name) )])
 # if usbCount > 0:
 
@@ -56,14 +60,17 @@ if usbSync:
 	ellapsed = time.time()
  
 	hplayer.log("USB sync folder detected: syncing !")
-	cmd = "rsync -tdv --delete --exclude='.*' --exclude='*/' --exclude='Thumbs.db' /data/usb/sync/ "+base_path[0]
-	hplayer.log(cmd)
-	os.system(cmd)
+	synced = usbsync.sync('/data/usb/sync', base_path[0], log=hplayer.log)
+	if synced:
+		hplayer.files.refresh()		# the new set, now: the watchdog's refresh comes 0.5 s later
+	else:
+		keypad.draw( [".:: HPlayer2 ::.", "USB sync FAILED "] )	# the previous set stays
 
-	ellapsed = time.time()-ellapsed	
-	if ellapsed < 2:
-		print("WAIT", 2-ellapsed)
-		time.sleep(2-ellapsed)
+	ellapsed = time.time()-ellapsed
+	hold = 2 if synced else 6		# a failure stays readable: the keypad redraws once the player runs
+	if ellapsed < hold:
+		print("WAIT", hold-ellapsed)
+		time.sleep(hold-ellapsed)
 	timer.cancel()
 else:
 	hplayer.log("No USB sync folder detected, skipping sync !")
