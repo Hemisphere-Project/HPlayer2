@@ -3,6 +3,7 @@ link was alive at a given minute. Real HELLO / RUNNING_STATE frames go through t
 own SysEx handler; the clock is driven by hand, nothing is started."""
 import os
 import sys
+import threading
 import time
 
 import pytest
@@ -178,3 +179,24 @@ def test_link_down_is_said_every_minute(iface):
     assert len(b) == 2
     assert b[0] == 'HEARTBEAT slave: link DOWN 55s, node last heard 56s ago'
     assert b[1] == 'HEARTBEAT slave: link DOWN 115s, node last heard 116s ago'
+
+
+@pytest.mark.parametrize('linked', [True, False])
+def test_the_emitter_thread_beats_linked_or_not(iface, monkeypatch, linked):
+    """The real emitter loop calls the heartbeat on both of its branches (link up, link down)."""
+    if linked:
+        link(iface, time.time())
+    called = []
+
+    def beat(now):
+        called.append(now)
+        iface.stopped.set()                     # one pass is enough
+
+    monkeypatch.setattr(iface, '_heartbeat', beat)
+    iface.stopped.clear()                       # what start() does; set again by the first beat
+    t = threading.Thread(target=iface._emitter_loop, daemon=True)
+    t.start()
+    t.join(2.0)
+    iface.stopped.set()                         # an unwired heartbeat would loop for ever
+    t.join(1.0)
+    assert len(called) == 1
