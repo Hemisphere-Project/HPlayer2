@@ -51,11 +51,13 @@ player = hplayer.addPlayer('mpv', 'player')
 # systemd restarted it — six times in two minutes on the wall master, black all along (2026-09-21).
 # Emitting the event on the zyre interface runs the engine's own play/stop/loop handlers locally;
 # the slaves follow the wallclock and the next broadcast reaches them once the node is up.
+# With the node up, the broadcast is LOCAL FIRST (hplayer2#t-067): this player obeys its own page
+# before zyre is asked anything, so a master cut off from its network still plays and stops.
 def zbroadcast(event, args=None, delay_ms=0):
 	z = hplayer.interface('zyre')
 	node = getattr(z, 'node', None) if z else None
 	if node:
-		return node.broadcast(event, args, delay_ms)
+		return node.broadcast(event, args, delay_ms, localFirst=True)
 	a = [] if args is None else (args if isinstance(args, list) else [args])
 	print('[zyre]     node not up yet: ' + event + ' handled locally')
 	if z:

@@ -539,6 +539,7 @@ class Peer():
 class ZyreNode ():
     def  __init__(self, interface, netiface=None):
         self.interface = interface
+        self.closed = False    # set by stop(): see broadcast(localFirst=True)
 
         # Peers book
         self.book = {}
@@ -937,6 +938,7 @@ class ZyreNode ():
         self.done = True
 
     def stop(self):
+        self.closed = True     # a local-first broadcast must not shout into a zyre being destroyed
         self.interface.log('stopping peers')
         for peer in list(self.book.values()) + [p for p, _ in list(self.gone.values())]:
             peer.stop()
@@ -1053,9 +1055,33 @@ class ZyreNode ():
             data['group'] = group
             self.preProcessor1(data)
 
-    def broadcast(self, event, args=None, delay_ms=0, at=0, extra=None):
-        self.shout('broadcast', event, args, delay_ms, at, extra)
-        
+    def broadcast(self, event, args=None, delay_ms=0, at=0, extra=None, localFirst=False):
+        if not localFirst:
+            return self.shout('broadcast', event, args, delay_ms, at, extra)
+        # LOCAL FIRST (hplayer2#t-067): this node obeys its own command before, and without,
+        # asking zyre anything. shout() reaches self only through zyre_own_groups(), a round trip
+        # into the zyre actor: on a master whose network is gone (dongle reset, interface
+        # vanished, node mid-rebuild) that call can fail or never return, and the master stayed
+        # deaf to its own page while http2 kept serving it (KOUAGOU/TAUPAKI, Lyon 2026-09-18).
+        # One message, built once: self and the peers get the same `at`, so sync is unchanged.
+        data = self.makeMsg(event, args, delay_ms, at, extra)
+        mine = json.loads(data.decode())
+        mine['from'] = 'self'
+        mine['group'] = 'broadcast'
+        try:
+            self.preProcessor1(mine)
+        except Exception as e:
+            self.interface.log('broadcast', event, 'local handling error:', e)
+        if self.closed:
+            self.interface.log('broadcast', event, 'handled locally, node closed: not sent to peers')
+            return
+        try:
+            with self._zyre_lock:
+                self.zyre.shouts(b'broadcast', data)
+        except Exception as e:
+            self.interface.log('broadcast', event, 'handled locally, not sent to peers:', e)
+
+
     def tomyself(self, event, args=None, delay_ms=0, at=0, extra=None):
         self.whisper(self.uuid, event, args, delay_ms, at, extra)
 
