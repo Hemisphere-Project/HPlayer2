@@ -246,6 +246,20 @@ def parse_running_state(d):
     return meta, receivers
 
 
+def fmt_age(seconds):
+    """A duration for one log line: 0.4s, 42s, 17m, 5h03m. None -> '-'."""
+    if seconds is None:
+        return '-'
+    s = max(0.0, float(seconds))
+    if s < 10:
+        return '%.1fs' % s
+    if s < 120:
+        return '%ds' % s
+    if s < 7200:
+        return '%dm' % (s // 60)
+    return '%dh%02dm' % (s // 3600, (s % 3600) // 60)
+
+
 def media_index_of(path):
     """Numeric prefix of a media file name -> 1..127, else 0."""
     if not path:
@@ -300,6 +314,7 @@ class NowdeInterface(BaseInterface):
     VOLUME_PERSIST_DELAY = 2.0      # slave: apply live, write the cfg only after this much quiet
     NODE_RESET_MIN_GAP = 900.0      # never two soft resets of the node closer than this
     HELLO_SILENCE = 30.0            # slave: no HELLO for this long = the node is not answering (probe is 2 s)
+    HEARTBEAT_INTERVAL = 60.0       # both roles: one summary line a minute (see _heartbeat)
 
     def __init__(self, hplayer, player=None, port_name=None, max_retry=0, mode='auto'):
         if _MIDO_IMPORT_ERROR:
@@ -366,6 +381,13 @@ class NowdeInterface(BaseInterface):
         self._tableEmptySince = None    # master: since when RUNNING_STATE lists no receiver
         self._lastNodeReset = 0.0       # both: last soft reset we asked the node for
         self._wasSlave = (mode == 'slave')   # the role survives a link loss for the guard's purpose
+        # heartbeat: one line a minute, so a journal alone says whether the link was alive
+        self._lastHeartbeat = 0.0
+        self._lastHeardAt = 0.0         # last SysEx of ours from the node, any command
+        self._hellosHeard = 0           # HELLOs since the last heartbeat (a 2.0.1+ slave answers every probe)
+        self._tablesHeard = 0           # master: complete RUNNING_STATE tables since the last heartbeat
+        self._nodeUptime = None         # ms, as the node last stated it (HELLO or RUNNING_STATE)
+        self._linkDownSince = None      # when the link last went down; None while linked
 
         # Slave sync state (the chase-lock servo lives in the shared Drifter)
         self.jumpFix = 500       # seek-latency compensation (300ms RockPro64 on loop, 1000ms laptop)
@@ -562,12 +584,15 @@ class NowdeInterface(BaseInterface):
             return
         cmd = data[1]
         d = list(data[2:])
+        self._lastHeardAt = time.time()
         if cmd == CMD_HELLO:
             info = parse_hello(d)
             if not info:
                 return
             self.node.update(info)
-            self._lastHelloAt = time.time()
+            self._lastHelloAt = self._lastHeardAt
+            self._hellosHeard += 1
+            self._nodeUptime = info['uptime']
             self.log(f"HELLO v{info['version']} up={info['uptime']}ms boot={info['boot_reason']}"
                      + (f" role={info['role']} board={info['board']}" if 'role' in info else " (v1 node)"))
             self.emit('hello', info)
@@ -595,6 +620,7 @@ class NowdeInterface(BaseInterface):
             if meta is None:
                 return
             self.mesh_synced = meta['synced']
+            self._nodeUptime = meta['uptime']
             if meta['chunk'] == 0:
                 self._chunkbuf = []
             buf = getattr(self, '_chunkbuf', [])
@@ -602,6 +628,7 @@ class NowdeInterface(BaseInterface):
             self._chunkbuf = buf
             if meta['chunk'] >= meta['chunks'] - 1:
                 self.receivers = list(buf)
+                self._tablesHeard += 1
                 self.emit('receivers', self.receivers)
                 self._auto_assign_layers()
         elif cmd == CMD_LOG:
@@ -672,6 +699,7 @@ class NowdeInterface(BaseInterface):
                     # a slave whose node vanished while it played would otherwise play on forever,
                     # unsynced, with nothing left to say stop (fuzz F3, 2026-09-29).
                     self._slave_watch(time.time())
+                self._heartbeat(time.time())          # both roles, linked or not
             except Exception as err:
                 self.log(colored(f"emitter error: {err}", 'red'))
             self.stopped.wait(0.02)
@@ -747,6 +775,7 @@ class NowdeInterface(BaseInterface):
                 else:
                     self.out = None
                 self._connected_at = time.time()
+                self._linkDownSince = None
                 self._lastSent = None
                 node_client = alsa_client_of(target_port)
                 self._seq_client = seq_subscriber_of(self._seq_clients(), node_client)
@@ -812,6 +841,8 @@ class NowdeInterface(BaseInterface):
     PORT_CLOSE_TIMEOUT = 3.0
 
     def _close_ports(self):
+        if self.port is not None or self.out is not None:
+            self._linkDownSince = time.time()
         for attr in ('port', 'out'):
             p = getattr(self, attr)
             if p is not None:
@@ -1099,6 +1130,55 @@ class NowdeInterface(BaseInterface):
                 and now - self._lastNodeReset >= self.NODE_RESET_MIN_GAP):
             if self._node_soft_reset(f"receiver table empty for {int(now - self._tableEmptySince)} s", now):
                 self._tableEmptySince = now
+
+    # ------------------------------------------------------------------ heartbeat
+
+    def _heartbeat(self, now):
+        """Once a minute on either role: ONE line saying whether the link was alive and how well
+        the mesh held. An 18-hour master journal held two HELLOs (boot) and nothing periodic about
+        the mesh (17/09): the RUNNING_STATE table was never written down, so nobody could say from
+        the journal whether the link was alive at a given minute. One line, never the 10 Hz stream.
+        Silent until the first link: a profile may load this interface on a player with no node,
+        and the port lookup already says so every 5 minutes."""
+        if not self._connected_at:
+            return
+        if not self._lastHeartbeat:
+            self._lastHeartbeat = now           # the first line comes one interval after the first link
+            return
+        if now - self._lastHeartbeat < self.HEARTBEAT_INTERVAL:
+            return
+        self._lastHeartbeat = now
+        self.log(self._heartbeat_line(now))
+        self._hellosHeard = 0
+        self._tablesHeard = 0
+
+    def _heartbeat_line(self, now):
+        """master: `slaves=4 locked=3 oldest=1.2s tables=60 heard=0.3s node-up=5h03m idx=3 playing`
+        slave:  `sq=2 hellos=30 heard=0.8s node-up=5h03m idx=3 playing`
+        down:   `link DOWN 3m, node last heard 3m ago`
+        `oldest` = the stalest slave the node lists (its own last-seen age); `tables`/`hellos` =
+        frames heard since the last line (a master polls 1 Hz, a 2.0.1+ slave node answers each
+        2 s probe with a HELLO); `heard` = age of the last frame of any kind from the node."""
+        role = self.role or ('slave' if self._wasSlave else 'role?')
+        heard = fmt_age(now - self._lastHeardAt) if self._lastHeardAt else '-'
+        if not self.isLinked():
+            down = fmt_age(now - self._linkDownSince) if self._linkDownSince else '-'
+            return f"HEARTBEAT {role}: link DOWN {down}, node last heard {heard} ago"
+        up = fmt_age(self._nodeUptime / 1000.0) if self._nodeUptime is not None else '-'
+        if self.isMaster():
+            locked = sum(1 for r in self.receivers if r.get('sync_quality') == 2)
+            oldest = fmt_age(max(r['last_seen'] for r in self.receivers) / 1000.0) if self.receivers else '-'
+            sent = self._lastSent
+            state = (f"idx={sent[0]} {'playing' if sent[1] else 'stopped'}") if sent else 'idx=- (nothing sent)'
+            return (f"HEARTBEAT master: slaves={len(self.receivers)} locked={locked} oldest={oldest}"
+                    f" tables={self._tablesHeard} heard={heard} node-up={up} {state}")
+        sq = self.node.get('sync_quality')
+        playing = bool(self.player and self.player.isPlaying()) and not self.isStopped
+        state = f"idx={self.lastCC if self.lastCC is not None else '-'} {'playing' if playing else 'stopped'}"
+        if self._guardStopped:
+            state += ' (silence guard)'
+        return (f"HEARTBEAT {role}: sq={'?' if sq is None else sq} hellos={self._hellosHeard}"
+                f" heard={heard} node-up={up} {state}")
 
     def handle_timecode(self, ev, *args):
         """Feed the external MTC/OSC clock to the shared chase-lock servo."""
