@@ -426,6 +426,7 @@ class Node():
         self.wc._myName = name
         if self.wc.drifter:
             self.wc.drifter.doLog = VERBOSE
+            self.wc.drifter.logTicks = VERBOSE      # -v: the per-tick chase lines too (off by default)
         self.advances = 0
         self.localAdvances = 0
         self._install_profile()

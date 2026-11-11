@@ -208,7 +208,8 @@ class WallclockInterface (BaseInterface):
                     masterName=None, staleness=1.0, extrapolate=4.0, modelMax=6 * 3600,
                     driftLog='/tmp/wallclock-drift.csv', durTolerance=1.0,
                     role='fixed', takeoverAfter=8.0, stopGrace=2.0, pauseGrace=1.0,
-                    mediaGrace=2.0, mediaStart=None, companyWindow=3.0, companyHold=2.0):
+                    mediaGrace=2.0, mediaStart=None, companyWindow=3.0, companyHold=2.0,
+                    logChase=False):
 
         super().__init__(hplayer, "WALLCLOCK")
         self.logQuietEvents.extend(['drift'])
@@ -248,6 +249,11 @@ class WallclockInterface (BaseInterface):
         # one content per screen, all cut to one length (the LEA fleet, 2026-09-10).
         self.durTolerance = durTolerance
         self._diffNoted = set()
+        # The servo's per-tick correction line is debug, off by default: during a chase it printed
+        # several lines a second into a journal that is 32 MB of RAM on a Pi player, for numbers
+        # the drift CSV (every tick) and the `drift 60s` summary already carry. JUMP lines stay.
+        # A profile passes logChase=True to see them again for a debug session.
+        self.logChase = logChase
 
         self._myName = network.get_hostname()
 
@@ -290,6 +296,7 @@ class WallclockInterface (BaseInterface):
             self.drifter = Drifter(self.player, log=self.log, danceMode=True) if self.player else None
             if self.drifter:
                 self.drifter.posAge = self._ownPosAge   # compare like with like (see _ownPosAge)
+                self.drifter.logTicks = logChase        # per-tick chase lines: debug (see logChase)
             self._lockedName = None
             self._lastSeq = None
             self._lastAccept = LONG_AGO

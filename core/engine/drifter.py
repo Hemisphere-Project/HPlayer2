@@ -54,6 +54,11 @@ class Drifter():
         self.inDeadZone = False
 
         self.doLog = True
+        # The per-tick correction line (`[hh:mm:ss] timedelay= framedelta= speed=`): one line
+        # per servo tick while the speed is off 1.0, i.e. several a second during a chase.
+        # False keeps the rare lines (JUMP, landing, no news) and drops only this one — the
+        # wallclock turns it off, its drift CSV and 60 s summary carry the same numbers.
+        self.logTicks = True
         self.onStalled = None   # optional hook: player not playing after grace (nowde plugs pattern-replay here)
 
         # Chase lead (s): the player timeline runs this far AHEAD of the shared
@@ -326,7 +331,7 @@ class Drifter():
         self.player.speed(speed)
 
         # LOG
-        if self.doLog:
+        if self.doLog and self.logTicks:
             if speed != 1.0 or self.lastSpeed != 1.0:
                 timestamp = datetime.datetime.now().strftime("%H:%M:%S.%f")[:-3]
 
