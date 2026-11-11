@@ -136,7 +136,7 @@ wcmod.time = ThreadClock('time')
 def feeder():
     while not stopFeed.is_set():
         if feeding.is_set():
-            master._latch = (mPlayer.position(), int((_realTime() + CS_US / PRECISION) * PRECISION))
+            master._latch = (mPlayer.position(), int((_realTime() + CS_US / PRECISION) * PRECISION), time.monotonic())
         stopFeed.wait(0.04)
 stopFeed = threading.Event(); feeding = threading.Event(); feeding.set()
 
@@ -237,7 +237,7 @@ slave9 = WallclockInterface(s9Hp, None, False, player=s9Player, port=13739, mast
 slave9._myName = 'SLAVE'; slave9.drifter.doLog = False
 def feeder9():
     while not stop9.is_set():
-        master._latch = (m9Player.position(), int((_realTime() + CS_US / PRECISION) * PRECISION))
+        master._latch = (m9Player.position(), int((_realTime() + CS_US / PRECISION) * PRECISION), time.monotonic())
         stop9.wait(0.04)
 stop9 = threading.Event()
 for x in (master, slave9): x.recvThread.daemon = True; x.start()

@@ -1,5 +1,6 @@
 from core.engine.hplayer import HPlayer2
 from core.engine import network
+from core.engine import usbsync
 from core.interfaces.wallclock import end_action
 
 import os, sys, types, platform, time
@@ -64,8 +65,10 @@ keypad.draw( [".:: HPlayer2 ::.", "   Starting "+keypad.CHAR_LOVE+"   "] )
 time.sleep(2.0)  	# wait for USB to get ready
 
 
-# RSync USB (on start)
+# USB sync (on start): stage -> check -> swap, core/engine/usbsync.py (hplayer2#t-092).
+# An interrupted copy never empties /data/media; a swap cut by a power loss is finished first, stick or not.
 #
+usbsync.recover(base_path[0], log=hplayer.log)
 usbSync = os.path.exists('/data/usb/sync') and os.path.isdir('/data/usb/sync')
 
 if usbSync:
@@ -90,13 +93,16 @@ if usbSync:
 	ellapsed = time.time()
 
 	hplayer.log("USB sync folder detected: syncing !")
-	cmd = "rsync -tdv --delete --exclude='.*' --exclude='*/' --exclude='Thumbs.db' /data/usb/sync/ "+base_path[0]
-	hplayer.log(cmd)
-	os.system(cmd)
+	synced = usbsync.sync('/data/usb/sync', base_path[0], log=hplayer.log)
+	if synced:
+		hplayer.files.refresh()		# the new set, now: the watchdog's refresh comes 0.5 s later
+	else:
+		keypad.draw( [".:: HPlayer2 ::.", "USB sync FAILED "] )	# the previous set stays
 
 	ellapsed = time.time()-ellapsed
-	if ellapsed < 2:
-		time.sleep(2-ellapsed)
+	hold = 2 if synced else 6		# a failure stays readable: the keypad redraws once the player runs
+	if ellapsed < hold:
+		time.sleep(hold-ellapsed)
 	timer.cancel()
 else:
 	hplayer.log("No USB sync folder detected, skipping sync !")
@@ -115,7 +121,7 @@ def seed_settings(ev, *args):
 	# The media folder IS the playlist, at every boot. settings.load() (in run(), just before app-run)
 	# replays the stored 'playlist' key as do-playlist, and hplayer's own binding runs playlist.load()
 	# on it: None (a fresh card) empties the list built at import (LCD 0/0, next/play dead), and a
-	# stored list is stale once the USB sync's rsync --delete changed /data/media (index sync breaks).
+	# stored list is stale once the USB sync changed /data/media (index sync breaks).
 	# Rebuild from the folder now that settings are ready: this also stores the folder's list.
 	build_list()
 

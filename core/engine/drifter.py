@@ -54,6 +54,11 @@ class Drifter():
         self.inDeadZone = False
 
         self.doLog = True
+        # The per-tick correction line (`[hh:mm:ss] timedelay= framedelta= speed=`): one line
+        # per servo tick while the speed is off 1.0, i.e. several a second during a chase.
+        # False keeps the rare lines (JUMP, landing, no news) and drops only this one — the
+        # wallclock turns it off, its drift CSV and 60 s summary carry the same numbers.
+        self.logTicks = True
         self.onStalled = None   # optional hook: player not playing after grace (nowde plugs pattern-replay here)
 
         # Chase lead (s): the player timeline runs this far AHEAD of the shared
@@ -63,12 +68,13 @@ class Drifter():
         # wallclock — mixed fleets (hub and non-hub players) stay aligned.
         self.offset = 0.0
 
-        # Position age (opt-in; the elected wallclock plugs it): posAge(pos) -> seconds since
+        # Position age (opt-in; every wallclock follower plugs it): posAge(pos) -> seconds since
         # `pos` was the player's true position, or None. mpv's position() is the LAST time-pos
         # event, and those come every ~40 ms (25 fps video) to 55-80 ms (audio). The clock is
         # extrapolated to now, so clock - pos reads `age` too late: +20..40 ms of bias, and the
         # servo parks a follower that far AHEAD (Anna bench, 2026-11-06). With posAge, both
-        # sides are compared at the same instant. None = the historic servo (fixed role, nowde).
+        # sides are compared at the same instant. None = the historic servo (nowde: its master
+        # sends an equally cached position, and the two ages cancel — hplayer2#t-094).
         self.posAge = None
 
         # ── Smart join (danceMode) ──────────────────────────────────────
@@ -109,7 +115,7 @@ class Drifter():
         # and profiles re-arm on that event — wiping the measurement here
         # would lose the seek-latency learning on every join. A genuinely
         # new play >2s later still discards the stale jump.
-        if self._pendingJump is not None and time.time() - self._pendingJump['t0'] > 2.0:
+        if self._pendingJump is not None and time.monotonic() - self._pendingJump['t0'] > 2.0:
             self._pendingJump = None
 
     # Freewheel: back to speed 1.0, clear servo state (clock lost / master gone)
@@ -136,7 +142,7 @@ class Drifter():
         target = clock + self._seekLatEst
         if duration and duration > 3:
             target = target % duration
-        self._pendingJump = {'t0': time.time()}
+        self._pendingJump = {'t0': time.monotonic()}    # a 2s freshness WINDOW: elapsed
         self._diffWindow.clear()
         if self.doLog:
             self.log("timedelay=" + colored(round(diff, 2), "red"),
@@ -325,7 +331,7 @@ class Drifter():
         self.player.speed(speed)
 
         # LOG
-        if self.doLog:
+        if self.doLog and self.logTicks:
             if speed != 1.0 or self.lastSpeed != 1.0:
                 timestamp = datetime.datetime.now().strftime("%H:%M:%S.%f")[:-3]
 

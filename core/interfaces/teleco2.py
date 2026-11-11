@@ -49,6 +49,17 @@ AUTO-FLASH (policy: any off-version remote is flashed on sight, erasure assumed)
 
 Device declares the link stale after 8s without a valid host line (net's 2s cadence = 4 missed).
 
+THE 303a:1001 COLLISION (USB only)
+  The default filter matches the generic Espressif ROM-CDC id, which the radar box
+  (extra/arduino/radar_ld2450) shares. Under that default the port is only ours once
+  the device proves it: a valid command, a hello carrying fw, or a bare `hello 1`
+  repeated (the radar box prints one bare `hello 1` on boot -- never flash on that).
+  A radar frame line, or no hello within HELLO_WAIT, rejects the port: SerialBase
+  re-scans excluding it until it is unplugged. A per-player `teleco2-filter` setting
+  (keyed on the USB serial string, SER=<chip MAC>) or a filter passed by the profile
+  is trusted instead: no probing, and a silent device gets the dump anyway. A TCP
+  session is proven by the protocol (it answered our "here"): never probed.
+
 ADDITIONS for fw >= 6 (additive: a v5 remote never sends them, a v5 player drops them unread)
   hello <proto> <fw> <chipid>   the chip id lets a player drop a TCP session of a remote that is
                                 now plugged into its USB (one remote, one transport)
@@ -67,6 +78,11 @@ remote on its battery. One selector thread serves both:
 """
 
 PROTO           = 1
+
+DEFAULT_FILTER  = "HPlayer2|303a:1001"
+HELLO_WAIT      = 15        # s, probing: a host-less remote beacons by 8s stale + 3s period
+DUMP_WAIT       = 10        # s, a trusted link (explicit filter, or tcp): silence -> dump anyway
+RADAR_FRAME     = re.compile(r'T(\s+-?\d+,-?\d+,-?\d+)*$')
 
 MEDIA_MAXLEN    = 48
 NAME_MAXLEN     = 16
@@ -110,6 +126,8 @@ class Teleco2Session():
         self._peersLast = 0
         self._netLast = 0
         self._helloWait = None          # connect-time silence window (see onConnect)
+        self._probing = False           # usb, matched on the generic default filter: not ours until proven
+        self._bareHellos = 0            # fw-less hellos seen on this link while probing
 
     def send(self, line):
         self._send(line)
@@ -129,6 +147,10 @@ class Teleco2Session():
         cmd = parts[0].lower()
         args = parts[1:]
 
+        if self.transport == 'usb' and RADAR_FRAME.match(line):
+            self.itf.rejectPort("radar frames")     # a radar box on the shared id, never a remote
+            return
+
         if cmd in ('hello', 'getall'):
             if cmd == 'hello':
                 try:
@@ -140,6 +162,11 @@ class Teleco2Session():
                 self.fw = fw
                 self.log("device hello: proto", proto, "fw", fw, *(('chip', chip) if chip else ()),
                          *(('over', self.transport) if self.transport != 'usb' else ()))
+                if self._probing and len(args) < 2:
+                    self._bareHellos += 1
+                    if self._bareHellos < 2:
+                        return      # the radar box says this once on boot: wait for the beacon
+                self._probing = False
                 if chip:
                     self.chipid = chip
                     self.itf._chipSeen(self, chip)
@@ -147,6 +174,7 @@ class Teleco2Session():
                     return          # link dropped for reflash, device will be back
                 if self.closing:
                     return          # a tcp session of a remote that is on our USB now
+            self._probing = False
             self.fullDump()
         elif cmd == 'hb':
             pass                    # heartbeat: lastRx is all it carries
@@ -157,6 +185,7 @@ class Teleco2Session():
                 args = [int(a) for a in args]
             except ValueError:
                 return self.log("bad args:", line)
+            self._probing = False
             if self.itf.local:
                 self.itf._execLocal(cmd, *args)
             else:
@@ -181,8 +210,11 @@ class Teleco2Session():
     def onConnect(self):
         # stay silent until the device introduces itself: its hello carries the
         # firmware version (auto-flash check). A plugged device beacons within 3s
-        # once stale; if nothing comes in 10s, dump anyway (tick fallback).
+        # once stale. Silence: a USB port matched on the generic default is rejected
+        # after HELLO_WAIT, any other link gets the dump after DUMP_WAIT (tick fallback).
         self._helloWait = time.time()
+        self._probing = self.transport == 'usb' and self.itf.filter == DEFAULT_FILTER
+        self._bareHellos = 0
 
     def onDisconnect(self):
         self._helloWait = None      # don't let the dump fallback race a dropped link
@@ -205,9 +237,13 @@ class Teleco2Session():
 
     def tick(self):
         if self._helloWait:
-            if time.time() - self._helloWait > 10:
-                self.log("no hello from device, dumping anyway")
-                self.fullDump()
+            wait = HELLO_WAIT if self._probing else DUMP_WAIT
+            if time.time() - self._helloWait > wait:
+                if self._probing:
+                    self.itf.rejectPort("no teleco2 hello in %ds" % wait)
+                else:
+                    self.log("no hello from device, dumping anyway")
+                    self.fullDump()
             return
         itf = self.itf
         now = time.time()
@@ -240,9 +276,11 @@ class Teleco2Session():
 
 class Teleco2Interface(SerialBase):
 
-    def  __init__(self, hplayer, local=False, netiface='wlan0', filter="HPlayer2|303a:1001",
+    def  __init__(self, hplayer, local=False, netiface='wlan0', filter=DEFAULT_FILTER,
                   netport=None, probeport=3739):
         super().__init__(hplayer, "Teleco2", filter)
+        # persistent per-player override, must exist before settings.load()
+        hplayer.settings._settings.setdefault('teleco2-filter', '')
         self.local = local          # True: execute commands on this player (autoBind)
                                     # False: emit 'remote-*' events, profile decides (parc broadcast)
         self.netiface = netiface
@@ -271,6 +309,20 @@ class Teleco2Interface(SerialBase):
             pass
 
         self.bind()
+
+    # The scan loop reads .filter on every pass: a 'teleco2-filter' setting in the
+    # /data cfg pins this player to one remote by its USB serial string.
+    @property
+    def filter(self):
+        try:
+            custom = self.hplayer.settings.get('teleco2-filter')
+        except Exception:
+            custom = None
+        return custom if custom else self._filter
+
+    @filter.setter
+    def filter(self, value):
+        self._filter = value
 
     def sessions(self):
         with self._netLock:
