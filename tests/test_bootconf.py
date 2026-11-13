@@ -131,3 +131,16 @@ def test_iface_alone_is_read_without_a_role(tmp_path):
     c = bootconf.load(write(tmp_path, '[sync]\niface = wlan1\n'))
     assert c.sync_role() is None
     assert c.sync_iface(lambda i: False) == 'wlan1'      # 26-anna: role is elected by design
+
+
+def test_pick_profile_reads_the_conf_only_on_auto(tmp_path):
+    c = bootconf.load(write(tmp_path, '[player]\nprofile = 26-anna\n'))
+    assert bootconf.pick_profile('auto', c) == '26-anna'
+    assert bootconf.pick_profile('biennale', c) == 'biennale'
+
+
+def test_pick_profile_falls_back_to_default(tmp_path):
+    assert bootconf.pick_profile('auto', bootconf.load(str(tmp_path / 'none'))) == 'default'
+    c = bootconf.load(write(tmp_path, '[player]\nprofile = ../../etc/x\n'))
+    assert bootconf.pick_profile('auto', c, default='looper') == 'looper'
+    assert c.errors

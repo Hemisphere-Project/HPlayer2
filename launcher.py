@@ -22,6 +22,10 @@ profile = 'looper'
 if len(sys.argv) > 1:
     profile = sys.argv[1]
 
+# hplayer2@auto: the profile named by /boot/hplayer2.conf [player] profile (hplayer2#t-101)
+from core.engine import bootconf
+profile = bootconf.pick_profile(profile)
+
 __import__("profiles."+profile)
 sys.exit(0)
 try:

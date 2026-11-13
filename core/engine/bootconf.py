@@ -30,6 +30,7 @@ on a typo in /boot.
 
 import configparser
 import os
+import re
 
 DEFAULT_PATH = '/boot/hplayer2.conf'
 ENV_PATH = 'HPLAYER2_CONF'                 # dev/test override of the path
@@ -169,6 +170,26 @@ def resolve_sync(conf, roles=ROLES, wifi_dir='/boot/wifi', has_interface=None):
         conf.errors.append('sync.role: %r not run by this profile (%s)' % (role, '|'.join(roles)))
         print('[bootconf] ' + conf.errors[-1] + ' — using /boot/wifi markers')
     return markers_sync(wifi_dir, has_interface)
+
+
+def pick_profile(arg, conf=None, default='default'):
+    """The profile to import. `arg` is what the service passed (hplayer2@<arg>).
+
+    `auto` = the conf's [player] profile, else `default` — so a starter that runs
+    hplayer2@auto takes its profile from /boot and a card is re-roled by one file. Any
+    other `arg` is used as given, as before. A conf value that is not a plain module name
+    is refused: it is fed to __import__.
+    """
+    if arg != 'auto':
+        return arg
+    conf = conf if conf is not None else load()
+    name = conf.profile()
+    if name and re.fullmatch(r'[A-Za-z0-9_-]+', name):
+        return name
+    if name:
+        conf.errors.append('player.profile: not a profile name: %r' % name)
+        print('[bootconf] ' + conf.errors[-1] + ' — ' + default)
+    return default
 
 
 def load(path=None):
