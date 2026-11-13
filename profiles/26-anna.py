@@ -58,10 +58,22 @@ wallclock	= hplayer.addInterface('wallclock', SYNC_IFACE, role='elected')
 if getattr(wallclock, 'drifter', None):
 	wallclock.drifter.deadZoneEnter = 0.010
 	wallclock.drifter.deadZoneExit = 0.030
-keypad 		= hplayer.addInterface('keypad')
+# /boot/hplayer2.conf [interfaces] keypad / teleco2 = no leave them out (hplayer2#t-101; default:
+# both loaded). Anna runs no Nowde mesh and no playback window: a conf asking for them is reported.
+class NoKeypad:
+	"""No keypad (conf off, or no LCD library): the LCD lines are still built, never drawn."""
+	lcd = None
+	CHAR_WIFI, CHAR_PEERS, CHAR_VOL, CHAR_PLAY, CHAR_STOP, CHAR_LOVE = '\x00', '\x01', '\x02', '\x03', '\x04', '\x05'	# KeypadInterface's glyph slots
+	def draw(self, lines=None): pass
+
+keypad 		= (hplayer.addInterface('keypad') if BOOTCONF.interface('keypad', True) else None) or NoKeypad()
 http		= hplayer.addInterface('http', 8037)
 keyboard 	= hplayer.addInterface('keyboard')
-teleco2		= hplayer.addInterface('teleco2', False, SYNC_IFACE, netport=3740)	# CoreS3 remote: USB, or WiFi (fw >= 6: tcp 3740, discovery udp 3739)
+teleco2		= None
+if BOOTCONF.interface('teleco2', True):
+	teleco2	= hplayer.addInterface('teleco2', False, SYNC_IFACE, netport=3740)	# CoreS3 remote: USB, or WiFi (fw >= 6: tcp 3740, discovery udp 3739)
+BOOTCONF.interface('nowde', False, runs=False)
+BOOTCONF.schedule(False, runs=False)
 
 if keypad.lcd: keypad.lcd.set_color( 100, 0, 100)
 keypad.draw( [".:: HPlayer2 ::.", "   Starting "+keypad.CHAR_LOVE+"   "] )

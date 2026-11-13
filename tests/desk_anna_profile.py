@@ -10,6 +10,8 @@ returns at once), then its handlers are fired and what they order is checked:
  - fresh settings file -> loop -1 + volume 95 at app-run
  - the follower's audio dead zone: 10/30 ms
  - keypad LCD: the short-name clamp (hplayer2#t-083) and the leader `*`
+ - /boot/hplayer2.conf (hplayer2#t-101): no conf = keypad + teleco2 loaded; keypad = no and
+   teleco2 = no leave both out and the profile still runs; nowde / schedule are reported
 
     /tmp/wallsync-venv/bin/python tests/desk_anna_profile.py      (termcolor + pymitter)
 """
@@ -153,6 +155,7 @@ sys.modules['core.engine.hplayer'] = fake
 import time as _time
 _sleep = _time.sleep
 _time.sleep = lambda s: None            # the profile waits 2 s for USB: not here
+os.environ['HPLAYER2_CONF'] = os.devnull    # no /boot/hplayer2.conf, whatever this machine has
 mod = runpy.run_path(os.path.join(REPO, 'profiles', '26-anna.py'))
 _time.sleep = _sleep
 
@@ -290,6 +293,25 @@ wc.dupName = False
 zy.node = None
 l0, l1 = upd()
 check('P0' in l1, 'the node gone again: still alive, 0 peers: %r' % l1)
+
+# /boot/hplayer2.conf switches (hplayer2#t-101): a second boot of the profile, under a conf
+check([n for n in ('keypad', 'teleco2') if n in hp.ifaces] == ['keypad', 'teleco2'],
+      'no conf: keypad and teleco2 loaded, as before')
+import tempfile
+conf = os.path.join(tempfile.mkdtemp(), 'hplayer2.conf')
+with open(conf, 'w') as f:
+    f.write('[interfaces]\nkeypad = no\nteleco2 = no\nnowde = yes\n[schedule]\nenabled = yes\n')
+os.environ['HPLAYER2_CONF'] = conf
+_time.sleep = lambda s: None
+mod2 = runpy.run_path(os.path.join(REPO, 'profiles', '26-anna.py'))
+_time.sleep = _sleep
+hp2 = FakeHPlayer2.last
+check(hp2 is not hp and 'keypad' not in hp2.ifaces and 'teleco2' not in hp2.ifaces,
+      'keypad = no, teleco2 = no: neither loaded, the profile ran to hplayer.run()')
+check(mod2['teleco2'] is None and mod2['keypad'].lcd is None, 'teleco2 is None, the keypad a no-LCD stand-in')
+check(mod2['BOOTCONF'].errors == ['interfaces.nowde: not run by this profile',
+                                  'schedule.enabled: not run by this profile'],
+      'nowde / schedule asked of anna: reported, not run: %r' % mod2['BOOTCONF'].errors)
 
 print('\nALL %d CHECKS PASSED' % ok)
 sys.stdout.flush()
