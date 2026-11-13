@@ -398,16 +398,22 @@ def auto_refresh(ev, *args):
 #    only [1-9]_ pieces, so the default loop above matches nothing and they stay
 #    silent until someone enters range; then the piece plays once (play-out).
 #  - schedule: inert unless enabled from http2 AND an RTC is present (requireRtc).
+#    /boot/hplayer2.conf [schedule] (hplayer2#t-101): enabled = no drops it (no window, no
+#    daily reboot), require_rtc overrides the ctor flag, open/close/days/reboot seed a card
+#    with no saved cfg — the cfg the web UI saves still wins, as for every key here.
 RADAR_PATTERN = "[1-9]_*.*"
 
 radar    = hplayer.addInterface('radar')
-schedule = hplayer.addInterface('schedule', 30, True)   # requireRtc: gate only with a real clock
+schedule = None
+if BOOTCONF.schedule(True):
+	hplayer.settings._settings.update(BOOTCONF.schedule_seeds())   # before the interface's setdefault
+	schedule = hplayer.addInterface('schedule', 30, BOOTCONF.schedule_require_rtc(True))
 
 @hplayer.on('radar.enter')
 def radar_trigger(ev, *args):
 	if nowde_slave():
 		return
-	if schedule.isOpen() and not player.isPlaying():
+	if schedule_open_now() and not player.isPlaying():
 		hplayer.settings.set('loop', -1)     # play the proximity piece once
 		doPlay(RADAR_PATTERN)
 
@@ -482,7 +488,8 @@ dmx = hplayer.addInterface('dmx')
 # Content contract: zero-padded numeric prefixes on every unit (01_xxx.mp4 on the master and
 # the slaves; 1_ alone is the one-shot set), same index = same cue, same duration if the
 # master loops a single file seamlessly. Distinct from the wifi wall (wallclock).
-nowde = hplayer.addInterface('nowde', player)
+# /boot/hplayer2.conf [interfaces] nowde = no leaves it out (hplayer2#t-101; default: loaded).
+nowde = hplayer.addInterface('nowde', player) if BOOTCONF.interface('nowde', True) else None
 
 if nowde:
 	# Seek-latency compensation for the 7.x image (kernel 6.18 mpv): the interface default
@@ -553,6 +560,9 @@ if nowde:
 # generic Espressif 303a:1001 ROM-CDC id with the CoreS3 remote, and teleco2's
 # hardcoded "HPlayer2|303a:1001" filter would grab the radar box and starve the
 # radar interface. Biennale uses no remote; teleco2 still lives in profiles/anna.py.
+# Nor the keypad: a conf that turns either on is reported and not obeyed (hplayer2#t-101).
+for _i in ('keypad', 'teleco2'):
+	BOOTCONF.interface(_i, False, runs=False)
 
 # Audio hub monitor: watches the platform forwarder units + USB card, pushes
 # per-output health to the http2 chips, and applies the latency compensation.
