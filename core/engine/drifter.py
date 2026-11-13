@@ -18,6 +18,14 @@ import datetime
 #  on master): dead zone with hysteresis, progressive speed curve, weighted
 #  speed smoothing. Added here: wrap-aware diff for looping media.
 #
+
+# posAge's third answer, beside an age and None: the player's position cannot be trusted at all
+# right now — its status reader stalled and is draining a backlog, so position() is an OLD time-pos
+# delivered late (hplayer2#t-093: a 6 s WiFi drop read as 1.66 s late, speed 2.0, then -0.3 s). The
+# tick is skipped and the stale diff never enters the median window.
+POS_STALE = object()
+
+
 class Drifter():
 
     def __init__(self, player, log=None,
@@ -75,6 +83,7 @@ class Drifter():
         # servo parks a follower that far AHEAD (Anna bench, 2026-11-06). With posAge, both
         # sides are compared at the same instant. None = the historic servo (nowde: its master
         # sends an equally cached position, and the two ages cancel — hplayer2#t-094).
+        # POS_STALE = skip this tick (a draining status reader, hplayer2#t-093).
         self.posAge = None
 
         # ── Smart join (danceMode) ──────────────────────────────────────
@@ -190,6 +199,8 @@ class Drifter():
         diff = clock - pos
         if self.posAge is not None:
             age = self.posAge(pos)
+            if age is POS_STALE:
+                return None                         # a draining reader: no reading this tick
             if age is not None and 0.0 <= age < 0.5:
                 diff -= age * self.lastSpeed        # our position NOW, like the clock
 
