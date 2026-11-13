@@ -242,3 +242,84 @@ def test_seeds_set_up_a_fresh_card_and_the_saved_cfg_wins(tmp_path, monkeypatch)
         s._settings.setdefault('schedule-open', '10:00')  # the interface's own default
         s.load()
         assert (s.get('schedule-open'), s.get('schedule-enable')) == (want_open, want_enable)
+
+
+# --- a peer mesh (25-kxkm): iface alone, no role ----------------------------------------
+
+def test_mesh_iface_absent_keeps_the_profile_default(tmp_path):
+    c = bootconf.load(write(tmp_path, '[player]\nprofile = 25-kxkm\n'))
+    assert c.mesh_iface('wint', lambda i: True) == 'wint'
+    assert c.mesh_iface(None, lambda i: True) is None
+    assert c.errors == []
+
+
+def test_mesh_iface_names_auto_and_none(tmp_path):
+    c = bootconf.load(write(tmp_path, '[sync]\niface = eth0\n'))
+    assert c.mesh_iface('wint', lambda i: True) == 'eth0'
+    c = bootconf.load(write(tmp_path, '[sync]\niface = auto\n'))
+    assert c.mesh_iface(None, lambda i: i == 'wlan0') == 'wlan0'
+    c = bootconf.load(write(tmp_path, '[sync]\niface = none\n'))
+    assert c.mesh_iface('wint', lambda i: True) is None      # Zyre's own choice: the mesh still runs
+    assert c.errors == []
+
+
+def test_mesh_ignores_and_reports_a_role_or_a_wall(tmp_path):
+    c = bootconf.load(write(tmp_path, '[sync]\nrole = master\nwall = yes\n'))
+    assert c.mesh_iface('wint', lambda i: True) == 'wint'    # a role never implies auto here
+    assert len(c.errors) == 2
+    assert all('peer mesh' in e for e in c.errors)
+    c = bootconf.load(write(tmp_path, '[sync]\nrole = none\nwall = no\n'))
+    assert c.mesh_iface(None, lambda i: True) is None
+    assert c.errors == []
+
+
+# --- the examples in extra/boot: one per bench role ----------------------------------------
+
+import os
+import pytest
+
+EXAMPLES = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 'extra', 'boot')
+PROFILES = os.path.join(os.path.dirname(EXAMPLES), '..', 'profiles')
+
+
+def example(name):
+    c = bootconf.load(os.path.join(EXAMPLES, 'hplayer2-' + name + '.conf'))
+    assert c.present and c.errors == [], c.errors
+    return c
+
+
+def test_every_example_parses_clean_and_names_a_real_profile():
+    names = sorted(f for f in os.listdir(EXAMPLES) if f.endswith('.conf'))
+    assert names == ['hplayer2-anna.conf', 'hplayer2-biennale-master.conf',
+                     'hplayer2-biennale-slave.conf', 'hplayer2-kxkm.conf']
+    for f in names:
+        c = example(f[len('hplayer2-'):-len('.conf')])
+        profile = bootconf.pick_profile('auto', c)
+        assert os.path.isfile(os.path.join(PROFILES, profile + '.py')), profile
+
+
+@pytest.mark.parametrize('side', ['master', 'slave'])
+def test_biennale_examples_are_the_wired_wall(tmp_path, side):
+    c = example('biennale-' + side)
+    assert bootconf.resolve_sync(c, ('master', 'slave'), str(tmp_path), lambda i: True) == ('eth0', side)
+    assert c.wall_sync(False) is True
+    assert c.schedule(True) is True and c.schedule_require_rtc(False) is True
+    assert c.schedule_seeds() == {}        # no `enabled` key: off until the web UI, as before
+    assert c.interface('nowde', True) is True
+    assert c.interface('keypad', False, runs=False) is False and c.errors == []
+
+
+def test_anna_example_keeps_wint_then_wlan0():
+    c = example('anna')
+    assert c.sync_iface(lambda i: i in ('wint', 'wlan0'), default=None) == 'wint'
+    assert c.sync_iface(lambda i: i == 'wlan0', default=None) == 'wlan0'
+    assert c.interface('keypad', True) is True and c.interface('teleco2', True) is True
+    assert c.schedule(False, runs=False) is False and c.errors == []
+
+
+def test_kxkm_example_changes_nothing_until_an_iface_is_named():
+    c = example('kxkm')
+    assert c.mesh_iface('wint', lambda i: True) == 'wint'
+    assert c.mesh_iface(None, lambda i: True) is None
+    assert c.schedule(False, runs=False) is False
+    assert c.errors == []

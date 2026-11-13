@@ -1,6 +1,7 @@
 from core.engine.hplayer import HPlayer2
 from core.engine.playlist import Playlist
 from core.engine import network
+from core.engine import bootconf
 
 import os
 import json, glob
@@ -37,6 +38,14 @@ try:
                 hplayer.log('attached to GROUP', myGROUP)
 except: pass
 
+# /boot/hplayer2.conf (hplayer2#t-101): [sync] iface binds the Zyre mesh; absent = as before
+# (wint for an etendard, Zyre's own choice for HDMI). Every kxkm player is a mesh peer: a role,
+# a wall, a schedule or a keypad/teleco2/nowde switch in the conf is reported, never obeyed.
+BOOTCONF = bootconf.load()
+BOOTCONF.schedule(False, runs=False)
+for _i in ('keypad', 'teleco2', 'nowde'):
+    BOOTCONF.interface(_i, False, runs=False)
+
 # PLAYLIST Sampler
 playlistSampler = None
 
@@ -48,7 +57,7 @@ if myETEND:
     video.setIP(myETEND['ip'])
     hplayer.log('mode VIDEO4ARTNET')
     # Ethernet Zyre
-    hplayer.addInterface('zyre', 'wint')
+    hplayer.addInterface('zyre', BOOTCONF.mesh_iface('wint'))
 
 # HDMI
 else:
@@ -58,7 +67,7 @@ else:
     hplayer.log('mode HDMI')
 
     # Any Zyre
-    hplayer.addInterface('zyre')
+    hplayer.addInterface('zyre', BOOTCONF.mesh_iface(None))
 
     # Sampler (play 0_* media from the same directory)
     # sampler = hplayer.addSampler('jp', 'audio', 1)

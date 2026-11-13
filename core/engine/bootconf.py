@@ -12,6 +12,7 @@ re-roled by editing /boot, never by shipping code.
     iface = eth0                ; eth0 | wlan0 | wlan1 | wint | auto (wireless) | none
     role  = master              ; master | slave | elected | none
     wall  = yes                 ; WALL_SYNC: continuous frame-lock (wallclock + chase)
+                                ; a mesh profile (25-kxkm) reads iface alone: mesh_iface()
 
     [schedule]
     enabled     = yes           ; no = no playback window and no daily reboot at all
@@ -39,6 +40,8 @@ has written that file, the file wins — /boot sets a card up, the web UI tunes 
 
 A profile states what it can run: a switch turned on for something it has no code for
 is reported and stays off (see `interface()` and `schedule()`).
+
+One example per bench role sits in extra/boot/ — copy it to /boot/hplayer2.conf.
 """
 
 import configparser
@@ -163,6 +166,22 @@ class BootConf:
 
     def wall_sync(self, default=False):
         return self.flag('sync', 'wall', default)
+
+    def mesh_iface(self, default=None, has_interface=None):
+        """[sync] iface for a profile whose sync is a peer mesh (Zyre) with no role: 25-kxkm.
+
+        The iface key alone decides — absent = `default` (a role never implies `auto`
+        here), `none` = None (Zyre binds its own choice: the mesh still runs), `auto` and
+        a name as in `sync_iface()`. A role or a wall the conf turns on is reported and
+        ignored: every player of a mesh is a peer, and a mesh profile has no wallclock.
+        """
+        for key in ('role', 'wall'):
+            v = self.get('sync', key)
+            if v is not None and v.lower() not in _FALSE + ('none',):
+                self._report('sync.%s: not run by this profile (a peer mesh)' % key, 'ignored')
+        if self.get('sync', 'iface') is None:
+            return default
+        return self.sync_iface(has_interface)
 
     # --- the schedule and the optional interfaces ----------------------------------
 
