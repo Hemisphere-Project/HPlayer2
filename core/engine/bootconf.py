@@ -128,5 +128,47 @@ class BootConf:
         return self.flag('sync', 'wall', default)
 
 
+def markers_sync(wifi_dir='/boot/wifi', has_interface=None):
+    """The legacy role: /boot/wifi/<iface>-sync-AP|STA.nmconnection → (iface, role).
+
+    AP = master, STA = slave; eth0 wins over wlan0, and a wlan0 marker binds wlan0, else
+    wlan1 (a USB dongle). (None, None) when no marker is there. Kept so a 7.4 card with
+    markers and no conf boots exactly as before.
+    """
+    def marker(iface, side):
+        return os.path.isfile(os.path.join(wifi_dir, iface + '-sync-' + side + '.nmconnection'))
+
+    if has_interface is None:
+        from core.engine import network
+        has_interface = network.has_interface
+    if marker('eth0', 'AP') or marker('eth0', 'STA'):
+        return 'eth0', ('master' if marker('eth0', 'AP') else 'slave')
+    if marker('wlan0', 'AP') or marker('wlan0', 'STA'):
+        role = 'master' if marker('wlan0', 'AP') else 'slave'
+        for iface in ('wlan0', 'wlan1'):
+            if has_interface(iface):
+                return iface, role
+        return None, role
+    return None, None
+
+
+def resolve_sync(conf, roles=ROLES, wifi_dir='/boot/wifi', has_interface=None):
+    """(iface, role) for this player: the conf's [sync] when it sets a role, else the markers.
+
+    `roles` is what the calling profile can run; a conf role outside it is reported and
+    the markers decide, so an unsupported role never boots a player into a mode its
+    profile has no code for.
+    """
+    if conf.get('sync', 'role') is not None:
+        role = conf.sync_role()
+        if role is None:
+            return None, None                  # role = none: sync off, markers ignored
+        if role in roles:
+            return conf.sync_iface(has_interface), role
+        conf.errors.append('sync.role: %r not run by this profile (%s)' % (role, '|'.join(roles)))
+        print('[bootconf] ' + conf.errors[-1] + ' — using /boot/wifi markers')
+    return markers_sync(wifi_dir, has_interface)
+
+
 def load(path=None):
     return BootConf(path)

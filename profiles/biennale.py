@@ -1,6 +1,7 @@
 from core.engine.hplayer import HPlayer2
 from core.engine import hdmi
 from core.engine import network
+from core.engine import bootconf
 from core.interfaces.nowde import media_index_of
 import os
 import time
@@ -84,25 +85,16 @@ def schedule_open_now():
 
 
 # ROLE detection (same /boot/wifi marker convention as biennale24)
+#   /boot/hplayer2.conf [sync] role = master|slave (+ iface, wall) wins over the markers;
+#   no conf, or no role in it, = the markers exactly as before (hplayer2#t-101).
 SYNC_BUFFER = 200
-SYNC = False
-SYNC_MASTER = False
-SYNC_IFACE = None
-if os.path.isfile('/boot/wifi/eth0-sync-AP.nmconnection') or os.path.isfile('/boot/wifi/eth0-sync-STA.nmconnection'):
-	SYNC = True
-	SYNC_MASTER = os.path.isfile('/boot/wifi/eth0-sync-AP.nmconnection')
-	SYNC_IFACE = 'eth0'
+BOOTCONF = bootconf.load()
+SYNC_IFACE, SYNC_ROLE = bootconf.resolve_sync(BOOTCONF, roles=('master', 'slave'))
+SYNC = SYNC_ROLE is not None
+SYNC_MASTER = SYNC_ROLE == 'master'
 
-elif os.path.isfile('/boot/wifi/wlan0-sync-AP.nmconnection') or os.path.isfile('/boot/wifi/wlan0-sync-STA.nmconnection'):
-	SYNC = True
-	SYNC_MASTER = os.path.isfile('/boot/wifi/wlan0-sync-AP.nmconnection')
-	if network.has_interface('wlan0'):
-		SYNC_IFACE = 'wlan0'
-	elif network.has_interface('wlan1'):
-		SYNC_IFACE = 'wlan1'
-
-# (globals().get: commenting the WALL_SYNC line out entirely is safe)
-WALL = bool(SYNC and SYNC_IFACE and globals().get('WALL_SYNC'))
+# (globals().get: commenting the WALL_SYNC line out entirely is safe; [sync] wall overrides it)
+WALL = bool(SYNC and SYNC_IFACE and BOOTCONF.wall_sync(bool(globals().get('WALL_SYNC'))))
 
 if SYNC_MASTER: print("SYNC_MASTER!")
 if WALL: print("WALL mode: continuous sync")

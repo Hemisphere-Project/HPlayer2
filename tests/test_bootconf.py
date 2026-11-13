@@ -69,3 +69,53 @@ def test_malformed_file_reads_as_absent(tmp_path):
     assert c.present is False
     assert c.errors
     assert c.sync_role('slave') == 'slave'
+
+
+def markers(tmp_path, *names):
+    d = tmp_path / 'wifi'
+    d.mkdir()
+    for n in names:
+        (d / (n + '.nmconnection')).write_text('')
+    return str(d)
+
+
+def test_markers_reproduce_the_biennale_rule(tmp_path):
+    assert bootconf.markers_sync(markers(tmp_path), lambda i: True) == (None, None)
+
+
+def test_markers_eth0_beats_wlan0(tmp_path):
+    d = markers(tmp_path, 'eth0-sync-STA', 'wlan0-sync-AP')
+    assert bootconf.markers_sync(d, lambda i: False) == ('eth0', 'slave')
+
+
+def test_markers_wlan0_falls_to_wlan1_then_none(tmp_path):
+    d = markers(tmp_path, 'wlan0-sync-AP')
+    assert bootconf.markers_sync(d, lambda i: i == 'wlan0') == ('wlan0', 'master')
+    assert bootconf.markers_sync(d, lambda i: i == 'wlan1') == ('wlan1', 'master')
+    assert bootconf.markers_sync(d, lambda i: False) == (None, 'master')
+
+
+def test_conf_role_wins_over_markers(tmp_path):
+    d = markers(tmp_path, 'eth0-sync-AP')
+    c = bootconf.load(write(tmp_path, '[sync]\nrole = slave\niface = wlan0\n'))
+    assert bootconf.resolve_sync(c, wifi_dir=d, has_interface=lambda i: True) == ('wlan0', 'slave')
+
+
+def test_conf_without_role_leaves_the_markers_in_charge(tmp_path):
+    d = markers(tmp_path, 'eth0-sync-AP')
+    c = bootconf.load(write(tmp_path, '[player]\nprofile = biennale\n'))
+    assert bootconf.resolve_sync(c, wifi_dir=d, has_interface=lambda i: True) == ('eth0', 'master')
+
+
+def test_conf_role_none_turns_sync_off_despite_markers(tmp_path):
+    d = markers(tmp_path, 'eth0-sync-AP')
+    c = bootconf.load(write(tmp_path, '[sync]\nrole = none\n'))
+    assert bootconf.resolve_sync(c, wifi_dir=d, has_interface=lambda i: True) == (None, None)
+
+
+def test_role_the_profile_cannot_run_falls_back_to_markers(tmp_path):
+    d = markers(tmp_path, 'eth0-sync-STA')
+    c = bootconf.load(write(tmp_path, '[sync]\nrole = elected\n'))
+    got = bootconf.resolve_sync(c, roles=('master', 'slave'), wifi_dir=d, has_interface=lambda i: True)
+    assert got == ('eth0', 'slave')
+    assert any('elected' in e for e in c.errors)
