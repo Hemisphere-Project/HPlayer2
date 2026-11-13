@@ -14,10 +14,14 @@ re-roled by editing /boot, never by shipping code.
     wall  = yes                 ; WALL_SYNC: continuous frame-lock (wallclock + chase)
 
     [schedule]
-    enabled     = yes
+    enabled     = yes           ; no = no playback window and no daily reboot at all
     require_rtc = yes           ; gate only with a real clock
+    open        = 10:00         ; the window: seeds for a fresh card (see below)
+    close       = 19:00
+    days        = 0111111       ; Monday first, 1 = open that day
+    reboot      = no
 
-    [interfaces]
+    [interfaces]                ; which optional interfaces the profile loads
     keypad  = no
     teleco2 = no
     nowde   = no
@@ -25,7 +29,16 @@ re-roled by editing /boot, never by shipping code.
 An ABSENT file is not an error: `present` is False and every accessor returns the
 default the caller passes, so a profile that asks keeps its old behaviour on a card
 that has no conf. A malformed file is reported and read as absent — boot never stops
-on a typo in /boot.
+on a typo in /boot. An unknown section or key is reported (a misspelt switch would
+otherwise be silently ignored) and changes nothing.
+
+Switches decide at every boot: `enabled = no` or `teleco2 = no` is never overridden.
+The window keys are SEEDS: they fill Settings before the saved cfg is loaded, so they
+set up a card with no /data/hplayer2-<profile>.cfg, and once the web UI (or any save)
+has written that file, the file wins — /boot sets a card up, the web UI tunes it.
+
+A profile states what it can run: a switch turned on for something it has no code for
+is reported and stays off (see `interface()` and `schedule()`).
 """
 
 import configparser
@@ -40,6 +53,16 @@ IFACES_AUTO = ('wint', 'wlan0', 'wlan1')    # wireless only: every Pi has an eth
 
 _TRUE = ('1', 'yes', 'true', 'on')
 _FALSE = ('0', 'no', 'false', 'off', '')
+
+INTERFACES = ('keypad', 'teleco2', 'nowde')
+KNOWN = {
+    'player': ('profile',),
+    'sync': ('iface', 'role', 'wall'),
+    'schedule': ('enabled', 'require_rtc', 'open', 'close', 'days', 'reboot'),
+    'interfaces': INTERFACES,
+}
+_HM = re.compile(r'([01]?[0-9]|2[0-3]):([0-5][0-9])')
+_DAYS = re.compile(r'[01]{7}')
 
 
 class BootConf:
@@ -60,6 +83,18 @@ class BootConf:
             self.errors.append(str(e).splitlines()[0])
             self._cp = configparser.ConfigParser(interpolation=None)
             print('[bootconf] ' + self.path + ' unreadable, ignored: ' + self.errors[-1])
+            return
+        for section in self._cp.sections():
+            if section not in KNOWN:
+                self._report('[%s]: unknown section' % section, 'ignored')
+                continue
+            for key in self._cp.options(section):
+                if key not in KNOWN[section]:
+                    self._report('%s.%s: unknown key' % (section, key), 'ignored')
+
+    def _report(self, error, outcome):
+        self.errors.append(error)
+        print('[bootconf] ' + error + ' — ' + outcome)
 
     # --- raw accessors -------------------------------------------------------------
 
@@ -128,6 +163,62 @@ class BootConf:
 
     def wall_sync(self, default=False):
         return self.flag('sync', 'wall', default)
+
+    # --- the schedule and the optional interfaces ----------------------------------
+
+    def interface(self, name, default=False, runs=True):
+        """[interfaces] <name>: whether the profile loads it; absent = `default`.
+
+        `runs=False` = the calling profile has no code for it: a `yes` is reported and
+        read as no, so a conf never half-loads a remote or a mesh nobody listens to.
+        """
+        on = self.flag('interfaces', name, default)
+        if on and not runs and self.get('interfaces', name) is not None:
+            self._report('interfaces.%s: not run by this profile' % name, 'not loaded')
+            return False
+        return on
+
+    def schedule(self, default=False, runs=True):
+        """[schedule] enabled: whether the profile loads its playback window; absent = `default`."""
+        on = self.flag('schedule', 'enabled', default)
+        if on and not runs and self.get('schedule', 'enabled') is not None:
+            self._report('schedule.enabled: not run by this profile', 'no schedule')
+            return False
+        return on
+
+    def schedule_require_rtc(self, default=True):
+        return self.flag('schedule', 'require_rtc', default)
+
+    def schedule_seeds(self):
+        """The [schedule] window as Settings defaults, e.g. {'schedule-open': '08:30'}.
+
+        Only the keys the conf sets, each checked: a bad value is reported and left out,
+        so the interface keeps its own default. `enabled = yes` also seeds
+        'schedule-enable', so a fresh card gates without a visit to the web UI. Seeds,
+        not overrides: the profile writes them before the saved cfg loads (module doc).
+        """
+        seeds = {}
+        v = (self.get('schedule', 'enabled') or '').lower()
+        if v in _TRUE:
+            seeds['schedule-enable'] = True
+        for key in ('open', 'close'):
+            v = self.get('schedule', key)
+            if v is None:
+                continue
+            m = _HM.fullmatch(v)
+            if m:
+                seeds['schedule-' + key] = '%02d:%s' % (int(m.group(1)), m.group(2))
+            else:
+                self._report('schedule.%s: not an HH:MM time: %r' % (key, v), 'left to the cfg')
+        v = self.get('schedule', 'days')
+        if v is not None:
+            if _DAYS.fullmatch(v):
+                seeds['schedule-days'] = v
+            else:
+                self._report('schedule.days: not 7 digits 0/1, Monday first: %r' % v, 'left to the cfg')
+        if self.get('schedule', 'reboot') is not None:
+            seeds['schedule-reboot'] = self.flag('schedule', 'reboot', False)
+        return seeds
 
 
 def markers_sync(wifi_dir='/boot/wifi', has_interface=None):

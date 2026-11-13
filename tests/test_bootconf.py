@@ -144,3 +144,101 @@ def test_pick_profile_falls_back_to_default(tmp_path):
     c = bootconf.load(write(tmp_path, '[player]\nprofile = ../../etc/x\n'))
     assert bootconf.pick_profile('auto', c, default='looper') == 'looper'
     assert c.errors
+
+
+# --- [schedule] and [interfaces] (hplayer2#t-101 ②) ---------------------------------------
+
+def test_switches_keep_the_profile_default_when_absent(tmp_path):
+    c = bootconf.load(write(tmp_path, '[player]\nprofile = biennale\n'))
+    assert c.interface('nowde', True) is True
+    assert c.interface('teleco2', False) is False
+    assert c.schedule(True) is True
+    assert c.schedule_require_rtc(True) is True
+    assert c.schedule_seeds() == {}
+    assert c.errors == []
+
+
+def test_switches_off_and_on(tmp_path):
+    c = bootconf.load(write(tmp_path, """
+[schedule]
+enabled = no
+require_rtc = no
+[interfaces]
+nowde = no
+teleco2 = yes
+"""))
+    assert c.schedule(True) is False
+    assert c.schedule_require_rtc(True) is False
+    assert c.interface('nowde', True) is False
+    assert c.interface('teleco2', False) is True
+    assert c.errors == []
+
+
+def test_a_switch_the_profile_cannot_run_is_reported_and_off(tmp_path):
+    c = bootconf.load(write(tmp_path, '[interfaces]\nkeypad = yes\nnowde = no\n[schedule]\nenabled = yes\n'))
+    assert c.interface('keypad', False, runs=False) is False
+    assert c.interface('nowde', False, runs=False) is False      # asked off: nothing to report
+    assert c.interface('teleco2', False, runs=False) is False    # not asked: nothing to report
+    assert c.schedule(False, runs=False) is False
+    assert c.errors == ['interfaces.keypad: not run by this profile',
+                        'schedule.enabled: not run by this profile']
+
+
+def test_schedule_window_seeds_are_checked_and_normalised(tmp_path):
+    c = bootconf.load(write(tmp_path, """
+[schedule]
+enabled = yes
+open    = 8:30
+close   = 19:00
+days    = 0111111     ; closed on Mondays
+reboot  = yes
+"""))
+    assert c.schedule_seeds() == {'schedule-enable': True, 'schedule-open': '08:30',
+                                  'schedule-close': '19:00', 'schedule-days': '0111111',
+                                  'schedule-reboot': True}
+    assert c.errors == []
+
+
+def test_bad_window_values_are_left_to_the_cfg(tmp_path):
+    c = bootconf.load(write(tmp_path, '[schedule]\nopen = 25:00\nclose = 7pm\ndays = weekdays\n'))
+    assert c.schedule_seeds() == {}
+    assert len(c.errors) == 3
+
+
+def test_enabled_no_seeds_nothing(tmp_path):
+    # the profile does not load the schedule at all: no key to seed
+    c = bootconf.load(write(tmp_path, '[schedule]\nenabled = no\nopen = 09:00\n'))
+    assert c.schedule_seeds() == {'schedule-open': '09:00'}
+    assert c.schedule(True) is False
+
+
+def test_unknown_sections_and_keys_are_reported_never_fatal(tmp_path):
+    c = bootconf.load(write(tmp_path, '[interfaces]\ntelco2 = no\n[players]\nprofile = x\n'))
+    assert c.present is True
+    assert sorted(c.errors) == ['[players]: unknown section', 'interfaces.telco2: unknown key']
+    assert c.interface('teleco2', True) is True      # the typo changed nothing
+
+
+def test_seeds_set_up_a_fresh_card_and_the_saved_cfg_wins(tmp_path, monkeypatch):
+    import json
+    from core.engine.settings import Settings
+
+    class HP:
+        def autoBind(self, m): pass
+        def emit(self, *a): pass
+
+    c = bootconf.load(write(tmp_path, '[schedule]\nenabled = yes\nopen = 08:30\n'))
+    for saved, want_open, want_enable in ((None, '08:30', True),
+                                          ({'schedule-open': '11:00'}, '11:00', True),
+                                          ({'schedule-enable': False}, '08:30', False)):
+        monkeypatch.setattr(Settings, '_settings', dict(Settings._settings))
+        cfg = tmp_path / 'hplayer2-biennale.cfg'
+        if saved is None:
+            cfg.unlink(missing_ok=True)
+        else:
+            cfg.write_text(json.dumps(saved))
+        s = Settings(HP(), persistent=str(cfg))
+        s._settings.update(c.schedule_seeds())          # what biennale does before addInterface
+        s._settings.setdefault('schedule-open', '10:00')  # the interface's own default
+        s.load()
+        assert (s.get('schedule-open'), s.get('schedule-enable')) == (want_open, want_enable)
