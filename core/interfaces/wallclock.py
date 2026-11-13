@@ -1,6 +1,6 @@
 from .base import BaseInterface
 from ..engine import network
-from ..engine.drifter import Drifter
+from ..engine.drifter import Drifter, POS_STALE
 from termcolor import colored
 import socket
 import json
@@ -19,6 +19,16 @@ WALL_STEP = 0.25
 # "Never" for a monotonic stamp: as far back as the wall epoch 0 these stamps used to start at
 # (time.monotonic() starts near boot, so 0 would read as "a few seconds ago" on a fresh boot).
 LONG_AGO = -1.0e9
+
+# A draining status reader (hplayer2#t-093). mpv's time-pos events come 40-80 ms apart; after a
+# silence of DRAIN_GAP s, the reader may be catching up on a backlog: those events are OLD positions
+# stamped on arrival. Until the reader is back at its normal cadence — events DRAIN_BURST s apart or
+# less keep it suspect, then DRAIN_HOLD - 1 normally spaced ones — a follower skips its servo ticks
+# and a leader sends no clock packet. A real mpv stall costs ~100 ms of held ticks; a drain is
+# skipped entirely (desk: tests/test_wallclock_drain_guard.py).
+DRAIN_GAP = 0.25
+DRAIN_BURST = 0.010
+DRAIN_HOLD = 3
 
 # Transport orders that move the clock leadership under role='elected' (the zyre event name,
 # without the profile's 'unbuf_' prefix). Volume and the rest are not orders: they never move it.
@@ -286,6 +296,8 @@ class WallclockInterface (BaseInterface):
         # by the event thread, read by the send loop / the servo.
         # (pos, at, mono): `at` is wall us for the wire, mono ages it here.
         self._latch = None
+        self._posPrev = None            # mono of the last time-pos event (the drain guard)
+        self._posHold = 0               # > 0: the latch may be a drained OLD position (DRAIN_*)
         if self.player:
             self.hplayer.on(self.player.name + '.status')(self._onPlayerStatus)
         if self.master or self.elected:
@@ -639,7 +651,10 @@ class WallclockInterface (BaseInterface):
         and the follower extrapolates that to now. But our own position() is the cached LAST
         event, 40-80 ms apart on mpv, so it must be aged the same way, or every follower locks
         ~half an event interval ahead. The latch holds the same event (same thread, same
-        value): None when it does not."""
+        value): None when it does not. POS_STALE while the status reader drains a backlog
+        (DRAIN_*): the position itself is old, whatever the latch says."""
+        if self._posHold:
+            return POS_STALE
         latch = self._latch
         if latch is None or abs(latch[0] - float(pos)) > 0.0005:
             return None
@@ -665,7 +680,15 @@ class WallclockInterface (BaseInterface):
         if len(args) < 2:
             return
         if args[0] == 'time' and args[1] is not None:
-            self._latch = (float(args[1]), int(time.time() * PRECISION), time.monotonic())
+            mono = time.monotonic()
+            prev, self._posPrev = self._posPrev, mono
+            if prev is not None:
+                gap = mono - prev
+                if gap >= DRAIN_GAP or (self._posHold and gap < DRAIN_BURST):
+                    self._posHold = DRAIN_HOLD      # a silence, or the backlog after it
+                elif self._posHold:
+                    self._posHold -= 1
+            self._latch = (float(args[1]), int(time.time() * PRECISION), mono)
             if self.elected:
                 try:                    # (mpv clears the media at EOF: keep the length for a track-end advance)
                     self._lastDur = float(self.player.status('duration') or 0) or self._lastDur
@@ -811,6 +834,8 @@ class WallclockInterface (BaseInterface):
             latch = self._latch
             wall, now = time.time(), time.monotonic()   # wall for the wire and health.py, mono for elapsed
             fresh = latch is not None and now - latch[2] <= 1.0
+            if self._posHold:
+                fresh = False           # a drained OLD position under a fresh `at`: send nothing (DRAIN_*)
             if self.elected and self.player.isPaused():
                 fresh = False           # paused: the beat below carries the exact frozen position
 
