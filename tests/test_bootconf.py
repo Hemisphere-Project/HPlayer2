@@ -119,3 +119,15 @@ def test_role_the_profile_cannot_run_falls_back_to_markers(tmp_path):
     got = bootconf.resolve_sync(c, roles=('master', 'slave'), wifi_dir=d, has_interface=lambda i: True)
     assert got == ('eth0', 'slave')
     assert any('elected' in e for e in c.errors)
+
+
+def test_auto_never_guesses_eth0(tmp_path):
+    c = bootconf.load(write(tmp_path, '[sync]\niface = auto\n'))
+    assert c.sync_iface(lambda i: i in ('eth0', 'wlan0')) == 'wlan0'
+    assert c.sync_iface(lambda i: i == 'eth0') is None
+
+
+def test_iface_alone_is_read_without_a_role(tmp_path):
+    c = bootconf.load(write(tmp_path, '[sync]\niface = wlan1\n'))
+    assert c.sync_role() is None
+    assert c.sync_iface(lambda i: False) == 'wlan1'      # 26-anna: role is elected by design

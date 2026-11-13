@@ -1,5 +1,6 @@
 from core.engine.hplayer import HPlayer2
 from core.engine import network
+from core.engine import bootconf
 from core.engine import usbsync
 from core.interfaces.wallclock import end_action
 
@@ -38,7 +39,9 @@ hplayer = HPlayer2(base_path, cfg_path)
 player 	= hplayer.addPlayer('mpv', 'mpv')
 
 # SYNC INTERFACE: the 7.3 image renames the internal WiFi `wint` (udev, brcmfmac); Anna has no dongle
-SYNC_IFACE = 'wint' if network.has_interface('wint') else 'wlan0'
+# /boot/hplayer2.conf [sync] iface overrides it (hplayer2#t-101); Anna's role is always elected
+BOOTCONF = bootconf.load()
+SYNC_IFACE = BOOTCONF.sync_iface(default=None) or ('wint' if network.has_interface('wint') else 'wlan0')
 hplayer.log("sync interface:", SYNC_IFACE)
 
 # Interfaces

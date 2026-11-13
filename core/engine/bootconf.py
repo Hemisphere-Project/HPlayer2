@@ -9,7 +9,7 @@ re-roled by editing /boot, never by shipping code.
     profile = biennale          ; used when the service passes no profile
 
     [sync]
-    iface = eth0                ; eth0 | wlan0 | wlan1 | wint | auto | none
+    iface = eth0                ; eth0 | wlan0 | wlan1 | wint | auto (wireless) | none
     role  = master              ; master | slave | elected | none
     wall  = yes                 ; WALL_SYNC: continuous frame-lock (wallclock + chase)
 
@@ -35,7 +35,7 @@ DEFAULT_PATH = '/boot/hplayer2.conf'
 ENV_PATH = 'HPLAYER2_CONF'                 # dev/test override of the path
 
 ROLES = ('master', 'slave', 'elected')
-IFACES_AUTO = ('wint', 'eth0', 'wlan0', 'wlan1')
+IFACES_AUTO = ('wint', 'wlan0', 'wlan1')    # wireless only: every Pi has an eth0
 
 _TRUE = ('1', 'yes', 'true', 'on')
 _FALSE = ('0', 'no', 'false', 'off', '')
@@ -103,8 +103,9 @@ class BootConf:
     def sync_iface(self, has_interface=None, default=None):
         """The sync interface name, or None for none.
 
-        `auto` (or an absent key while a role is set) picks the first of wint, eth0, wlan0,
-        wlan1 that `has_interface` reports — the order the live profiles already use.
+        `auto` (or an absent key while a role is set) picks the first of wint, wlan0, wlan1
+        that `has_interface` reports — the order the live profiles already use. eth0 is
+        never guessed (every Pi has one): a wired sync names it.
         """
         v = self.get('sync', 'iface')
         if v is None:
