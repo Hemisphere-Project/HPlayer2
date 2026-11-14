@@ -318,7 +318,9 @@ class ThreadedHTTPServer(object):
 
         app = Flask(__name__, template_folder=www_path)
         app.config['SECRET_KEY'] = 'secret!'
-        socketio = SocketIO(app, cors_allowed_origins="*")
+        # the page saves the whole project as ONE message: python-engineio's 1 MB default
+        # dropped a big show's save without a word (sacvp-kernel4-2025 39c82e3)
+        socketio = SocketIO(app, cors_allowed_origins="*", max_http_buffer_size=100_000_000)
 
 
         #

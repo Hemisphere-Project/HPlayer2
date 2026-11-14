@@ -14,6 +14,12 @@ NDI_DEVICE = '/dev/video10'
 NDI_URL = 'av://v4l2:' + NDI_DEVICE
 NDI_API = 'http://127.0.0.1:8791'
 
+# s of IPC silence tolerated after a loadfile before the lockout watchdog counts: opening a
+# file can keep mpv silent for over a second on a loaded Pi 3B+ (mmal re-init, SD, sync), and
+# four 0.2 s socket timeouts used to hard-kill a healthy player right after a cue
+# (sacvp-kernel4-2025 4b385be, HPO 2026-10-15). A truly hung mpv is still killed, ~7 s instead of ~1 s.
+LOAD_GRACE = 3.0
+
 
 def build_pan_filter(pan, channels):
     """mpv 'af' string for the mono/pan feature, adapted to the source layout.
@@ -140,6 +146,7 @@ class MpvPlayer(BasePlayer):
         self._mpv_socketpath = '/tmp/hplayer-' + name
 
         self._mpv_lockedout = 0
+        self._mpv_loadtime = 0      # last loadfile: the lockout watchdog waits LOAD_GRACE after it
 
         self._audio_channels = 2    # current track layout (observed live)
         self._pan_current = None    # last mono/pan request, re-applied on layout change
@@ -440,24 +447,7 @@ class MpvPlayer(BasePlayer):
                         # print(self.status('media'))
                 # Timeout: retry
                 except socket.timeout:
-                    # print('-', end ="")
-                    if self.status('isPlaying'):
-                        if not self.status('media').split('.')[-1].lower() in self._imageExt:
-                            self.log('PLAYBACK LOCKED OUT', self._mpv_lockedout)
-                            if self._mpv_lockedout == 0:
-                                self._mpv_send('{ "command": ["set_property", "pause", false] }')
-                            if self._mpv_lockedout == 1:
-                                print("CRASH RELOAD FILE", self.status('media'))
-                                self._mpv_send('{ "command": ["stop"] }')
-                                time.sleep(0.5)
-                                self._mpv_send('{"command": ["loadfile", "'+self.status('media')+'"]}')
-                            self._mpv_lockedout += 1
-                            if self._mpv_lockedout > 3:
-                                print("CRASH STOP")
-                                self._mpv_send('{ "command": ["stop"] }')
-                                self._force_stop_backend()
-                                self.emit('hardreset')
-                    pass
+                    self._ipcTimeout()
 
                 # Socket error: exit
                 except (socket.error, AssertionError) as e:
@@ -473,6 +463,32 @@ class MpvPlayer(BasePlayer):
 
 
     # MPV ipc send
+    def _ipcTimeout(self):
+        """Lockout watchdog, one 0.2 s IPC silence at a time: unpause, then reload the file,
+        then kill mpv and hard-reset the player. Silent while a fresh load is within LOAD_GRACE."""
+        # print('-', end ="")
+        if not self.status('isPlaying'):
+            return
+        if time.time() - self._mpv_loadtime <= LOAD_GRACE:
+            return
+        if self.status('media').split('.')[-1].lower() in self._imageExt:
+            return
+        self.log('PLAYBACK LOCKED OUT', self._mpv_lockedout)
+        if self._mpv_lockedout == 0:
+            self._mpv_send('{ "command": ["set_property", "pause", false] }')
+        if self._mpv_lockedout == 1:
+            print("CRASH RELOAD FILE", self.status('media'))
+            self._mpv_send('{ "command": ["stop"] }')
+            time.sleep(0.5)
+            self._mpv_loadtime = time.time()
+            self._mpv_send('{"command": ["loadfile", "'+self.status('media')+'"]}')
+        self._mpv_lockedout += 1
+        if self._mpv_lockedout > 3:
+            print("CRASH STOP")
+            self._mpv_send('{ "command": ["stop"] }')
+            self._force_stop_backend()
+            self.emit('hardreset')
+
     def _mpv_send(self, msg):
         if self._mpv_sock_connected:
             try:
@@ -575,6 +591,7 @@ class MpvPlayer(BasePlayer):
         if self._ndi and self._isNdi(path):
             self._ndi_play(path)
         else:
+            self._mpv_loadtime = time.time()
             self._mpv_send('{ "command": ["loadfile", "'+path+'"] }')
         
         if pause:
@@ -670,6 +687,7 @@ class MpvPlayer(BasePlayer):
         # arrive (no A/V clock), no cache, no audio probe, and re-open the device on
         # EOF (the node restarting its output pipeline must not leave the wall black)
         opts = 'untimed=yes,cache=no,audio=no,demuxer-lavf-analyzeduration=0,loop-file=inf'
+        self._mpv_loadtime = time.time()
         self._mpv_send('{ "command": ["loadfile", "' + NDI_URL + '", "replace", -1, "'
                        + opts + '"] }')
 

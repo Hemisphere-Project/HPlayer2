@@ -261,19 +261,24 @@ class TelecoInterface (BaseInterface):
                 self.line(k+1, l+m)
 
 
+    # The media page shows, and A plays, the FILTERED list (settings 'filter'): the scroll
+    # must walk that same list, or a wrap lands the cursor on a name the filter hides and A
+    # plays another clip (sacvp-kernel4-2025 8140c23 filtered both; master kept one unfiltered).
+    # A short filtered list must not wrap to a negative offset: the cursor would leave the page.
     def scrollUp(self):
+        n = len(self.hplayer.files.currentList(filtered=True))
         if self.microIndex > 0:
             self.microIndex -= 1
         elif self.microOffset > 0:
             self.microOffset -= 1
         else:
-            self.microIndex  = min(3, len(self.hplayer.files.currentList())-1)
-            self.microOffset = len(self.hplayer.files.currentList())-4 
-        self.microList = self.hplayer.files.currentList(True)[self.microOffset:][:4]
+            self.microIndex  = min(3, n-1)
+            self.microOffset = max(0, n-4)      # a filter often leaves fewer than 4 clips
+        self.microList = self.hplayer.files.currentList(True, filtered=True)[self.microOffset:][:4]
         
 
     def scrollDown(self):
-        if self.microIndex < min(3, len(self.hplayer.files.currentList())-1):
+        if self.microIndex < min(3, len(self.hplayer.files.currentList(filtered=True))-1):
             self.microIndex += 1
         elif self.microOffset < len(self.hplayer.files.currentList(filtered=True))-4:
             self.microOffset += 1
