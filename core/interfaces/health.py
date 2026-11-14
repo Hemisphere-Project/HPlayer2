@@ -289,8 +289,26 @@ class HealthInterface (BaseInterface):
         st['restarts'] = [t for t in st.get('restarts', []) if now - t < 86400] + [now]
         st['last'] = {'at': now, 'reason': reason}
         self._saveState(st)
+        self._saveResume()
         self.log(colored('RESTARTING HPlayer2 (systemd brings it back): ' + reason, 'red'))
         self.hplayer.request_shutdown(exit_code=1, force_delay=10.0)
+
+    def _saveResume(self):
+        """A fixed wallclock master leaves its timeline to the next process, which plays on it
+        instead of from 0 (hplayer2#t-079; the record is wallclock's: RESUME there)."""
+        wc = self.hplayer.interface('wallclock')
+        if not wc or not hasattr(wc, 'saveResume'):
+            return
+        p = self._player()
+        sample = mpv_get(getattr(p, '_mpv_socketpath', None), ('time-pos', 'duration', 'path')) if p else {}
+        sample['wall'] = time.time()
+        try:
+            rec = wc.saveResume(sample)
+        except Exception as e:
+            self.log('timeline not kept:', e)
+            return
+        if rec:
+            self.log('timeline kept for the next start: %s, position 0 at %.3f' % (rec['m'], rec['t0']))
 
     def _rebuildZyre(self, why):
         z = self.hplayer.interface('zyre')

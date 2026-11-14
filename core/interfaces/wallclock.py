@@ -34,6 +34,17 @@ DRAIN_HOLD = 3
 # without the profile's 'unbuf_' prefix). Volume and the rest are not orders: they never move it.
 ORDER_EVENTS = ('play', 'playindex', 'playz', 'playpause', 'next', 'prev', 'stop', 'pause', 'resume')
 
+# A fixed master's timeline kept across health's self-restart (hplayer2#t-079). KOUAGOU 30/09: a
+# master restarted at the loop point played again from 0 ~25 s later, while its slaves chased their
+# model of it (last packet + elapsed, wrapped at the length) - they jumped back ~28 s when its clock
+# returned. health writes the wall time of the timeline's position 0 here before it exits; the next
+# process reads it once and plays where that model already is.
+RESUME = '/run/hplayer2-resume.json'
+RESUME_MAX_AGE = 300.0      # s: an older record is not this restart's
+RESUME_WINDOW = 120.0       # s from the start: no play of the file by then -> forgotten
+RESUME_SETTLE = 30.0        # s after the seek: the profile's other boot plays stay local (resuming())
+RESUME_HOLD = 5.0           # s after the seek: the clock goes out even with the landing unconfirmed
+
 
 def natural_key(name):
     """Name order for the leader tie-break: Anna-2 < Anna-10 (a plain string compare says the
@@ -300,6 +311,13 @@ class WallclockInterface (BaseInterface):
         self._posHold = 0               # > 0: the latch may be a drained OLD position (DRAIN_*)
         if self.player:
             self.hplayer.on(self.player.name + '.status')(self._onPlayerStatus)
+        # Self-restart resume (RESUME_*): a fixed master only - an elected leader is no leader after
+        # a restart, and a follower chases whoever leads.
+        self._resume = None             # the record, while it governs this start
+        self._resumeUntil = LONG_AGO    # mono: the record is forgotten past this
+        self._resumeSeek = None         # [target, mono, landed] once the resume seek is issued
+        if self.master and not self.elected:
+            self._loadResume()
         if self.master or self.elected:
             self.drifter = None
         if not self.master:
@@ -695,6 +713,132 @@ class WallclockInterface (BaseInterface):
                 except (TypeError, ValueError):
                     pass
 
+    def saveResume(self, sample=None):
+        """health's _doRestart, just before the exit: where this master's timeline stands, as the
+        wall time of its position 0 - the line the slaves' model of us follows. A seamless one-file
+        loop only: a cue list moves to another file at its end. The latch first (the `at` the
+        slaves were sent), else health's own mpv reading `sample` (time-pos, duration, path, wall):
+        on a clock-silent restart the player's view is the frozen part."""
+        if not self.master or self.elected or not self.seamless or not self.player:
+            return None
+        media = self.player.status('media')
+        try:
+            dur = float(self.player.status('duration') or 0)
+        except (TypeError, ValueError):
+            dur = 0.0
+        latch = self._latch
+        if latch is not None and not self._posHold and time.monotonic() - latch[2] <= 1.0:
+            t0 = latch[1] / PRECISION - latch[0]
+        elif sample and sample.get('time-pos') is not None and sample.get('wall'):
+            t0 = float(sample['wall']) - float(sample['time-pos'])
+            media = media or sample.get('path')
+            dur = dur or float(sample.get('duration') or 0)
+        else:
+            return None
+        if not media or dur <= 3:
+            return None
+        rec = {'t0': t0, 'm': os.path.basename(media), 'dur': dur, 'at': time.time()}
+        try:
+            tmp = RESUME + '.tmp'
+            with open(tmp, 'w') as f:
+                json.dump(rec, f)
+            os.replace(tmp, RESUME)
+        except OSError as e:
+            self.log('resume record not written:', e)
+            return None
+        return rec
+
+    def _loadResume(self):
+        """Read health's record once, and remove it: one restart, one resume."""
+        try:
+            with open(RESUME) as f:
+                rec = json.load(f)
+        except (OSError, ValueError):
+            return
+        finally:
+            try:
+                os.unlink(RESUME)
+            except OSError:
+                pass
+        try:
+            age = time.time() - float(rec['at'])
+            float(rec['t0'])
+            ok = 0 <= age <= RESUME_MAX_AGE and float(rec['dur']) > 3 and bool(rec.get('m'))
+        except (KeyError, TypeError, ValueError, AttributeError):
+            ok, age = False, -1
+        if not ok:
+            self.log('resume record ignored (stale or malformed):', rec)
+            return
+        self._resume = rec
+        self._resumeUntil = time.monotonic() + RESUME_WINDOW
+        self.log('self-restart %d s ago: resuming %s on its timeline, not at 0' % (age, rec['m']))
+
+    def resuming(self):
+        """The profile asks before its boot play. True = health restarted this master and the
+        slaves still play on their model of it: play locally and broadcast no stop/play (they
+        would replay from 0) - the send loop seeks to the timeline."""
+        return self._resume is not None and time.monotonic() < self._resumeUntil
+
+    def _resumeGate(self):
+        """_runMaster, every tick while a resume record governs: True = the clock may go out. Until
+        the player is on the timeline nothing goes out, not even the stopped beat, which would
+        release the slaves' chase of their model."""
+        rec = self._resume
+        if rec is None:
+            return True
+        now = time.monotonic()
+        if now >= self._resumeUntil:
+            self._resume = None
+            if self._resumeSeek is None:
+                self.log('resume: no play of', rec['m'], 'within %d s: forgotten' % RESUME_WINDOW)
+            return True
+        dur = float(rec['dur'])
+        latch = self._latch
+        seek = self._resumeSeek
+        if seek is None:
+            if not self.player.isPlaying():
+                return False            # still booting: the slaves chase their model meanwhile
+            media = os.path.basename(self.player.status('media') or '')
+            if media and media != rec['m']:
+                self._resume = None
+                self.log('resume: playing', media, 'not', rec['m'], '- forgotten')
+                return True
+            try:
+                pdur = float(self.player.status('duration') or 0)
+            except (TypeError, ValueError):
+                pdur = 0.0
+            if not media or pdur <= 0 or latch is None or now - latch[2] > 1.0:
+                return False            # the file is loading: no position to seek from yet
+            if abs(pdur - dur) > self.durTolerance:
+                self._resume = None
+                self.log('resume: %s is %.2f s long, the record says %.2f - forgotten' % (media, pdur, dur))
+                return True
+            target = (time.time() - float(rec['t0'])) % dur
+            self._resumeUntil = now + RESUME_SETTLE
+            if 1.0 < target < dur - 1.0:
+                self._resumeSeek = [target, now, False]
+                self.player.seekTo(target * 1000, exact=True)
+                self.log('resume: seek to %.2f s of %s (where the slaves model this master)' % (target, media))
+                return False
+            self._resumeSeek = [target, now, True]
+            self.log('resume: the timeline is at its loop point (%.2f s): no seek' % target)
+            return True
+        if seek[2]:
+            return True
+        if now - seek[1] > RESUME_HOLD:
+            seek[2] = True
+            self.log('resume: landing unconfirmed after %d s: clock out anyway' % RESUME_HOLD)
+            return True
+        if latch is None or latch[2] <= seek[1]:
+            return False
+        err = latch[0] - (latch[1] / PRECISION - float(rec['t0'])) % dur
+        err = ((err + dur / 2) % dur) - dur / 2
+        if abs(err) > 1.0:
+            return False                # a pre-seek position still in the pipe
+        seek[2] = True
+        self.log('resume: on the timeline (%+d ms): clock out' % (err * 1000))
+        return True
+
     def _peerIps(self):
         ips = []
         z = self.hplayer.interface('zyre')
@@ -811,6 +955,8 @@ class WallclockInterface (BaseInterface):
                     continue            # a follower: someone else emits
                 if self._dark:
                     continue            # leading with no media to play: silence, never a p=0 beat
+            elif self._resume is not None and not self._resumeGate():
+                continue                # a self-restart not yet on the slaves' timeline (RESUME_*)
 
             media = self.player.status('media')
             dur = self.player.status('duration')

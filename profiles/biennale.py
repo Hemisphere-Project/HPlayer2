@@ -152,6 +152,11 @@ def gap_cancel():
 debounceLastTime = 0
 debounceLastMedia = ""
 
+def wall_resuming():
+	# hplayer2#t-079: health restarted this master and the slaves still play on their model of it
+	wc = hplayer.interface('wallclock') if WALL else None
+	return bool(wc and wc.resuming())
+
 def doPlay(media, debounce=0):
 
 	# DEBOUNCE media
@@ -164,7 +169,13 @@ def doPlay(media, debounce=0):
 
 	# PLAY SYNC -> forward to peers
 	if SYNC:
-		if SYNC_MASTER:
+		if SYNC_MASTER and wall_resuming():
+			# a stop/play to the slaves would replay them from 0: play here, once - the wallclock
+			# seeks this player to where their model of it already is
+			if not player.isPlaying():
+				hplayer.playlist.play(media)
+			print('doPlay: sync master resuming after a self-restart.. local play, no broadcast')
+		elif SYNC_MASTER:
 			zbroadcast('stop')
 			zbroadcast('play', media, SYNC_BUFFER)
 			print('doPlay: sync master.. broadcast')
@@ -178,8 +189,8 @@ def doPlay(media, debounce=0):
 # SYNC_MASTER INIT: let slaves join zyre before the first broadcast
 @hplayer.on('app-run')
 def sync_init(ev, *args):
-	if SYNC_MASTER:
-		time.sleep(10)
+	if SYNC_MASTER and not wall_resuming():
+		time.sleep(10)                       # (a resume broadcasts nothing: no one to wait for)
 
 # DEFAULT File
 @hplayer.on('app-run')
