@@ -230,12 +230,14 @@ def test_two_threads_stopping_one_client_never_free_the_callback_under_it(world)
 
 def test_a_stop_on_the_actors_own_thread_does_not_wait_for_itself(world, monkeypatch):
     stopped = threading.Event()
+    first = [True]
 
     def round_that_stops_its_client(self, pipe, args):
         pipe.signal(0)
-        if not stopped.is_set():
-            stopped.set()
+        if first[0]:
+            first[0] = False
             self.stop()                 # the last word on this client comes from its own actor
+            stopped.set()               # only once stop() returned: its hand-over is queued before settle()'s drain
         self.done = True
 
     monkeypatch.setattr(zyremod.TimeClient, 'actor_fn', round_that_stops_its_client)
