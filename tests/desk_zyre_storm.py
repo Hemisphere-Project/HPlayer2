@@ -10,7 +10,7 @@ link-flap storm). REAL zyre/czmq over loopback, two processes:
 
 Prints A's thread count before/peak/after and B's clock-sync result; exit 1 on a failure.
 """
-import sys, os, time, threading, subprocess, functools
+import sys, os, time, threading, subprocess, functools, tempfile, faulthandler, signal
 
 REPO = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, REPO)
@@ -95,6 +95,7 @@ def run_flapper(iface, rebuilds):
 
 if __name__ == '__main__':
     if len(sys.argv) > 1 and sys.argv[1] in ('master', 'flapper'):
+        faulthandler.register(signal.SIGUSR1, all_threads=True)     # `kill -USR1 <pid>`: where it hangs
         role, iface, n = sys.argv[1], sys.argv[2], int(sys.argv[3])
         if role == 'master':
             run_master(iface, n)
@@ -103,10 +104,20 @@ if __name__ == '__main__':
     rebuilds = int(sys.argv[1]) if len(sys.argv) > 1 else 40
     iface = sys.argv[2] if len(sys.argv) > 2 else 'lo'
     dur = 2 + rebuilds * 0.45 + 40
-    m = subprocess.Popen([sys.executable, __file__, 'master', iface, str(int(dur))], stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True)
-    f = subprocess.Popen([sys.executable, __file__, 'flapper', iface, str(rebuilds)], stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True)
-    fo, _ = f.communicate()
-    mo, _ = m.communicate()
+    # Each child writes to its own unlinked file, never to a pipe: the parent waits on the flapper
+    # first, so an undrained pipe filled at ~64 KiB of MASTER output — one « Subscriber terminated »
+    # per peer exit, ~2980 rebuilds — and every actor that printed blocked there, its zactor_destroy
+    # with it (bench-01, 18/11, 16000 rebuilds: the reaper wedged at 1332 s, master at 243 threads).
+    # STORM_LOG=<prefix>: named files instead (<prefix>.master / .flapper), kept after a killed run.
+    log = os.environ.get('STORM_LOG')
+    out = (lambda r: open(log + '.' + r, 'w+')) if log else (lambda r: tempfile.TemporaryFile('w+'))
+    mf, ff = out('master'), out('flapper')
+    m = subprocess.Popen([sys.executable, __file__, 'master', iface, str(int(dur))], stdout=mf, stderr=subprocess.STDOUT, text=True)
+    f = subprocess.Popen([sys.executable, __file__, 'flapper', iface, str(rebuilds)], stdout=ff, stderr=subprocess.STDOUT, text=True)
+    f.wait()
+    m.wait()
+    mf.seek(0); ff.seek(0)
+    mo, fo = mf.read(), ff.read()
     keep = lambda o: [l for l in o.splitlines() if l.startswith(('MASTER', 'FLAPPER', 'Traceback', 'RuntimeError', 'AttributeError', 'Exception', '  File', '    '))]
     for l in keep(mo) + keep(fo):
         print(l)
