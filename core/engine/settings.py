@@ -61,6 +61,7 @@ def clean_surface(surface):
 class Settings(Module):
 
     _ready = False
+    _loading = False
     _settingspath = None
     _settings = {
         'flip':         False,
@@ -81,6 +82,10 @@ class Settings(Module):
         super().__init__(hplayer, 'Settings', 'yellow')     
         
         self._settingspath = persistent
+
+        # keys a set() dropped because it came before load(): their value never reached the store,
+        # so the stored one load() replays is OLDER than what the caller has (see setEarly)
+        self._setEarly = set()
 
         # Autobind to player
         hplayer.autoBind(self)
@@ -120,10 +125,17 @@ class Settings(Module):
 
         snapshot = self.export()
         self.emit('loading')
-        for key in self._settings:
-            self.emit('do-'+key, self._settings[key], snapshot)
-        self.emit('updated', snapshot)
-        self.emit('loaded', snapshot)
+        self._loading = True
+        try:
+            for key in self._settings:
+                self.emit('do-'+key, self._settings[key], snapshot)
+        finally:
+            self._loading = False
+            self._setEarly.clear()
+        # a do-<key> handler may have set() during the replay (do-playlist stores the list a
+        # profile built at import): announce what the store holds now, not the pre-replay snapshot
+        self.emit('updated', self.export())
+        self.emit('loaded', self.export())
 
         if loaded_from_file:
             self.log('settings loaded:', self._settings)
@@ -135,6 +147,17 @@ class Settings(Module):
         return self._settings.copy()
 
 
+    def loading(self):
+        """True while load() replays the stored values as do-<key>."""
+        return self._loading
+
+
+    def setEarly(self, key):
+        """True if something set <key> before load() made the settings ready. set() dropped that
+        value, so the stored one load() replays is older than it. Cleared once the replay is over."""
+        return key in self._setEarly
+
+
     def get(self, key):
         if key in self._settings:
             return self._settings[key]
@@ -144,6 +167,7 @@ class Settings(Module):
     def set(self, key, val):
         if not self._ready:
             self.log('WARNING: settings not ready to set', key, val)
+            self._setEarly.add(key)
             return
         if key not in self._settings:
             self._settings[key] = None

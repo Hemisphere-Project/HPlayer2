@@ -171,7 +171,8 @@ def main(profile):
           "HPlayer2.run(): settings.load() runs, then app-run")
     src = inspect.getsource(HPlayer2.autoBind)
     k = src.find("@module.on('do-playlist')")
-    check(k >= 0 and 'self.playlist.load(' in src[k:k + 200],
+    body = src[k:src.find('@module.on(', k + 1)] if k >= 0 else ''     # up to the next binding
+    check('self.playlist.load(' in body,
           "autoBind: settings' do-playlist -> playlist.load(<stored value>)")
 
     tmp = tempfile.mkdtemp(prefix='desk-anna-boot-')
