@@ -166,3 +166,150 @@ def test_the_clean_slate_times_are_unchanged(clock):
     assert sched._rebootSlots() == [('before open', 590), ('after close', 1085)]
     clock.now = at(TUE, '08:00')
     assert sched._rebootSlots() == []
+
+
+# ── the window as a STATE: a play outside it ends (hplayer2#t-073) ──────────────────────────
+# W3, Tuesday 22/09 16:05: a play sent by hand on the garden's closed day ran on, because the
+# window only acted on its edges and a closed day has none.
+
+class FakePlayer:
+    def __init__(self):
+        self.playing = False
+    def isPlaying(self):
+        return self.playing
+
+
+def playing_make(**settings):
+    sched, events = make(**settings)
+    p = FakePlayer()
+    sched.hplayer._players['fake'] = p
+    return sched, events, p
+
+
+def closes(events):
+    return [e for e in events if e[0] == 'schedule.close']
+
+
+def tick(sched, clock, when):
+    clock.now = when
+    sched._evaluate()
+
+
+def test_a_play_on_a_closed_day_stops_after_the_grace(clock):
+    sched, events, p = playing_make(**GARDEN)        # default grace: 60 min
+    tick(sched, clock, at(TUE, '16:00'))             # baseline: closed, idle
+    p.playing = True                                 # someone presses play on the day off
+    tick(sched, clock, at(TUE, '16:05'))
+    assert sched.outOfHoursStop() == '17:05'
+    tick(sched, clock, at(TUE, '17:04'))
+    assert closes(events) == []
+    tick(sched, clock, at(TUE, '17:05'))
+    assert closes(events) == [('schedule.close', 'out-of-hours')]
+    tick(sched, clock, at(TUE, '17:35'))             # still reported playing: one close, not a storm
+    tick(sched, clock, at(TUE, '23:59'))
+    assert len(closes(events)) == 1
+    assert sched.outOfHoursStop() is None
+
+
+def test_after_the_close_hour_too_not_only_on_a_day_off(clock):
+    sched, events, p = playing_make(schedule_grace=15, **GARDEN)
+    tick(sched, clock, at(MON, '18:00'))             # baseline just after the window: closed
+    p.playing = True
+    tick(sched, clock, at(MON, '18:30'))
+    tick(sched, clock, at(MON, '18:45'))
+    assert closes(events) == [('schedule.close', 'out-of-hours')]
+
+
+def test_grace_zero_stops_at_the_first_tick(clock):
+    sched, events, p = playing_make(schedule_grace=0, **GARDEN)
+    p.playing = True
+    tick(sched, clock, at(TUE, '09:00'))
+    assert closes(events) == [('schedule.close', 'out-of-hours')]
+
+
+def test_a_new_play_after_a_stop_gets_a_fresh_grace(clock):
+    sched, events, p = playing_make(schedule_grace=30, **GARDEN)
+    p.playing = True
+    tick(sched, clock, at(TUE, '10:00'))
+    tick(sched, clock, at(TUE, '10:30'))
+    assert len(closes(events)) == 1
+    p.playing = False                                # the handler stopped it
+    tick(sched, clock, at(TUE, '10:31'))
+    p.playing = True                                 # played by hand again
+    tick(sched, clock, at(TUE, '11:00'))
+    assert len(closes(events)) == 1 and sched.outOfHoursStop() == '11:30'
+    tick(sched, clock, at(TUE, '11:30'))
+    assert len(closes(events)) == 2
+
+
+def test_a_play_that_ends_by_itself_is_never_closed(clock):
+    sched, events, p = playing_make(schedule_grace=30, **GARDEN)
+    p.playing = True
+    tick(sched, clock, at(TUE, '10:00'))
+    p.playing = False
+    tick(sched, clock, at(TUE, '10:20'))
+    p.playing = True                                 # a later play is timed from ITS start
+    tick(sched, clock, at(TUE, '10:40'))
+    tick(sched, clock, at(TUE, '11:09'))
+    assert closes(events) == []
+
+
+def test_playing_inside_the_window_is_untouched(clock):
+    sched, events, p = playing_make(schedule_grace=0, **GARDEN)
+    p.playing = True
+    for hm in ('10:00', '12:00', '17:59'):
+        tick(sched, clock, at(WED, hm))
+    assert closes(events) == [] and sched.outOfHoursStop() is None
+
+
+def test_the_window_opening_ends_the_count(clock):
+    sched, events, p = playing_make(schedule_grace=60, **GARDEN)
+    p.playing = True
+    tick(sched, clock, at(WED, '09:30'))             # a test play before opening
+    tick(sched, clock, at(WED, '10:00'))             # the window opens on it: legitimate now
+    tick(sched, clock, at(WED, '10:30'))
+    assert closes(events) == []
+
+
+def test_never_gates_when_the_schedule_does_not(clock):
+    sched, events, p = playing_make(schedule_grace=0, **GARDEN)
+    p.playing = True
+    sched.hplayer.settings.set('schedule-enable', False)
+    tick(sched, clock, at(TUE, '12:00'))
+    sched.hplayer.settings.set('schedule-enable', True)
+    tick(sched, clock, datetime(2000, 1, 1, 3, 0))   # a clock nobody set: fails open
+    assert closes(events) == []
+
+
+def test_the_edge_close_still_fires_once_then_a_stuck_play_gets_the_grace(clock):
+    sched, events, p = playing_make(schedule_grace=60, **GARDEN)
+    p.playing = True
+    tick(sched, clock, at(MON, '17:59'))
+    tick(sched, clock, at(MON, '18:00'))             # the edge
+    assert closes(events) == [('schedule.close', None)]
+    tick(sched, clock, at(MON, '18:59'))             # a slave, or a stop that did not take
+    tick(sched, clock, at(MON, '19:00'))
+    assert closes(events) == [('schedule.close', None), ('schedule.close', 'out-of-hours')]
+
+
+@pytest.mark.parametrize('raw, minutes', [
+    (60, 60), ('15', 15), (0, 0), (-5, 0), (5000, 24 * 60), ('2.5', 2),
+    ('', 60), (None, 60), ('never', 60),             # unreadable = the default, never "off"
+])
+def test_grace_is_coerced(clock, raw, minutes):
+    sched, _ = make(**GARDEN)
+    sched.hplayer.settings.set('schedule-grace', raw)
+    assert sched.grace() == minutes
+
+
+def test_the_status_says_when_it_stops(clock):
+    sched, _, p = playing_make(schedule_grace=45, **GARDEN)
+    sent = []
+    class FakeHttp:
+        def send(self, ev, data):
+            sent.append((ev, data))
+    sched.hplayer.interface = lambda name: FakeHttp() if name == 'http2' else None
+    p.playing = True
+    tick(sched, clock, at(TUE, '20:00'))
+    st = sent[-1][1]
+    assert st['open'] is False and st['grace'] == 45 and st['stopsAt'] == '20:45'

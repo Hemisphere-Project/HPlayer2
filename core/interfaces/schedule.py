@@ -1,6 +1,6 @@
 from .base import BaseInterface
 
-from datetime import datetime
+from datetime import datetime, timedelta
 import subprocess
 import glob
 import json
@@ -13,7 +13,9 @@ class ScheduleInterface(BaseInterface):
 
     Settable from a profile and from http2 (settings keys below). Emits edge events
         schedule.open   — the window just opened
-        schedule.close  — the window just closed
+        schedule.close  — the window just closed; ALSO emitted with the argument 'out-of-hours'
+                          when something has played outside the window for schedule-grace
+                          minutes (hplayer2#t-073, below) — the same handler stops it
         schedule.slot   — the window in force changed (also once at startup when inside one), with
                           {'day', 'open', 'close', 'volume'}: the day it started on and that day's
                           volume (None = leave it as it is). Emitted BEFORE schedule.open, so the
@@ -51,11 +53,19 @@ class ScheduleInterface(BaseInterface):
         # is. Applied on entering the window and at boot inside it (schedule.slot), never while the
         # schedule does not gate (disabled, no RTC, clock nobody set). None = no day volumes.
         'schedule-volumes': None,
+        # 2026-11-18 (hplayer2#t-073, W3 22/09: a play started by hand on a closed day ran all
+        # night): the window used to act only on its EDGES, so a play outside it — by hand, from
+        # any interface — ran until somebody stopped it. Now a play found running outside the
+        # window gets schedule-grace minutes, then schedule.close fires ('out-of-hours') and the
+        # profile's close handler stops it, slaves included. A deliberate out-of-hours play is a
+        # choice with an end; 0 = stop it at the next tick. Only while the schedule gates.
+        'schedule-grace': 60,
     }
     REBOOT_BEFORE_OPEN = 10     # minutes
     REBOOT_AFTER_CLOSE = 5      # minutes
     REBOOT_SLOT_MINUTES = 3     # the decision window (the tick is 30 s)
     REBOOT_MIN_UPTIME = 900     # seconds
+    GRACE_MAX = 24 * 60         # minutes: a day is the longest out-of-hours play the grace allows
     DAYS_ALL = '1111111'
 
     def __init__(self, hplayer, tick=30, requireRtc=False):
@@ -69,6 +79,8 @@ class ScheduleInterface(BaseInterface):
         self._lastOpen = None
         self._lastSlot = False          # False = no baseline yet; None = outside the window
         self._rebootSlotDone = None     # "<date>-<label>" of the last slot acted on (or skipped)
+        self._outSince = None           # when a play outside the window was first seen (None = none)
+        self._outClosed = False         # that play already got its out-of-hours close
 
     #
     # public
@@ -132,11 +144,57 @@ class ScheduleInterface(BaseInterface):
         elif openNow != self._lastOpen:
             self._lastOpen = openNow
             self.emit('open' if openNow else 'close')
+        self._outOfHoursTick(win is not None and not openNow)
         self._pushStatus(openNow, slot)
         try:
             self._rebootTick()
         except Exception as e:
             self.log("schedule-reboot error:", e)
+
+    #
+    # the window as a STATE: a play outside it ends (hplayer2#t-073)
+    #
+
+    def grace(self):
+        """Minutes a play outside the window may run before schedule.close stops it: 0..GRACE_MAX.
+        Unreadable (blank, junk) = the default, so a bad value never reopens the hole."""
+        raw = self.hplayer.settings.get('schedule-grace')
+        try:
+            return max(0, min(self.GRACE_MAX, int(float(raw))))
+        except (TypeError, ValueError):
+            return self.DEFAULTS['schedule-grace']
+
+    def _playing(self):
+        try:
+            return any(p.isPlaying() for p in self.hplayer.players())
+        except Exception:
+            return False
+
+    def _outOfHoursTick(self, closed):
+        """closed = the schedule gates AND the window is shut. A play found running then is timed
+        from the first tick that sees it; after grace() minutes it gets ONE schedule.close
+        ('out-of-hours'). It ends — and the next one is timed afresh — when the play stops or the
+        window opens. The interface stops nothing itself: the profile's close handler does, which
+        is what keeps a Nowde/zyre slave following its master instead of its own window."""
+        if not (closed and self._playing()):
+            self._outSince = None
+            self._outClosed = False
+            return
+        now = datetime.now()
+        if self._outSince is None:
+            self._outSince = now
+            self.log("playing outside the window: stops at %s unless it ends first"
+                     % (now + timedelta(minutes=self.grace())).strftime('%H:%M'))
+        if not self._outClosed and now - self._outSince >= timedelta(minutes=self.grace()):
+            self._outClosed = True
+            self.log("played outside the window for %d min: closing" % self.grace())
+            self.emit('close', 'out-of-hours')
+
+    def outOfHoursStop(self):
+        """'HH:MM' at which the play running outside the window gets stopped, or None."""
+        if self._outSince is None or self._outClosed:
+            return None
+        return (self._outSince + timedelta(minutes=self.grace())).strftime('%H:%M')
 
     #
     # clean-slate reboot around the window (schedule-reboot)
@@ -272,6 +330,8 @@ class ScheduleInterface(BaseInterface):
                 'days': self._cfgDays(),
                 'dayOpen': self._dayOpen(datetime.now().weekday()),
                 'reboot': self._cfgBool('schedule-reboot'),
+                'grace': self.grace(),
+                'stopsAt': self.outOfHoursStop(),
                 'rebootSlots': ' / '.join('%02d:%02d %s' % (m // 60, m % 60, l) for l, m in self._rebootSlots()),
             })
 

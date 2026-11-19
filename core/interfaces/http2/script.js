@@ -827,6 +827,8 @@ $(document).ready(function() {
             if (msg['schedule-open'] !== undefined) $('#schedule_open').val(msg['schedule-open']);
             if (msg['schedule-close'] !== undefined) $('#schedule_close').val(msg['schedule-close']);
             if (msg['schedule-reboot'] !== undefined) $('#schedule_reboot').prop('checked', !!msg['schedule-reboot']);
+            if (msg['schedule-grace'] !== undefined && document.activeElement !== $('#schedule_grace')[0])
+                $('#schedule_grace').val(msg['schedule-grace']);
             if (msg['schedule-volumes'] !== undefined) {
                 var vols = Array.isArray(msg['schedule-volumes']) ? msg['schedule-volumes'] : [];
                 $('.schedule-volume').each(function() {
@@ -866,12 +868,18 @@ $(document).ready(function() {
                         : (st['dayOpen'] === false ? 'closed TODAY (day off) — silent'
                                                    : 'window CLOSED — silent');
                 if (st['open'] && st['volume'] !== null && st['volume'] !== undefined) why += ' · volume ' + st['volume'];
+                if (!st['open'] && st['stopsAt']) why = why.replace('— silent', '— playing by hand, stops at ' + st['stopsAt']);
                 if (st['reboot']) why += ' · clean-slate reboot ' + (st['rebootSlots'] || 'inactive today');
                 status.text(why).removeClass('rtc-warn').addClass('rtc-ok');
             }
         });
         $('#schedule_enable').on('change', function() { trigger('schedule-enable', this.checked); });
         $('#schedule_reboot').on('change', function() { trigger('schedule-reboot', this.checked); });
+        $('#schedule_grace').on('change', function() {
+            var g = parseInt(this.value, 10);
+            if (isNaN(g)) return;                       // blank/junk: keep the saved value
+            trigger('schedule-grace', Math.max(0, Math.min(1440, g)));
+        });
         $('.schedule-volume').on('change', function() {
             var vols = [];
             for (var d = 0; d < 7; d++) {
