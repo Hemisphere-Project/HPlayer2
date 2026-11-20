@@ -264,6 +264,9 @@
                         <div class="mb-2">
                             <label><input type="checkbox" id="schedule_reboot"> clean slate: reboot the player 10 min before opening and 5 min after closing (open days, RTC required)</label>
                         </div>
+                        <div id="schedule_grace_ctrls" class="mb-2"><span class="badge badge-secondary mr-2">out of hours</span>
+                            a play outside the window stops after <input type="number" id="schedule_grace" min="0" max="1440" step="1" style="width: 5em"> min
+                            <div><small class="schedule-hint">a play started by hand (or by any interface) while the window is closed &middot; 0 = stop it at once</small></div></div>
                         <div id="schedule_status" class="mt-2">RTC: &mdash;</div>
                     </div>
                     </div><!-- /schedule_body -->

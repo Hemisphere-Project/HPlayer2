@@ -621,6 +621,14 @@ class HPlayer2(Module):
 
         @module.on('do-playlist')
         def doplaylist(ev, *args):
+            # settings.load() (in run(), just before app-run) replays the STORED list as do-playlist.
+            # A list the profile built at import came before the settings were ready, so it never
+            # reached the store, and it is the newer one: keep it and store it now. The stored one
+            # is None on a fresh card (the import list emptied: 0/0, next/play dead) and stale once
+            # the media folder changed (index sync across players breaks). Anna-01, 2026-11-06.
+            if self.settings.loading() and self.settings.setEarly('playlist'):
+                self.playlist.update()
+                return
             self.playlist.load(args[0] if len(args) > 0 else None)
 
         # PLAYERS
