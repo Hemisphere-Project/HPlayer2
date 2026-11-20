@@ -151,6 +151,7 @@ def gap_cancel():
 # PLAY action
 debounceLastTime = 0
 debounceLastMedia = ""
+resumePlayed = False                     # hplayer2#t-079: the resuming master's one local boot play went out
 
 def wall_resuming():
 	# hplayer2#t-079: health restarted this master and the slaves still play on their model of it
@@ -160,7 +161,7 @@ def wall_resuming():
 def doPlay(media, debounce=0):
 
 	# DEBOUNCE media
-	global debounceLastTime, debounceLastMedia
+	global debounceLastTime, debounceLastMedia, resumePlayed
 	now = int(round(time.time() * 1000))
 	if debounce > 0 and debounceLastMedia == media and (now - debounceLastTime) < debounce:
 		return
@@ -171,8 +172,12 @@ def doPlay(media, debounce=0):
 	if SYNC:
 		if SYNC_MASTER and wall_resuming():
 			# a stop/play to the slaves would replay them from 0: play here, once - the wallclock
-			# seeks this player to where their model of it already is
-			if not player.isPlaying():
+			# seeks this player to where their model of it already is. "Once" is a flag, not
+			# player.isPlaying(): the resume's exact seek reads as stopped (mpv core-idle) while
+			# it decodes - about 1 s into a 1080p film on a Pi 3B+ - and the second boot play
+			# (sync_init2, 1 s after app-run) landed inside it and replayed the file from 0 (rig 20/11)
+			if not resumePlayed:
+				resumePlayed = True
 				hplayer.playlist.play(media)
 			print('doPlay: sync master resuming after a self-restart.. local play, no broadcast')
 		elif SYNC_MASTER:
