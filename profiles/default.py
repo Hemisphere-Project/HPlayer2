@@ -3,8 +3,8 @@ from core.engine.hplayer import HPlayer2        # Import base HPlayer2 class
 
 # HPLAYER2
 hplayer = HPlayer2(                             # Initialize HPlayer2 object
-        basepath=['/data/usb', '/data/media'],  # basepath is a list of base directories for media collection search. 
-        settingspath="/data/hplayer2.cfg")      # settingspath is the path to persistent settings file. If ommited, no settings (like volume) will be kept between restarts.
+        mediaPath=['/data/usb', '/data/media'], # media folders searched for the collection
+        config="/data/hplayer2.cfg")            # persistent settings file (volume, ...) kept between restarts
 
 
 # PLAYERS
