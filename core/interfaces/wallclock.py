@@ -43,14 +43,18 @@ RESUME = '/run/hplayer2-resume.json'
 RESUME_MAX_AGE = 300.0      # s: an older record is not this restart's
 RESUME_WINDOW = 120.0       # s from the start: no play of the file by then -> forgotten
 RESUME_SETTLE = 30.0        # s after the seek: the profile's other boot plays stay local (resuming())
-RESUME_HOLD = 5.0           # s after a seek: the clock goes out even with the landing unconfirmed
-# Landed = RUNNING on the timeline, not reading it: mpv reports the seek target the moment an exact
-# seek starts, then a film decodes from its keyframe before playback moves (~2 s for 1080p on a Pi
-# 3B+, rig 20/11) - a clock sent off that first reading put the master 2 s behind its slaves.
+RESUME_HOLD = 5.0           # s after the start: the clock goes out even with the landing unconfirmed
+# The resume is a PRE-ROLL: pause, seek exactly to where the timeline will be RESUME_PREROLL s from
+# now, start there and then. mpv reports an exact seek's target the moment it starts, but a film
+# decodes from its keyframe before it moves - 1.8 then 4.1 s for 1080p on a Pi 3B+ (rig 20/11): a
+# clock sent off that first reading put the master 2 s behind its slaves, and a seek that leads by
+# the last lag overshot the next. Paused, the decode costs nothing on the timeline.
+RESUME_PREROLL = 6.0        # s: the first pre-roll's margin (doubled when the decode outran it)
+RESUME_PREROLLS = 3         # pre-rolls at most, then the clock goes out and the slaves trim the rest
+RESUME_START_EARLY = 0.02   # s: unpause this early (the send loop ticks every 50 ms)
 RESUME_RUN = 0.3            # s of latches that must advance with the wall clock to call it running
 RESUME_RUN_SLIP = 0.15      # s: how far position and wall may disagree over RESUME_RUN and still run
 RESUME_TOL = 0.15           # s: running this close to the timeline = landed
-RESUME_SEEKS = 3            # seeks at most; each re-seek leads the timeline by the lag the last one showed
 
 
 def natural_key(name):
@@ -322,7 +326,7 @@ class WallclockInterface (BaseInterface):
         # a restart, and a follower chases whoever leads.
         self._resume = None             # the record, while it governs this start
         self._resumeUntil = LONG_AGO    # mono: the record is forgotten past this
-        self._resumeSeek = None         # [target, mono, landed, run anchor, seeks, lead] once a resume seek is issued
+        self._resumeSeek = None         # the pre-roll's state (dict, _resumePreroll) once it began
         if self.master and not self.elected:
             self._loadResume()
         if self.master or self.elected:
@@ -820,59 +824,78 @@ class WallclockInterface (BaseInterface):
                 self._resume = None
                 self.log('resume: %s is %.2f s long, the record says %.2f - forgotten' % (media, pdur, dur))
                 return True
-            target = (time.time() - float(rec['t0'])) % dur
             self._resumeUntil = now + RESUME_SETTLE
-            # [target, mono of the seek, landed, run anchor (pos, mono) or None, seeks so far, lead]
-            if 1.0 < target < dur - 1.0:
-                self._resumeSeek = [target, now, False, None, 1, 0.0]
-                self.player.seekTo(target * 1000, exact=True)
-                self.log('resume: seek to %.2f s of %s (where the slaves model this master)' % (target, media))
-                return False
-            self._resumeSeek = [target, now, True, None, 0, 0.0]
-            self.log('resume: the timeline is at its loop point (%.2f s): no seek' % target)
+            err = self._resumeErr(latch, rec, dur)
+            if abs(err) <= RESUME_TOL:
+                self._resumeSeek = {'phase': 'done', 'n': 0}
+                self.log('resume: already on the timeline (%+d ms, at its loop point): no seek' % (err * 1000))
+                return True
+            return self._resumePreroll(rec, dur, RESUME_PREROLL, 1, media)
+        if seek['phase'] == 'done':
             return True
-        if seek[2]:
-            return True
-        if now - seek[1] > RESUME_HOLD:
-            seek[2] = True
-            self.log('resume: landing unconfirmed after %d s: clock out anyway' % RESUME_HOLD)
-            return True
-        if latch is None or latch[2] <= seek[1]:
+        if seek['phase'] == 'preroll':
+            if time.time() < seek['start'] - RESUME_START_EARLY:
+                return False            # paused on the target frame until the timeline gets there
+            self.player.resume()
+            seek['phase'], seek['runAt'], seek['anchor'] = 'running', now, None
             return False
-        # a position this seek can have produced: from its target to target + the time since it
-        if not (seek[0] - 0.5 <= latch[0] <= seek[0] + (latch[2] - seek[1]) + 0.5):
-            return False                # a pre-seek position still in the pipe
-        anchor = seek[3]
-        if anchor is None or latch[2] - anchor[1] < 0:
-            seek[3] = (latch[0], latch[2])
+        # running: landed = moving with the wall clock (two latches RESUME_RUN apart), on the timeline
+        if now - seek['runAt'] > RESUME_HOLD:
+            seek['phase'] = 'done'
+            self.log('resume: landing unconfirmed %d s after the start: clock out anyway' % RESUME_HOLD)
+            return True
+        if latch is None or latch[2] <= seek['runAt']:
+            return False
+        if not (seek['target'] - 0.5 <= latch[0] <= seek['target'] + (latch[2] - seek['runAt']) + 0.5):
+            return False                # a position from before the pre-roll still in the pipe
+        anchor = seek['anchor']
+        if anchor is None:
+            seek['anchor'] = (latch[0], latch[2])
             return False
         span = latch[2] - anchor[1]
         if span < RESUME_RUN:
             return False
         if abs((latch[0] - anchor[0]) - span) > RESUME_RUN_SLIP:
-            seek[3] = (latch[0], latch[2])  # frozen (the film still decodes) or jerky: watch again
+            seek['anchor'] = (latch[0], latch[2])   # still frozen (the decode outran the pre-roll) or jerky
             return False
-        err = latch[0] - (latch[1] / PRECISION - float(rec['t0'])) % dur
-        err = ((err + dur / 2) % dur) - dur / 2
+        err = self._resumeErr(latch, rec, dur)
         if abs(err) <= RESUME_TOL:
-            seek[2] = True
+            seek['phase'] = 'done'
             self.log('resume: on the timeline (%+d ms, running): clock out' % (err * 1000))
             return True
-        if seek[4] >= RESUME_SEEKS:
-            seek[2] = True
-            self.log('resume: still %+d ms off after %d seeks: clock out, the slaves trim the rest' % (err * 1000, seek[4]))
+        if seek['n'] >= RESUME_PREROLLS:
+            seek['phase'] = 'done'
+            self.log('resume: still %+d ms off after %d pre-rolls: clock out, the slaves trim the rest'
+                     % (err * 1000, seek['n']))
             return True
-        lead = seek[5] - err            # behind by the decode lag -> lead the next seek by it
-        target = (time.time() - float(rec['t0']) + lead) % dur
+        self.log('resume: started %+d ms off the timeline (the decode outran %.0f s): pre-roll again'
+                 % (err * 1000, seek['margin']))
+        return self._resumePreroll(rec, dur, seek['margin'] * 2, seek['n'] + 1, rec['m'])
+
+    @staticmethod
+    def _resumeErr(latch, rec, dur):
+        """How far the latched position sits from the record's timeline, wrapped to +-dur/2 (s)."""
+        err = latch[0] - (latch[1] / PRECISION - float(rec['t0'])) % dur
+        return ((err + dur / 2) % dur) - dur / 2
+
+    def _resumePreroll(self, rec, dur, margin, n, media):
+        """Pause, seek exactly to where the timeline will be `margin` s from now, and start there and
+        then: the film decodes from its keyframe while paused, so the start lands on the timeline
+        whatever that costs (rig 20/11: 1.8, then 4.1 s on a 1080p film on a Pi 3B+ - a seek-and-go
+        cannot aim at a lag that changes with every target)."""
+        t0 = float(rec['t0'])
+        start = time.time() + margin
+        target = (start - t0) % dur
         if not (1.0 < target < dur - 1.0):
-            seek[2] = True
-            self.log('resume: %+d ms off, the timeline is at its loop point: clock out' % (err * 1000))
-            return True
-        self._resumeSeek = [target, now, False, None, seek[4] + 1, lead]
-        self._resumeUntil = now + RESUME_SETTLE
+            start += 2.0                # clear of the loop point: mpv wraps the file itself there
+            target = (start - t0) % dur
+        self.player.pause()
         self.player.seekTo(target * 1000, exact=True)
-        self.log('resume: running %+d ms off the timeline (the seek decoded that long): re-seek to %.2f s, %+d ms ahead'
-                 % (err * 1000, target, lead * 1000))
+        self._resumeSeek = {'phase': 'preroll', 'target': target, 'start': start, 'margin': margin,
+                            'n': n, 'anchor': None, 'runAt': None}
+        self._resumeUntil = time.monotonic() + (start - time.time()) + RESUME_SETTLE
+        self.log('resume: pre-roll %d: paused at %.2f s of %s, starting in %.1f s on the timeline'
+                 ' (where the slaves model this master)' % (n, target, media, start - time.time()))
         return False
 
     def _peerIps(self):

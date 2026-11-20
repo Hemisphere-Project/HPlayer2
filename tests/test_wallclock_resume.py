@@ -22,12 +22,19 @@ class FakePlayer:
     def __init__(self, media=FILM, dur=120.0, playing=True):
         self.media, self.dur, self.playing = media, dur, playing
         self.seeks = []
+        self.paused = False
 
     def isPlaying(self):
         return self.playing
 
     def isPaused(self):
-        return False
+        return self.paused
+
+    def pause(self):
+        self.paused = True
+
+    def resume(self):
+        self.paused = False
 
     def seekTo(self, ms, exact=False):
         self.seeks.append((ms, exact))
@@ -122,74 +129,82 @@ def _resumed(monkeypatch, player, t0_ago=50.0):
     return w, c
 
 
-def test_seeks_to_the_timeline_and_holds_the_clock_until_landed(monkeypatch):
+def test_prerolls_to_the_timeline_and_holds_the_clock_until_it_runs_there(monkeypatch):
     p = FakePlayer(playing=False)
     w, c = _resumed(monkeypatch, p)
     assert w._resumeGate() is False, "booting: not even a stopped beat (it releases the slaves)"
     p.playing = True
     _latch(w, c, 0.3)                           # the boot play starts the file at 0
     assert w._resumeGate() is False
+    assert p.paused, "paused: the film decodes its keyframe off the timeline"
     (ms, exact), = p.seeks
-    assert exact and abs(ms - 50000) < 1
-    c.step(0.1)
-    _latch(w, c, 0.4)                           # a pre-seek position still in the pipe
+    pre = wallclock.RESUME_PREROLL
+    assert exact and abs(ms - (50 + pre) * 1000) < 1, "where the timeline will be at the start"
+    c.step(1.0)
+    _latch(w, c, 50 + pre)                      # decoded, sitting on the target frame
+    assert w._resumeGate() is False and p.paused
+    c.step(pre - 1.0)                           # the timeline reaches the target: start
+    assert w._resumeGate() is False and not p.paused
+    c.step(0.05)
+    _latch(w, c, 50 + pre + 0.05)               # reading the target is not running on it...
     assert w._resumeGate() is False
-    c.step(0.2)
-    _latch(w, c, 50.31)                         # the seek reports the timeline...
-    assert w._resumeGate() is False, "reading the target is not running on it"
     c.step(0.35)
-    _latch(w, c, 50.66)                         # ...and moves with the wall clock: landed
+    _latch(w, c, 50 + pre + 0.40)               # ...moving with the wall clock, on the timeline: landed
     assert w._resumeGate() is True
     assert w.resuming(), "the profile's other boot plays stay local a while"
     assert len(p.seeks) == 1
 
 
-def test_a_film_that_decodes_after_its_seek_is_re_seeked_ahead_by_the_lag(monkeypatch):
-    # rig 20/11 (bench-01, RastaOS-7.5, 1080p 0_mire.mp4): mpv reports the seek target at once,
-    # the film then decodes ~2 s before it moves. The clock went out on the first reading
-    # ("on the timeline -139 ms") and the master ran 2 s behind: its slave read -1906 ms.
+def test_a_decode_that_outruns_the_preroll_prerolls_again_with_twice_the_margin(monkeypatch):
+    # rig 20/11 (bench-01, RastaOS-7.5, 1080p 0_mire.mp4): an exact seek decoded 1.8 s, the next
+    # 4.1 s - a seek-and-go (the first fix) sent the clock off mpv's first reading and the master
+    # ran 2 s behind its slave (-1906 ms). A pre-roll whose decode outran it starts late: again,
+    # with twice the margin.
     p = FakePlayer()
     w, c = _resumed(monkeypatch, p)
     logs = []
     w.log = lambda *a: logs.append(' '.join(str(x) for x in a))
+    pre = wallclock.RESUME_PREROLL
     _latch(w, c, 0.3)
-    assert w._resumeGate() is False             # seek to 50.0
+    assert w._resumeGate() is False             # pre-roll 1: paused at 50 + pre
+    c.step(pre)
+    assert w._resumeGate() is False and not p.paused     # started - but still decoding
     c.step(0.05)
-    _latch(w, c, 50.0)                          # the target, at once
+    _latch(w, c, 50 + pre)
     assert w._resumeGate() is False
-    c.step(2.0)
-    _latch(w, c, 50.02)                         # frozen while it decoded; moving again
+    c.step(1.0)
+    _latch(w, c, 50 + pre + 0.02)               # frozen a second, moving now
     assert w._resumeGate() is False
     c.step(0.4)
-    _latch(w, c, 50.42)                         # running, 2.03 s behind the timeline (52.45)
-    assert w._resumeGate() is False, "2 s behind is no landing"
-    assert len(p.seeks) == 2
+    _latch(w, c, 50 + pre + 0.42)               # running 1.03 s behind (timeline 50 + pre + 1.45)
+    assert w._resumeGate() is False, "1 s behind is no landing"
+    assert p.paused and len(p.seeks) == 2
     ms, exact = p.seeks[1]
-    assert exact and abs(ms - 54480) < 20, "re-seek leads the timeline by the lag it measured"
+    assert exact and abs(ms - (50 + pre + 1.45 + 2 * pre) * 1000) < 1, "twice the margin"
+    c.step(2 * pre)
+    assert w._resumeGate() is False and not p.paused
     c.step(0.05)
-    _latch(w, c, 54.48)                         # the re-seek reports its target...
+    _latch(w, c, 50 + 3 * pre + 1.50)
     assert w._resumeGate() is False
-    c.step(2.0)
-    _latch(w, c, 54.50)                         # ...decodes as long again, then moves
-    assert w._resumeGate() is False
-    c.step(0.4)
-    _latch(w, c, 54.90)                         # the timeline: 50 + 4.9
+    c.step(0.35)
+    _latch(w, c, 50 + 3 * pre + 1.85)           # on the timeline
     assert w._resumeGate() is True
     assert len(p.seeks) == 2
-    assert any('running' in l and 'clock out' in l for l in logs)
+    assert any('pre-roll again' in l for l in logs) and any('running' in l and 'clock out' in l for l in logs)
 
 
-def test_still_off_after_the_last_seek_lets_the_clock_out(monkeypatch):
+def test_still_off_after_the_last_preroll_lets_the_clock_out(monkeypatch):
     p = FakePlayer()
     w, c = _resumed(monkeypatch, p)
-    w._resumeSeek = [50.0, c.mono, False, None, wallclock.RESUME_SEEKS, 2.0]
+    w._resumeSeek = {'phase': 'running', 'target': 50.0, 'start': c.wall, 'margin': 24.0,
+                     'n': wallclock.RESUME_PREROLLS, 'anchor': None, 'runAt': c.mono}
     c.step(0.05)
     _latch(w, c, 49.6)
     assert w._resumeGate() is False
     c.step(0.4)
-    _latch(w, c, 50.0)                          # running, 0.45 s behind, no seek left
+    _latch(w, c, 50.0)                          # running, 0.45 s behind, no pre-roll left
     assert w._resumeGate() is True
-    assert not p.seeks, "the slaves' drifter trims the rest"
+    assert not p.seeks and not p.paused, "the slaves' drifter trims the rest"
 
 
 def test_landing_unconfirmed_still_lets_the_clock_out(monkeypatch):
@@ -197,6 +212,8 @@ def test_landing_unconfirmed_still_lets_the_clock_out(monkeypatch):
     w, c = _resumed(monkeypatch, p)
     _latch(w, c, 0.3)
     assert w._resumeGate() is False
+    c.step(wallclock.RESUME_PREROLL)
+    assert w._resumeGate() is False and not p.paused    # started; no position ever comes back
     c.step(wallclock.RESUME_HOLD + 0.1)
     assert w._resumeGate() is True
 
