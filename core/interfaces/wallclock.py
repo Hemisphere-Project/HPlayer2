@@ -1185,6 +1185,25 @@ class WallclockInterface (BaseInterface):
         longer: the master's wrap seeks us back) instead of wrapping on its own."""
         return self._masterSeamless and (self._followIdx == 0 or self._sameDur)
 
+    def _mirrorLoop(self):
+        """Hold the slave's playlist loop flag to what the master's mode and our cue allow:
+        2 (wrap) only when mpv loops our file itself (oneLoop), else 0 — under a playlist-owned
+        loop our file must END and stay ended (the master's next play broadcast restarts us), and
+        a cue file of another length must end too (shorter: hold; longer: seeked back at the
+        master's wrap), never wrap to index 0 on its own. Every packet, not on a mode change only:
+        the profile writes the flag as well (biennale's play0 sets 2 on a WALL slave at each
+        playlist end), and one stale 2 lets a one-file cue playlist restart our file at 0 before
+        the hold can stop it (hplayer2#t-052, rig run 21/11: ③'s short file played from 0 while
+        the master sat at 33 s). A no-op while the flag already reads right."""
+        one = self.oneLoop()
+        want = 2 if one else 0
+        if self.hplayer.settings.get('loop') == want:
+            return
+        self.hplayer.settings.set('loop', want)
+        if self.player and self.player.isPlaying():
+            self.player._applyOneLoop(one)          # the settings' do-loop re-applied mpv's: ours wins
+            self._loopApplied = one
+
     def _startCue(self, idx, why):
         pattern = index_pattern(idx)
         files = self.hplayer.files.listFiles(pattern)
@@ -1711,16 +1730,12 @@ class WallclockInterface (BaseInterface):
             # its loop to the playlist (several cues, loop gap) never leaves a slave wrapping
             # seamlessly on its own — and the other way round.
             # (elected: off — the profile owns the loop, Anna runs loop=-1 and loops '_loop' tracks itself)
-            l = bool(pkt.get('l', 1))
-            if l != self._masterSeamless and not self.elected:
-                self._masterSeamless = l
-                self.log('master loops ' + ('seamlessly (mpv)' if l else 'through its playlist') + ' -> mirroring')
-                # playlist loop too: under a playlist-owned loop our file must END and stay
-                # ended (the master's next play broadcast restarts us), not wrap to index 0
-                self.hplayer.settings.set('loop', 2 if l else 0)
-                if self.player and self.player.isPlaying():
-                    self.player._applyOneLoop(self.oneLoop())
-                    self._loopApplied = self.oneLoop()
+            if not self.elected:
+                l = bool(pkt.get('l', 1))
+                if l != self._masterSeamless:
+                    self._masterSeamless = l
+                    self.log('master loops ' + ('seamlessly (mpv)' if l else 'through its playlist') + ' -> mirroring')
+                self._mirrorLoop()
 
             # Master not playing
             if not pkt.get('p', False):
@@ -1797,12 +1812,17 @@ class WallclockInterface (BaseInterface):
                     if want != self._loopApplied and self.player.isPlaying():
                         self.player._applyOneLoop(want)      # lengths differ / master not seamless: our file must end
                         self._loopApplied = want
+                    self._mirrorLoop()                       # ...and the playlist must not wrap it either
                     if not self._sameDur and clock >= self._myDur - 0.05:
                         if not self._holdEnd:
                             self._holdEnd = True
                             self.log('cue %d: our file ends at %.1fs, master is at %.1fs -> stopped, waiting for it' % (midx, self._myDur, clock))
-                            if self.player.isPlaying():
-                                self.player.stop()
+                        if self.player.isPlaying():
+                            # held means silent: whatever restarted our file meanwhile (the hold
+                            # can land in the instant between a restart's do-play and its
+                            # « playing »), stop it again — only the master's loop/cue change
+                            # (below / _startCue) brings it back
+                            self.player.stop()
                         self.drifter.release()
                         continue
                     if self._holdEnd:

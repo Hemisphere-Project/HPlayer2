@@ -231,6 +231,10 @@ def play0(ev, *args):
 	# playlist loop flag: seamless (2) for a WALL/solo set with no gap — a WALL slave starts
 	# there too and the wallclock mirrors the master's mode live; 0 = end -> playlist.end ->
 	# play0 (the 2024 sync trigger, and the gap)
+	if slave and WALL and ev == 'playlist.end':
+		return                               # past its start the wallclock holds a WALL slave's flag
+		                                     # (every packet): a 2 here at each end only made them fight,
+		                                     # one cfg write each (hplayer2#t-052)
 	if (WALL or not SYNC) and (gap <= 0 or (slave and WALL)):
 		hplayer.settings.set('loop', 2) # blackless loop (wall: mpv loop=inf below)
 	else:
