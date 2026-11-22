@@ -1,4 +1,4 @@
-zeroconf==0.31.0
+zeroconf==0.149.16
 flask-socketio
 netifaces
 wheel
