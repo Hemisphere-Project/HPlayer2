@@ -511,7 +511,9 @@ dmx = hplayer.addInterface('dmx')
 # the slaves; 1_ alone is the one-shot set), same index = same cue, same duration if the
 # master loops a single file seamlessly. Distinct from the wifi wall (wallclock).
 # /boot/hplayer2.conf [interfaces] nowde = no leaves it out (hplayer2#t-101; default: loaded).
-nowde = hplayer.addInterface('nowde', player) if BOOTCONF.interface('nowde', True) else None
+# [nowde] link / serial: how it reaches its node -- USB-MIDI (default) or the node's tty (hplayer2#t-105).
+nowde = hplayer.addInterface('nowde', player, link=BOOTCONF.nowde_link(), serial=BOOTCONF.nowde_serial()) \
+	if BOOTCONF.interface('nowde', True) else None
 
 if nowde:
 	# Seek-latency compensation for the 7.x image (kernel 6.18 mpv): the interface default

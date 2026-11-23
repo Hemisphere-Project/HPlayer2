@@ -223,3 +223,141 @@ def test_booted_after_open_reads_the_hello_uptime():
     assert link.booted_after_open(250, now=100.4)       # up 250 ms, opened 400 ms ago: our open reset it
     assert not link.booted_after_open(3_600_000, now=100.4)
     assert not link.booted_after_open(900, now=100.4)   # booted before the open (a fresh plug-in)
+
+
+class _LineStates:
+    """A pyserial Serial that records (DTR, RTS) as the node's auto-reset circuit sees it. open()
+    does what the kernel and pyserial 3.5 do: the kernel asserts both, then serialposix.open()
+    applies dtr, THEN rts (each its own ioctl)."""
+    states = []
+
+    def __init__(self):
+        self.port = self.baudrate = self.timeout = None
+        self._dtr, self._rts, self._open = True, True, False
+        self.in_waiting = 0
+
+    def _set(self, dtr, rts):
+        self._dtr, self._rts = dtr, rts
+        if self._open:
+            self.states.append((dtr, rts))
+
+    dtr = property(lambda self: self._dtr, lambda self, v: self._set(v, self._rts))
+    rts = property(lambda self: self._rts, lambda self, v: self._set(self._dtr, v))
+
+    def open(self):
+        want_dtr, want_rts = self._dtr, self._rts
+        self._open = True
+        self.states.append((True, True))        # the kernel raises both on open
+        self._set(want_dtr, self._rts)          # pyserial: dtr first ...
+        self._set(self._dtr, want_rts)          # ... then rts
+
+    def read(self, n):
+        time.sleep(0.01)
+        return b''
+
+    def close(self):
+        self._open = False
+
+
+def test_open_never_passes_through_the_reset_state(monkeypatch):
+    """EN is pulled low (the node resets) only while RTS is asserted and DTR is not."""
+    import core.interfaces.nowde as nowde_mod
+
+    class FakeSerialModule:
+        Serial = _LineStates
+
+    _LineStates.states = []
+    monkeypatch.setattr(nowde_mod, '_serial', FakeSerialModule)
+    link = NowdeSerialLink('/dev/ttyFAKE', lambda m: None, log=lambda *a: None).open()
+    link.close()
+    assert (False, True) not in _LineStates.states
+    assert _LineStates.states[-1] == (False, False)
+
+
+# ---- the interface on a pinned tty: the same legs as the USB-MIDI loopback -----------------------
+
+from core.engine.hplayer import HPlayer2  # noqa: E402
+from core.interfaces.nowde import NowdeInterface, CMD_QUERY_CONFIG, CMD_MEDIA_SYNC  # noqa: E402
+
+
+class _Player:
+    name = 'player'
+
+    def status(self, entry=None):
+        st = {'isPlaying': False, 'isPaused': False, 'media': None, 'time': 0.0}
+        return st[entry] if entry else st
+
+    def isPlaying(self):
+        return False
+
+
+def _node_cmds(node, seconds):
+    """Every SysEx command byte the interface wrote to the node within `seconds`."""
+    p, cmds, end = NowdeStreamParser(), [], time.time() + seconds
+    while time.time() < end:
+        for m in p.messages(node.read(256, timeout=0.05)):
+            if m.type == 'sysex' and len(m.data) >= 2 and m.data[0] == 0x7D:
+                cmds.append(m.data[1])
+    return cmds
+
+
+def _serial_iface(node, **kw):
+    hplayer = HPlayer2(mediaPath=[])
+    hplayer.appRunning = True
+    player = _Player()
+    hplayer._players['player'] = player
+    iface = NowdeInterface(hplayer, player, link='serial', serial=node.path, **kw)
+    iface.PORT_LOOKUP_INTERVAL = 0.2
+    iface.CONNECTION_CHECK_INTERVAL = 0.1
+    return hplayer, iface
+
+
+def test_interface_on_a_pinned_tty_probes_then_runs_the_master_leg(node):
+    hplayer, iface = _serial_iface(node)
+    roles = []
+    hplayer.on('nowde.role')(lambda ev, *a: roles.append(a[0]))
+    iface.start()
+    try:
+        assert wait_for(lambda: iface.isLinked(), 3.0), "the interface did not open the pinned tty"
+        assert iface.out is iface.port and iface._resolved_port_name == node.path
+        first = _node_cmds(node, 0.5)
+        assert CMD_QUERY_RUNNING_STATE in first and CMD_QUERY_CONFIG not in first   # role probe only
+        node.write(hello_frame(role=1))
+        assert wait_for(lambda: iface.role == 'master', 3.0), "HELLO over serial did not set the role"
+        assert roles == ['master']
+        later = _node_cmds(node, 1.0)
+        assert CMD_QUERY_CONFIG in later and CMD_MEDIA_SYNC in later
+    finally:
+        iface.quit()
+
+
+def test_interface_cc100_over_serial_reaches_the_shared_handler(node):
+    hplayer, iface = _serial_iface(node, mode='slave')
+    seen = []
+    iface.handle_media_selection = seen.append
+    iface.start()
+    try:
+        assert wait_for(lambda: iface.isLinked(), 3.0)
+        node.write([0xB0, 100, 4])
+        assert wait_for(lambda: seen == [4], 2.0)
+    finally:
+        iface.quit()
+
+
+def test_interface_unlinks_when_the_tty_goes(node):
+    hplayer, iface = _serial_iface(node)
+    events = []
+    hplayer.on('nowde.unlinked')(lambda ev, *a: events.append(ev))
+    iface.start()
+    try:
+        assert wait_for(lambda: iface.isLinked(), 3.0)
+        node.unplug()
+        assert wait_for(lambda: not iface.isLinked(), 3.0), "a lost tty left the link up"
+        assert wait_for(lambda: events, 1.0)
+    finally:
+        iface.quit()
+
+
+def test_link_kind_is_checked():
+    with pytest.raises(RuntimeError):
+        NowdeInterface(HPlayer2(mediaPath=[]), _Player(), link='usb')
