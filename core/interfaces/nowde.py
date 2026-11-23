@@ -271,6 +271,109 @@ def media_index_of(path):
     return n if 1 <= n <= 127 else 0
 
 
+# ---- Nowde over serial (hplayer2#t-105): the same bytes, without the USB-MIDI packets ----
+
+SERIAL_SYSEX_MAX = 512          # F0 .. F7 inclusive; a longer frame is noise, never a Nowde frame
+_CHANNEL_DATA = {0x80: 2, 0x90: 2, 0xA0: 2, 0xB0: 2, 0xC0: 1, 0xD0: 1, 0xE0: 2}
+_SYSTEM_DATA = {0xF1: 1, 0xF2: 2, 0xF3: 1, 0xF6: 0}     # F4/F5 are undefined: dropped
+
+
+class NowdeStreamParser:
+    """A MIDI byte stream -> complete messages, each a list of bytes.
+
+    Over serial the node writes the bytes it puts inside its USB-MIDI packets: SysEx `F0 7D .. F7`
+    and plain MIDI (CC#100, CC#7, MTC quarter-frames `F1 xx`, Start/Stop). A USB-MIDI packet
+    arrives whole; a tty hands over bytes in any slicing, so this reassembles them:
+      - SysEx up to SERIAL_SYSEX_MAX bytes; a longer one is dropped whole (`oversize`)
+      - channel and system-common messages by their data length
+      - real-time bytes (F8-FF) at any point, even inside a SysEx or a channel message
+      - running status: the node never sends it, it is accepted anyway
+    A byte that belongs to nothing (data before any status: the tail of a frame cut by the
+    open, or a SysEx cut by a new status) is dropped and counted in `dropped`, never raised."""
+
+    def __init__(self, sysex_max=SERIAL_SYSEX_MAX):
+        self.sysex_max = sysex_max
+        self.dropped = 0
+        self.oversize = 0
+        self._sysex = None      # bytes of the SysEx being read, F0 included
+        self._skip = False      # inside an oversize SysEx: drop until its F7
+        self._status = None     # status of the message being read
+        self._need = 0          # its data length
+        self._data = []
+        self._running = None    # running status: the last channel status
+
+    def feed(self, chunk):
+        out = []
+        for b in chunk:
+            if b >= 0xF8:                               # real-time: never interrupts anything
+                out.append([b])
+                continue
+            if self._sysex is not None or self._skip:
+                if b < 0x80:
+                    if self._skip:
+                        self.dropped += 1
+                    elif len(self._sysex) >= self.sysex_max - 1:   # no room left for the F7
+                        self.dropped += len(self._sysex) + 1
+                        self._sysex, self._skip = None, True
+                    else:
+                        self._sysex.append(b)
+                    continue
+                if b == 0xF7:
+                    if self._skip:
+                        self.oversize += 1
+                        self.dropped += 1
+                    else:
+                        out.append(self._sysex + [b])
+                    self._sysex, self._skip = None, False
+                    continue
+                # any other status ends a SysEx that never saw its F7: drop it, then read the status
+                if self._sysex is not None:
+                    self.dropped += len(self._sysex)
+                elif self._skip:
+                    self.oversize += 1
+                self._sysex, self._skip = None, False
+            if b >= 0x80:
+                if self._status is not None:            # a message cut short by a new status
+                    self.dropped += 1 + len(self._data)
+                self._status, self._data = None, []
+                if b == 0xF0:
+                    self._sysex = [b]
+                    self._running = None
+                elif b < 0xF0:
+                    self._status = self._running = b
+                    self._need = _CHANNEL_DATA[b & 0xF0]
+                else:
+                    self._running = None                # system common cancels running status
+                    n = _SYSTEM_DATA.get(b)
+                    if n is None:                       # stray F7, undefined F4/F5
+                        self.dropped += 1
+                    elif n == 0:
+                        out.append([b])
+                    else:
+                        self._status, self._need = b, n
+                continue
+            if self._status is None:
+                if self._running is None:
+                    self.dropped += 1
+                    continue
+                self._status, self._need = self._running, _CHANNEL_DATA[self._running & 0xF0]
+            self._data.append(b)
+            if len(self._data) == self._need:
+                out.append([self._status] + self._data)
+                self._status, self._data = None, []
+        return out
+
+    def messages(self, chunk):
+        """feed() as mido messages: the very objects the USB-MIDI callback receives."""
+        out = []
+        for raw in self.feed(chunk):
+            try:
+                out.append(mido.Message.from_bytes(raw))
+            except (ValueError, TypeError):
+                self.dropped += len(raw)
+        return out
+
+
 class NowdeInterface(BaseInterface):
 
     PORT_LOOKUP_INTERVAL = 5.0
