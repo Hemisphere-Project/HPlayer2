@@ -574,7 +574,8 @@ class NowdeInterface(BaseInterface):
         self.mode = mode
         self.role = None if mode == 'auto' else mode
         # Transport (hplayer2#t-105, /boot/hplayer2.conf [nowde]): 'midi' = the USB-MIDI ports,
-        # 'serial' = the node's tty (`serial` pins it, else _discover_serial), 'auto' = USB-MIDI for now.
+        # 'serial' = the node's tty (`serial` pins it, else _discover_serial), 'auto' = USB-MIDI
+        # first, the serial discovery only while no USB-MIDI node is there (_wait_for_port).
         if link not in ('auto', 'midi', 'serial'):
             raise RuntimeError("NowdeInterface link must be auto, midi or serial")
         self.link = link
@@ -583,6 +584,7 @@ class NowdeInterface(BaseInterface):
         self._notNowde = {}             # tty -> identity: probed silent, or reset on open twice
         self._resetStrikes = {}         # tty -> identity, after one open that looked like a reset
         self._serialFirstHello = None   # the link whose first HELLO is still to be checked
+        self._autoSerial = None         # auto: the tty _wait_for_port found instead of a MIDI node
         self.node = {}                  # last HELLO / CONFIG_STATE
         self.receivers = []             # master: slave table from RUNNING_STATE
         self._seq_client = None         # our ALSA sequencer client, for the subscription check
@@ -984,6 +986,10 @@ class NowdeInterface(BaseInterface):
                     self._serial_session()
                     continue
                 target_port = self._wait_for_port()
+                if not target_port and self._autoSerial:
+                    device, self._autoSerial = self._autoSerial, None
+                    self._serial_session(device)
+                    continue
                 if not target_port:
                     if self.max_retry > 0:
                         self.log(f"no MIDI input matching {self._port_filter_label()} found; stopping")
@@ -1079,11 +1085,11 @@ class NowdeInterface(BaseInterface):
         self._close_ports()
         self.log("listener stopped")
 
-    def _serial_session(self):
+    def _serial_session(self, found=None):
         """One serial link, from open to loss (hplayer2#t-105): the pinned tty, opened without
         resetting the node, its messages into _on_message, `port` = `out` = the link, so `_send`,
         the emitter and `_close_ports` (3 s deadline) run unchanged. Returns when the link is gone."""
-        device = self.serial_device or self._discover_serial()
+        device = found or self.serial_device or self._discover_serial()
         if device and device in self._notNowde:                 # a pinned tty refused (reset on open)
             if self._notNowde[device] == self._ident_of(device):
                 device = None
@@ -1271,6 +1277,10 @@ class NowdeInterface(BaseInterface):
             match = self._resolve_port_from(available)
             if match:
                 return match
+            if self.link == 'auto':                 # no USB-MIDI node: is one on a serial port?
+                self._autoSerial = self._discover_serial()
+                if self._autoSerial:
+                    return None
 
             attempts += 1
             ports_display = ", ".join(available) if available else "none"

@@ -460,3 +460,29 @@ def test_a_node_that_resets_on_open_is_refused_on_the_second_strike(node, monkey
         assert any('reset when its port opened' in line for line in logs)
     finally:
         stop()
+
+
+def test_auto_takes_the_serial_node_when_no_midi_node_is_there(node, monkeypatch):
+    monkeypatch.setattr(nowde_mod.mido, 'get_input_names', lambda: [])
+    _ports(monkeypatch, _Port(node.path))
+    stop = _answer_probes(node, 3_600_000, role=0)
+    hplayer, iface = _serial_iface(node)
+    iface.link, iface.serial_device = 'auto', None
+    iface.start()
+    try:
+        assert wait_for(lambda: iface.isLinked() and iface.role == 'slave', 6.0)
+        assert iface._resolved_port_name == node.path
+    finally:
+        iface.quit()
+        stop()
+
+
+def test_auto_prefers_the_midi_node(node, monkeypatch):
+    monkeypatch.setattr(nowde_mod.mido, 'get_input_names', lambda: ['Nowde - ABC123:Nowde - ABC123 MIDI 1 28:0'])
+    probed = []
+    hplayer, iface = _serial_iface(node)
+    iface.link, iface.serial_device = 'auto', None
+    iface._discover_serial = lambda: probed.append(1)
+    iface.stopped.clear()                           # as start() does, without the threads
+    assert iface._wait_for_port().startswith('Nowde - ABC123')
+    assert probed == []
