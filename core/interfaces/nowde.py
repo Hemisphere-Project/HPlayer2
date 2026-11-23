@@ -25,7 +25,7 @@ except ImportError as err:
     _TIMECODE_IMPORT_ERROR = err
 
 # pyserial, as the serial interfaces load it (optional: only the serial link needs it, hplayer2#t-105)
-from .serialbase import serial as _serial, _SERIAL_IMPORT_ERROR
+from .serialbase import serial as _serial, list_ports as _list_ports, _SERIAL_IMPORT_ERROR, SerialBase
 
 _PatternType = type(re.compile(""))
 
@@ -480,6 +480,15 @@ class NowdeSerialLink:
             r.join(1.0)
 
 
+# USB VID:PID of the bridges a Nowde board carries: CP210x, CH340, CH343, FTDI, Espressif USB-Serial-JTAG
+NOWDE_SERIAL_IDS = {(0x10C4, 0xEA60), (0x1A86, 0x7523), (0x1A86, 0x55D3), (0x0403, 0x6001), (0x303A, 0x1001)}
+
+
+def serial_candidates(ports):
+    """list_ports entries -> those whose VID:PID a Nowde board carries."""
+    return [p for p in ports if (getattr(p, 'vid', None), getattr(p, 'pid', None)) in NOWDE_SERIAL_IDS]
+
+
 class NowdeInterface(BaseInterface):
 
     PORT_LOOKUP_INTERVAL = 5.0
@@ -565,12 +574,15 @@ class NowdeInterface(BaseInterface):
         self.mode = mode
         self.role = None if mode == 'auto' else mode
         # Transport (hplayer2#t-105, /boot/hplayer2.conf [nowde]): 'midi' = the USB-MIDI ports,
-        # 'serial' = the node's tty (`serial` pins it), 'auto' = USB-MIDI for now.
+        # 'serial' = the node's tty (`serial` pins it, else _discover_serial), 'auto' = USB-MIDI for now.
         if link not in ('auto', 'midi', 'serial'):
             raise RuntimeError("NowdeInterface link must be auto, midi or serial")
         self.link = link
         self.serial_device = serial
         self._serialWaits = 0
+        self._notNowde = {}             # tty -> identity: probed silent, or reset on open twice
+        self._resetStrikes = {}         # tty -> identity, after one open that looked like a reset
+        self._serialFirstHello = None   # the link whose first HELLO is still to be checked
         self.node = {}                  # last HELLO / CONFIG_STATE
         self.receivers = []             # master: slave table from RUNNING_STATE
         self._seq_client = None         # our ALSA sequencer client, for the subscription check
@@ -806,6 +818,13 @@ class NowdeInterface(BaseInterface):
             info = parse_hello(d)
             if not info:
                 return
+            if self._serialFirstHello is not None and self._serialFirstHello is self.port:
+                link, self._serialFirstHello = self._serialFirstHello, None
+                if link.booted_after_open(info['uptime']):
+                    self._reset_on_open(link.device)
+                    link.broken = True          # the session loop drops it and relinks
+                    return
+                self._resetStrikes.pop(link.device, None)
             self.node.update(info)
             self._lastHelloAt = self._lastHeardAt
             self._hellosHeard += 1
@@ -1064,12 +1083,17 @@ class NowdeInterface(BaseInterface):
         """One serial link, from open to loss (hplayer2#t-105): the pinned tty, opened without
         resetting the node, its messages into _on_message, `port` = `out` = the link, so `_send`,
         the emitter and `_close_ports` (3 s deadline) run unchanged. Returns when the link is gone."""
-        device = self.serial_device
+        device = self.serial_device or self._discover_serial()
+        if device and device in self._notNowde:                 # a pinned tty refused (reset on open)
+            if self._notNowde[device] == self._ident_of(device):
+                device = None
+            else:
+                del self._notNowde[device]                      # replugged: a fresh look
         if not device or not os.path.exists(device):
             self._serialWaits += 1
             if self._serialWaits <= 3 or self._serialWaits % 60 == 0:     # as _wait_for_port
                 self.log(f"retry {self._serialWaits}: waiting for the node's tty "
-                         + (f"'{device}'" if device else "(none pinned: set [nowde] serial in /boot/hplayer2.conf)"))
+                         + (f"'{device}'" if device else "(no tty answered HELLO)"))
             self.stopped.wait(self.PORT_LOOKUP_INTERVAL)
             return
         link = NowdeSerialLink(device, self._on_message, log=self.log)
@@ -1081,6 +1105,8 @@ class NowdeInterface(BaseInterface):
             self.stopped.wait(self.PORT_LOOKUP_INTERVAL)
             return
         self._serialWaits = 0
+        self._serialFirstHello = link
+        self._claim(device)
         self.port = self.out = link
         self._resolved_port_name = device
         self._seq_client = None
@@ -1101,10 +1127,101 @@ class NowdeInterface(BaseInterface):
                 break
             self.stopped.wait(self.CONNECTION_CHECK_INTERVAL)
         self._close_ports()
+        self._release(device)
         self.emit('unlinked')
         if not self.stopped.is_set():
             self.log(colored("attempting to reconnect...", 'yellow'))
             self.stopped.wait(self.PORT_LOOKUP_INTERVAL)
+
+    SERIAL_PROBE_TIMEOUT = 2.5
+
+    def _claim(self, device):
+        """Hold the tty against every SerialBase of the process (one reader per tty)."""
+        key = os.path.realpath(device)
+        with SerialBase._claimsLock:
+            if SerialBase._claims.get(key, self) is not self:
+                return False
+            SerialBase._claims[key] = self
+            return True
+
+    def _release(self, device):
+        key = os.path.realpath(device)
+        with SerialBase._claimsLock:
+            if SerialBase._claims.get(key) is self:
+                del SerialBase._claims[key]
+
+    def _discover_serial(self):
+        """The first candidate tty (NOWDE_SERIAL_IDS) that answers QUERY_RUNNING_STATE with a
+        HELLO -- never QUERY_CONFIG, which turns a v1.2 node into a sender. A tty another
+        interface holds is skipped; one that stayed silent is not probed again until it is
+        plugged in anew (SerialBase._identity): a player with no node must not write to a
+        foreign device every scan."""
+        if _list_ports is None:
+            return None
+        found = [(d.device, SerialBase._identity(d)) for d in serial_candidates(_list_ports.comports())]
+        self._notNowde = {p: i for p, i in self._notNowde.items() if (p, i) in found}
+        for device, ident in found:
+            if device in self._notNowde or not self._claim(device):
+                continue
+            try:
+                found_one = self._probe_tty(device)
+                if found_one:
+                    return device
+                if found_one is False:
+                    self.log(f"{device}: no HELLO, not a Nowde - not probed again until replugged")
+                    self._notNowde[device] = ident
+            finally:
+                self._release(device)
+        return None
+
+    @staticmethod
+    def _ident_of(device):
+        """SerialBase._identity of the tty now on `device`: changes when it is replugged."""
+        for d in (_list_ports.comports() if _list_ports is not None else []):
+            if d.device == device:
+                return SerialBase._identity(d)
+        try:
+            return (None, os.stat(device).st_ino)
+        except OSError:
+            return None
+
+    def _probe_tty(self, device):
+        hello, uptime = threading.Event(), []
+
+        def on_msg(m):
+            if m.type == 'sysex' and len(m.data) >= 2 and m.data[0] == SYSEX_MANUFACTURER_ID and m.data[1] == CMD_HELLO:
+                info = parse_hello(list(m.data[2:]))
+                if info:
+                    uptime.append(info['uptime'])
+                    hello.set()
+        link = NowdeSerialLink(device, on_msg, log=self.log)
+        try:
+            link.open()
+            link.write([0xF0] + build_simple(CMD_QUERY_RUNNING_STATE) + [0xF7])
+            if not hello.wait(self.SERIAL_PROBE_TIMEOUT):
+                return False
+            if link.booted_after_open(uptime[0]):
+                self._reset_on_open(device)
+                return None             # a Nowde, but not on this open: neither linked nor forgotten
+            return True
+        except Exception as err:
+            self.log(f"probe of {device} failed: {err}")
+            return False
+        finally:
+            link.close()
+
+    def _reset_on_open(self, device):
+        """The node's first HELLO says it booted after our open. Once can be a node plugged in at
+        the very moment of the scan; twice on the same plug-in is a board whose DTR/RTS wiring
+        resets it on open: refuse that tty until it is replugged."""
+        ident = self._ident_of(device)
+        if self._resetStrikes.get(device, object()) == ident:
+            self.log(colored(f"{device}: the node reset when its port opened, twice - refused until replugged", 'red'))
+            self._notNowde[device] = ident
+            self._resetStrikes.pop(device, None)
+        else:
+            self.log(colored(f"{device}: the node booted after our open - relinking to check it", 'yellow'))
+            self._resetStrikes[device] = ident
 
     PORT_CLOSE_TIMEOUT = 3.0
 

@@ -361,3 +361,102 @@ def test_interface_unlinks_when_the_tty_goes(node):
 def test_link_kind_is_checked():
     with pytest.raises(RuntimeError):
         NowdeInterface(HPlayer2(mediaPath=[]), _Player(), link='usb')
+
+
+# ---- discovery: VID:PID candidates, a QUERY_RUNNING_STATE probe, HELLO confirms ------------------
+
+import core.interfaces.nowde as nowde_mod  # noqa: E402
+from core.interfaces.serialbase import SerialBase  # noqa: E402
+
+
+class _Port:
+    def __init__(self, device, vid=0x10C4, pid=0xEA60):
+        self.device, self.vid, self.pid = device, vid, pid
+        self.hwid = 'USB VID:PID=%04X:%04X' % (vid, pid)
+
+
+def _ports(monkeypatch, *ports):
+    class FakeListPorts:
+        @staticmethod
+        def comports():
+            return list(ports)
+    monkeypatch.setattr(nowde_mod, '_list_ports', FakeListPorts)
+
+
+def _answer_probes(node, uptime_ms, delay=0.0, role=1):
+    """The node: every QUERY_RUNNING_STATE it reads is answered with a HELLO."""
+    stop = threading.Event()
+
+    def run():
+        p = NowdeStreamParser()
+        while not stop.is_set():
+            try:
+                chunk = node.read(64, timeout=0.05)
+            except OSError:
+                return
+            for m in p.messages(chunk):
+                if m.type == 'sysex' and list(m.data[:2]) == [0x7D, CMD_QUERY_RUNNING_STATE]:
+                    time.sleep(delay)
+                    node.write(hello_frame(uptime_ms=uptime_ms, role=role))
+    t = threading.Thread(target=run, daemon=True)
+    t.start()
+
+    def halt():                     # joined: a pty's fd numbers are reused by the next test
+        stop.set()
+        t.join(1.0)
+    return halt
+
+
+def test_discovery_links_the_tty_that_answers_hello(node, monkeypatch):
+    _ports(monkeypatch, _Port('/dev/ttyNOPE', 0x2341, 0x0043), _Port(node.path))
+    stop = _answer_probes(node, 3_600_000)
+    hplayer, iface = _serial_iface(node)
+    iface.serial_device = None                      # nothing pinned: discovery decides
+    iface.start()
+    try:
+        assert wait_for(lambda: iface.isLinked() and iface.role == 'master', 6.0)
+        assert iface._resolved_port_name == node.path
+        assert SerialBase._claims.get(os.path.realpath(node.path)) is iface    # held while linked
+    finally:
+        iface.quit()
+        stop()
+    assert os.path.realpath(node.path) not in SerialBase._claims
+
+
+def test_a_silent_tty_is_probed_once_per_plug_in(node, monkeypatch):
+    _ports(monkeypatch, _Port(node.path))
+    hplayer, iface = _serial_iface(node)
+    iface.SERIAL_PROBE_TIMEOUT = 0.3
+    assert iface._discover_serial() is None
+    assert node.read(4) == bytes([0xF0, 0x7D, CMD_QUERY_RUNNING_STATE, 0xF7])   # never QUERY_CONFIG
+    assert iface._discover_serial() is None
+    assert node.read(4, timeout=0.5) == b''                                      # not written again
+    assert node.path in iface._notNowde
+
+
+def test_discovery_skips_a_tty_another_interface_holds(node, monkeypatch):
+    _ports(monkeypatch, _Port(node.path))
+    hplayer, iface = _serial_iface(node)
+    key = os.path.realpath(node.path)
+    SerialBase._claims[key] = object()
+    try:
+        assert iface._discover_serial() is None
+        assert node.read(4, timeout=0.3) == b''
+    finally:
+        del SerialBase._claims[key]
+
+
+def test_a_node_that_resets_on_open_is_refused_on_the_second_strike(node, monkeypatch):
+    _ports(monkeypatch, _Port(node.path))
+    stop = _answer_probes(node, uptime_ms=40, delay=0.2)     # up 40 ms, 200 ms after our open
+    hplayer, iface = _serial_iface(node)
+    logs = []
+    iface.log = lambda *a: logs.append(' '.join(map(str, a)))
+    try:
+        assert iface._discover_serial() is None
+        assert node.path not in iface._notNowde                 # one strike: maybe a fresh plug-in
+        assert iface._discover_serial() is None
+        assert node.path in iface._notNowde                     # twice: refused, with a log line
+        assert any('reset when its port opened' in line for line in logs)
+    finally:
+        stop()
