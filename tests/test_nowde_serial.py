@@ -486,3 +486,18 @@ def test_auto_prefers_the_midi_node(node, monkeypatch):
     iface.stopped.clear()                           # as start() does, without the threads
     assert iface._wait_for_port().startswith('Nowde - ABC123')
     assert probed == []
+
+
+def test_status_names_the_link_kind(node):
+    hplayer, iface = _serial_iface(node)
+    seen = []
+    hplayer.on('nowde.status')(lambda ev, *a: seen.append(a[0]))
+    iface.start()
+    try:
+        assert wait_for(lambda: any(st.get('linked') for st in seen), 3.0)
+        assert [st['link'] for st in seen if st.get('linked')][-1] == 'serial'
+    finally:
+        iface.quit()
+    iface._lastStatus = 0
+    iface._push_status()
+    assert seen[-1]['linked'] is False and seen[-1]['link'] is None

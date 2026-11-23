@@ -767,6 +767,8 @@ $(document).ready(function() {
         socket.on('nowde-status', function(st) {
             var role = $('#nowde_role'), state = $('#nowde_state');
             panelFollow('#nowde_body', st['linked']);
+            // the link kind (hplayer2#t-105): USB-MIDI or the node's serial port
+            $('#nowde_link').text(st['link'] === 'serial' ? 'SERIAL' : st['link'] === 'midi' ? 'MIDI' : '');
             if (!st['linked']) {
                 role.text('no node').removeClass('badge-success badge-info badge-warning').addClass('badge-secondary');
                 state.text('—').removeClass('badge-success badge-danger badge-warning').addClass('badge-secondary');

@@ -899,6 +899,7 @@ class NowdeInterface(BaseInterface):
             slaves_locked = None
         self.emit('status', {
             'linked': self.isLinked(), 'role': self.role, 'port': self._resolved_port_name,
+            'link': ('serial' if isinstance(self.port, NowdeSerialLink) else 'midi') if self.isLinked() else None,
             'node': {k: v for k, v in self.node.items() if k in ('version', 'role', 'board', 'layer', 'lr')},
             'mesh_synced': self.mesh_synced, 'slaves': len(self.receivers),
             'sync_quality': own_quality,
