@@ -23,6 +23,9 @@ try:
 except ImportError as err:
     _TIMECODE_IMPORT_ERROR = err
 
+# pyserial, as the serial interfaces load it (optional: only the serial link needs it, hplayer2#t-105)
+from .serialbase import serial as _serial, _SERIAL_IMPORT_ERROR
+
 _PatternType = type(re.compile(""))
 
 
@@ -372,6 +375,99 @@ class NowdeStreamParser:
             except (ValueError, TypeError):
                 self.dropped += len(raw)
         return out
+
+
+class NowdeSerialLink:
+    """One Nowde on a tty: opened without resetting the node, read as a byte stream into mido
+    messages, written raw. It stands in for both mido ports the interface holds -- `send(message)`
+    like the output, `close()` like either (idempotent: the interface closes `port` and `out`)."""
+
+    BAUD = 921600
+
+    def __init__(self, device, on_message, log=print, baud=BAUD):
+        self.device = device
+        self.on_message = on_message
+        self.log = log
+        self.baud = baud
+        self.parser = NowdeStreamParser()
+        self.serial = None
+        self.opened_at = None           # time.monotonic() of the open: the reset-on-open check
+        self.broken = False             # the reader lost the tty (unplug, I/O error)
+        self._stop = threading.Event()
+        self._wlock = threading.Lock()
+        self._reader = None
+
+    def open(self):
+        if _serial is None:
+            raise RuntimeError("pyserial is required for the Nowde serial link") from _SERIAL_IMPORT_ERROR
+        s = _serial.Serial()
+        s.port = self.device
+        s.baudrate = self.baud
+        s.timeout = 0.05
+        # DevKit-style boards wire DTR/RTS to EN/IO0 (the esptool auto-reset): both must be low
+        # BEFORE open(), or opening the port reboots the node. pyserial applies them inside open()
+        # (and ignores them on a pty). Whether a given board survives it is booted_after_open()'s call.
+        s.dtr = False
+        s.rts = False
+        s.open()
+        self.serial = s
+        self.opened_at = time.monotonic()
+        self._reader = threading.Thread(target=self._read_loop, name='nowde-serial-rx', daemon=True)
+        self._reader.start()
+        return self
+
+    def booted_after_open(self, uptime_ms, now=None):
+        """A HELLO uptime shorter than the time since our open: the node started after it, so the
+        open reset it. A node plugged in boots before its tty even appears, so a plain new plug-in
+        reads False."""
+        if self.opened_at is None:
+            return False
+        now = time.monotonic() if now is None else now
+        return uptime_ms < (now - self.opened_at) * 1000.0
+
+    def _read_loop(self):
+        while not self._stop.is_set():
+            s = self.serial
+            if s is None:
+                return
+            try:
+                chunk = s.read(s.in_waiting or 1)
+            except Exception as err:        # SerialException on unplug, OSError, a close under us
+                if not self._stop.is_set():
+                    self.broken = True
+                    self.log(f"serial link {self.device} lost: {err}")
+                return
+            if not chunk:
+                continue
+            for msg in self.parser.messages(chunk):
+                try:
+                    self.on_message(msg)
+                except Exception as err:
+                    self.log(f"serial message handler error: {err}")
+
+    def send(self, message):
+        """The mido output's call: the message's own bytes, raw on the wire."""
+        self.write(message.bin())
+        return True
+
+    def write(self, data):
+        s = self.serial
+        if s is None or self.broken:
+            raise OSError(f"serial link {self.device} is closed")
+        with self._wlock:
+            s.write(bytes(data))
+
+    def close(self):
+        self._stop.set()
+        s, self.serial = self.serial, None
+        if s is not None:
+            try:
+                s.close()
+            except Exception:
+                pass
+        r = self._reader
+        if r is not None and r is not threading.current_thread():
+            r.join(1.0)
 
 
 class NowdeInterface(BaseInterface):

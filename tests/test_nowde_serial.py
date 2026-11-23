@@ -112,3 +112,114 @@ def test_message_cut_short_by_a_new_status():
     msgs = p.messages([0xB0, 100, 0xB0, 100, 6])
     assert [(m.control, m.value) for m in msgs] == [(100, 6)]
     assert p.dropped == 2
+
+
+# ---- the link on a pty pair: the test holds the node's end -------------------------------------
+
+import select  # noqa: E402
+import threading  # noqa: E402
+import time  # noqa: E402
+
+pytest.importorskip("serial")
+
+from core.interfaces.nowde import NowdeSerialLink, CMD_QUERY_RUNNING_STATE, build_simple  # noqa: E402
+
+
+class PtyNode:
+    """The node's end of a pty pair: what it writes, the link reads; what the link writes, it reads."""
+
+    def __init__(self):
+        self.master, self._slave = os.openpty()
+        self.path = os.ttyname(self._slave)
+
+    def write(self, data):
+        os.write(self.master, bytes(data))
+
+    def read(self, n, timeout=2.0):
+        out = b''
+        end = time.time() + timeout
+        while len(out) < n and time.time() < end:
+            r, _, _ = select.select([self.master], [], [], 0.05)
+            if r:
+                out += os.read(self.master, n - len(out))
+        return out
+
+    def unplug(self):
+        os.close(self.master)
+        os.close(self._slave)
+
+
+@pytest.fixture
+def node():
+    n = PtyNode()
+    yield n
+    for fd in (n.master, n._slave):
+        try:
+            os.close(fd)
+        except OSError:
+            pass
+
+
+def wait_for(pred, timeout=2.0):
+    end = time.time() + timeout
+    while time.time() < end:
+        if pred():
+            return True
+        time.sleep(0.01)
+    return pred()
+
+
+def test_link_reads_hello_cc100_and_mtc(node):
+    got = []
+    link = NowdeSerialLink(node.path, got.append, log=lambda *a: None).open()
+    try:
+        node.write(hello_frame() + [0xB0, 100, 7] + [0xF1, 0x00, 0xF1, 0x12])
+        assert wait_for(lambda: len(got) == 4)
+        assert [m.type for m in got] == ['sysex', 'control_change', 'quarter_frame', 'quarter_frame']
+        assert got[1].value == 7
+    finally:
+        link.close()
+
+
+def test_link_writes_sysex_raw(node):
+    link = NowdeSerialLink(node.path, lambda m: None, log=lambda *a: None).open()
+    try:
+        assert link.send(mido.Message('sysex', data=build_simple(CMD_QUERY_RUNNING_STATE)))
+        assert node.read(4) == bytes([0xF0, 0x7D, CMD_QUERY_RUNNING_STATE, 0xF7])
+    finally:
+        link.close()
+
+
+def test_link_300_byte_sysex_through_the_tty(node):
+    got = []
+    link = NowdeSerialLink(node.path, got.append, log=lambda *a: None).open()
+    try:
+        body = [(i * 5) & 0x7F for i in range(298)]
+        node.write([0xF0] + body[:100])
+        time.sleep(0.05)
+        node.write(body[100:] + [0xF7])
+        assert wait_for(lambda: len(got) == 1)
+        assert list(got[0].data) == body
+    finally:
+        link.close()
+
+
+def test_unplug_marks_the_link_broken_and_close_is_idempotent(node):
+    logs = []
+    link = NowdeSerialLink(node.path, lambda m: None, log=lambda *a: logs.append(' '.join(map(str, a)))).open()
+    node.unplug()
+    assert wait_for(lambda: link.broken, 3.0)
+    assert any('lost' in line for line in logs)
+    with pytest.raises(OSError):
+        link.write([0xFA])
+    link.close()
+    link.close()
+
+
+def test_booted_after_open_reads_the_hello_uptime():
+    link = NowdeSerialLink('/dev/null', lambda m: None)
+    assert not link.booted_after_open(10)          # never opened: no verdict
+    link.opened_at = 100.0
+    assert link.booted_after_open(250, now=100.4)       # up 250 ms, opened 400 ms ago: our open reset it
+    assert not link.booted_after_open(3_600_000, now=100.4)
+    assert not link.booted_after_open(900, now=100.4)   # booted before the open (a fresh plug-in)
