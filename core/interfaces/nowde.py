@@ -31,6 +31,13 @@ _PatternType = type(re.compile(""))
 #
 #  Two legs, one interface. The node tells us which one to run (HELLO carries
 #  its role since Nowde v2), or the profile forces it with mode=.
+#  In mode='auto' EVERY HELLO re-derives the leg, the first one and the unsolicited
+#  one a Nowde 3 node pushes on each role change: master -> master leg; slave or
+#  standby (a v3 sender that yielded to a better rank) -> slave leg. The switch
+#  happens on the live link, no relink (hplayer2#t-106).
+#  A player in a Millumin show runs mode='slave': a Pi must never drive a Millumin
+#  mesh, whatever its node says. A host meant to keep driving through a v3 standby
+#  (hot standby) runs mode='master' — 'auto' follows its node instead.
 #
 #  SLAVE leg (Nowde v1.2+, AnnaTV since 2025): the node drives THIS player.
 #    CC#100 = media index (0 = stop, N = play the file prefixed N_ / 0N_ / 00N_)
@@ -67,8 +74,9 @@ CMD_RUNNING_STATE = 0x22
 CMD_ERROR_REPORT = 0x30
 CMD_LOG = 0x31
 
-ROLE_NAMES = {0: 'slave', 1: 'master', 2: 'legacy'}
-BOARD_NAMES = {0: 'unknown', 1: 'devkit', 2: 'atoms3', 3: 'atoms3-lite'}
+ROLE_NAMES = {0: 'slave', 1: 'master', 2: 'legacy', 3: 'standby'}    # 3: Nowde 3
+BOARD_NAMES = {0: 'unknown', 1: 'devkit', 2: 'atoms3', 3: 'atoms3-lite', 4: 'atom', 5: 'esp32'}
+LR_NAMES = {0: 'off', 1: '250k', 2: '500k'}     # HELLO [19] / SET_LR: 2.0.3 sent 0/1, 2.4 adds 2
 ERROR_NAMES = {0x01: 'CONFIG_INVALID', 0x02: 'SYSEX_PARSE_ERROR', 0x03: 'ESPNOW_SEND_FAILED',
                0x04: 'MESH_CLOCK_LOST_SYNC', 0x05: 'RECEIVER_TIMEOUT', 0xFF: 'UNKNOWN'}
 RESET_REASONS = {1: 'POWERON', 3: 'SW', 4: 'PANIC', 5: 'INT_WDT', 6: 'TASK_WDT', 7: 'WDT',
@@ -152,7 +160,15 @@ def parse_hello(d):
     if len(d) >= 19:                       # 2.0.1: this node's own lock quality
         info['sync_quality'] = d[18]       # 0 none, 1 coarse (following, mesh off), 2 locked
     if len(d) >= 20:                       # 2.0.3: long-range PHY switch as the node runs it
-        info['lr'] = bool(d[19])
+        info['lr'] = d[19]                 # 2.4: the mode, 0 off / 1 LR 250k / 2 LR 500k (LR_NAMES)
+    # [20..35] linkLost, stream age, watchdog restarts, syncGaps, buildId: not read here
+    # (nowde#t-031 owns the stream-age readers). 2.4 / Nowde 3 append, read by length:
+    if len(d) >= 37:
+        info['gen'] = d[36]                # protocol generation: 2 = the 2.x line, 3 = Nowde 3
+    if len(d) >= 43:                       # the MAC's last 3 bytes as 6 hex chars = `Nowde - XXXXXX`
+        info['node_id'] = bytes(b & 0x7F for b in d[37:43]).decode('ascii', errors='replace')
+    if len(d) >= 44:                       # -dBm of the last frame straight from the locked master
+        info['rssi'] = -d[43] if d[43] else None     # 0 = unknown (no master for 5 s, or a master)
     return info
 
 
@@ -242,6 +258,8 @@ def parse_running_state(d):
             'last_seen': (r[30] << 24) | (r[31] << 16) | (r[32] << 8) | r[33],
             'index': r[35],
             'sync_quality': r[36] if len(r) >= 37 else 0xFF,   # 2.0.1: 0 none, 1 coarse, 2 locked
+            # 2.4: the slave's own reading of its master, -dBm after v2.2's syncGaps(2); 0 = unknown
+            'rssi': -r[39] if len(r) >= 40 and r[39] else None,
         })
     return meta, receivers
 
@@ -434,18 +452,54 @@ class NowdeInterface(BaseInterface):
         return self.port is not None
 
     def _set_role(self, role, source):
-        if role == 'legacy':
+        # legacy: an old build's receiver. standby (Nowde 3): a sender that yielded to a better
+        # rank -- not the mesh's master, so this player does not lead it.
+        if role in ('legacy', 'standby'):
             role = 'slave'
         if role not in ('master', 'slave'):
             return
         if self.role == role:
             return
-        self.role = role
+        previous, self.role = self.role, role
         self._wasSlave = (role == 'slave')
-        self.log(colored(f"role: {role.upper()} ({source})", 'cyan'))
+        self.log(colored(f"role: {role.upper()} ({source})"
+                         + (f", was {previous.upper()} on this link" if previous else ''), 'cyan'))
+        if previous is not None:
+            self._leave_leg(previous)
         self.emit('role', role)
         if role == 'master' and self.out:
             self._handshake()
+
+    def _leave_leg(self, previous):
+        """The role changed on a live link (a Nowde 3 node pushes a HELLO on every role change;
+        a late HELLO overrules the 'assuming v1 node' guess): drop what the old leg held, as a
+        relink would have, without the relink. Nothing of one leg may steer the other."""
+        # master leg: its slave table, its MEDIA_SYNC memory, its volume carry
+        self.receivers = []
+        self._chunkbuf = []
+        self.mesh_synced = False
+        self._assigned.clear()
+        self._lastSent = None
+        self._stopSince = None
+        self._volRaw = self._volCarried = None
+        self._tableEmptySince = None
+        # slave leg: the next CC#100 / CC#7 must act, the guards restart their clocks, and the
+        # servo gives the speed back -- a slave promoted mid-chase would otherwise stream its
+        # position at 1.05x to the whole mesh (handle_timecode never ticks a master again)
+        if self._volPending is not None:
+            self._volLastSeen = 0.0
+            self._volume_persist_tick()      # the settled level is the player's, keep it
+        self._volApplied = None
+        self.lastCC = None
+        self.isStopped = False
+        self._guardStopped = False
+        self._sqZeroSince = None
+        self._silentSince = None
+        if self.drifter:
+            self.drifter.release()
+        self._lastPoll = self._lastProbe = 0.0   # the new leg polls / probes at once
+        self.log(f"left the {previous} leg on a live link: its state is dropped, no relink")
+        self.emit('receivers', self.receivers)
 
     def _cfg(self, key):
         try:
@@ -594,7 +648,11 @@ class NowdeInterface(BaseInterface):
             self._hellosHeard += 1
             self._nodeUptime = info['uptime']
             self.log(f"HELLO v{info['version']} up={info['uptime']}ms boot={info['boot_reason']}"
-                     + (f" role={info['role']} board={info['board']}" if 'role' in info else " (v1 node)"))
+                     + (f" role={info['role']} board={info['board']}" if 'role' in info else " (v1 node)")
+                     + (f" gen={info['gen']}" if 'gen' in info else "")
+                     + (f" id={info['node_id']}" if 'node_id' in info else "")
+                     + (f" lr={LR_NAMES.get(info['lr'], info['lr'])}" if info.get('lr') else "")
+                     + (f" rssi={info['rssi']}dBm" if info.get('rssi') is not None else ""))
             self.emit('hello', info)
             if self.mode == 'auto' and 'role' in info:
                 self._set_role(info['role'], 'HELLO')
@@ -666,6 +724,11 @@ class NowdeInterface(BaseInterface):
             'sync_quality': own_quality,
             'locked': (own_quality == 2) if own_quality is not None else None,
             'slaves_locked': slaves_locked,
+            # 2.4 / Nowde 3 HELLO identity (hplayer2#t-106); None on an older node. The node's own
+            # role stays in node['role'] -- 'standby' while this player runs the slave leg.
+            'ident': {'gen': self.node.get('gen'), 'node_id': self.node.get('node_id'),
+                      'lr': self.node.get('lr'), 'rssi': self.node.get('rssi')},
+            'weakest_rssi': min((r['rssi'] for r in self.receivers if r.get('rssi') is not None), default=None),
             'layer': self._cfg('nowde-layer') if self.isMaster() else self.node.get('layer'),
             'index': index, 'playing': playing,
         })
@@ -1033,15 +1096,17 @@ class NowdeInterface(BaseInterface):
     def _node_soft_reset(self, reason, now=None):
         """Reboot the node from here: SET_LR with the value it already carries (2.0.3+ restarts on
         any SET_LR). The radio re-inits, USB re-enumerates (~3 s), the listener relinks by itself.
-        Refused when the node's LR flag is unknown: guessing it could split the mesh."""
+        Refused when the node's LR flag is unknown: guessing it could split the mesh. The value is
+        sent back as HELLO stated it: a 2.4 node on LR 500k says 2, and a 1 would move it to 250k."""
         lr = self.node.get('lr')
         if lr is None or not self.out:
             self.log(colored(f"node reset wanted ({reason}) but the node's LR flag is unknown: not sent", 'yellow'))
             return False
+        lr = int(lr) & 0x7F
         self._lastNodeReset = now if now is not None else time.time()
-        self.log(colored(f"NODE SOFT RESET: {reason} -> SET_LR {1 if lr else 0} (unchanged value; the node restarts)", 'red'))
+        self.log(colored(f"NODE SOFT RESET: {reason} -> SET_LR {lr} (unchanged value; the node restarts)", 'red'))
         self.emit('node-reset', reason)
-        return bool(self._send(build_simple(CMD_SET_LR, 1 if lr else 0)))
+        return bool(self._send(build_simple(CMD_SET_LR, lr)))
 
     def _schedule_open_on_sane_clock(self):
         """True only when this player's own schedule is enabled, an RTC is present, the clock is

@@ -776,9 +776,11 @@ $(document).ready(function() {
                 return;
             }
             var r = st['role'] || 'probing';
-            role.text(r.toUpperCase()).removeClass('badge-secondary badge-success badge-info badge-warning')
-                .addClass(r === 'master' ? 'badge-info' : r === 'slave' ? 'badge-success' : 'badge-warning');
             var node = st['node'] || {};
+            // Nowde 3: a yielded sender says `standby`; this player then runs the slave leg (#t-106)
+            role.text(r.toUpperCase() + (node['role'] === 'standby' ? ' · STANDBY' : ''))
+                .removeClass('badge-secondary badge-success badge-info badge-warning')
+                .addClass(r === 'master' ? 'badge-info' : r === 'slave' ? 'badge-success' : 'badge-warning');
             if (r === 'master') {
                 // 2.0.1: honest count -- M of N slaves actually LOCKED (delivering in sync),
                 // not merely alive. M<N is the "listed but not delivering" warning.
@@ -804,6 +806,13 @@ $(document).ready(function() {
             $('#nowde_live').css('background', playing ? '#d6f5e6' : '#eee');
             var d = (r === 'master' ? 'sending on layer ' : 'node layer ') + (st['layer'] || '?');
             if (node['version']) d += ' · node v' + node['version'] + (node['board'] ? ' ' + node['board'] : '');
+            // 2.4 / Nowde 3 HELLO trailer (hplayer2#t-106): generation, node id, LR mode, RSSI
+            var id = st['ident'] || {};
+            if (id['gen'] != null) d += ' · gen ' + id['gen'];
+            if (id['node_id']) d += ' · ' + id['node_id'];
+            if (id['lr'] != null) d += ' · LR ' + ({0: 'off', 1: '250k', 2: '500k'}[id['lr']] || id['lr']);
+            if (id['rssi'] != null) d += ' · ' + id['rssi'] + ' dBm';
+            if (r === 'master' && st['weakest_rssi'] != null) d += ' · weakest slave ' + st['weakest_rssi'] + ' dBm';
             $('#nowde_detail').text(d);
         });
     })();
