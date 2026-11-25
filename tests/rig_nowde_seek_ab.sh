@@ -12,9 +12,13 @@
 #   pre | setup b2 master | setup b1 slave <sha> | status <b1|b2> [secs] | clicks <A|B> | collect <A|B>
 #   | swap <sha> | restore b1 | restore b2
 # Run A = setup b1 slave "$OLD"; run B = swap "$FIX". Expected: A chases/hunts, B = 1 exact seek a click.
+# The rig is shared (interactive sessions use the same boxes and nodes): `pre` prints BUSY and exits 3,
+# and `setup` refuses, while another test's /data overlay is up, usbfix is inhibited by someone else, or
+# a key other than ours (rig37) logged in during the last QUIET minutes (20). FORCE=1 overrides `setup`.
 set -euo pipefail
 cd "$(dirname "$0")/.."
 OLD=${OLD:-$(git rev-parse origin/master)}; FIX=${FIX:-$(git rev-parse HEAD)}
+RIG37=${RIG37:-$(ssh-keygen -lf ~/.ssh/rig37 2>/dev/null | awk '{print $2}')}; QUIET=${QUIET:-20}
 SSHO=(-o BatchMode=yes -o ConnectTimeout=10 -o ServerAliveInterval=15 -o UpdateHostKeys=no)
 host() { case $1 in b1) echo bench-01;; b2) echo bench-02;; *) echo "$1";; esac; }
 r() { local h; h=$(host "$1"); shift; sleep 1; ssh "${SSHO[@]}" "$h" bash -s -- "$@"; }   # script on stdin
@@ -29,6 +33,17 @@ grep -qw overlay /proc/filesystems && echo "overlay: yes" || echo "overlay: NOT 
 echo "usbfix: timer $(systemctl is-active usbfix.timer 2>/dev/null) inhibit $([ -f /run/usbfix.inhibit ] && echo SET || echo none)"
 echo "ffmpeg: $(command -v ffmpeg || echo none)"
 ls -d /tmp/t062 2>/dev/null && echo "WARNING: /tmp/t062 already exists"; true
+EOF
+)
+
+# $1 = our key's fingerprint, $2 = quiet minutes → one `BUSY: …` line per sign of another session
+BUSY=$(cat <<'EOF'
+src=$(findmnt -no SOURCE,FSTYPE /data | awk '$2=="overlay"{print $1}' | tail -1)
+[ -n "$src" ] && [ "$src" != t062 ] && echo "BUSY: $(hostname) /data overlaid by '$src' (another test)"
+[ -f /run/usbfix.inhibit ] && [ ! -f /tmp/t062/inhibit.ours ] && echo "BUSY: $(hostname) usbfix inhibited by another session"
+n=$(journalctl -t sshd --since "-${2}min" --no-pager -o cat | grep 'Accepted publickey' | grep -vcF "${1:-none}")
+[ "$n" -gt 0 ] && echo "BUSY: $(hostname) $n ssh login(s) by another key in the last ${2} min"
+true
 EOF
 )
 
@@ -114,11 +129,11 @@ S=$(journalctl -t t062 --no-pager -o short-unix | grep "click 1 run $1 START" | 
  | sed 's/\x1b\[[0-9;]*m//g' | sort -s -k1,3 \
  | grep -E 't062|clock stepped|JUMP|timedelay|CC#100|stopped|Video ended|Traceback' | cut -c1-210 > /tmp/t062/run-$1.log
 grep -vE 'timedelay' /tmp/t062/run-$1.log
-echo "== per click, run $1: exact seeks · keyframe JUMPs · clock-step · chase ticks (|d|>0.1) · last |timedelay|"
+echo "== per click, run $1: exact seeks · keyframe JUMPs · clock-step · chase ticks (servo |d|>0.1) · last servo |timedelay|"
 awk '/t062.*click [0-9]+ run .* START/{for(i=1;i<=NF;i++) if($i=="click") k=$(i+1)}
      /t062.*run .* END/{k=""}
      k!="" && /JUMP exact/{e[k]++} k!="" && /JUMP \(fix/{j[k]++} k!="" && /clock stepped/{c[k]++}
-     k!="" && match($0,/timedelay=-?[0-9.]+/){d=substr($0,RSTART+10,RLENGTH-10)+0; if(d<0)d=-d; if(d>0.1)t[k]++; last[k]=d}
+     k!="" && !/JUMP/ && match($0,/timedelay=-?[0-9.]+/){d=substr($0,RSTART+10,RLENGTH-10)+0; if(d<0)d=-d; if(d>0.1)t[k]++; last[k]=d}
      k!=""{seen[k]=1}
      END{for(x in seen) printf "click %s: exact %d · keyframe %d · step %d · chase-ticks %d · last %.2fs\n", x, e[x], j[x], c[x], t[x], last[x]}' \
   /tmp/t062/run-$1.log | sort
@@ -154,8 +169,11 @@ EOF
 }
 
 case ${1:-} in
-  pre)     for h in b1 b2; do r "$h" <<<"$PRE"; done ;;
-  setup)   push_clip "$2"; [ "$3" = master ] && sha=$OLD || sha=${4:?sha}; push_code "$2" "$sha"
+  pre)     out=$(for h in b1 b2; do r "$h" <<<"$PRE"; r "$h" "$RIG37" "$QUIET" <<<"$BUSY"; done); echo "$out"
+           ! grep -q '^BUSY' <<<"$out" || { echo "rig busy: no run now"; exit 3; } ;;
+  setup)   [ -n "$RIG37" ] || { echo "no rig37 fingerprint"; exit 1; }
+           b=$(r "$2" "$RIG37" "$QUIET" <<<"$BUSY"); [ -z "$b" ] || [ "${FORCE:-}" = 1 ] || { echo "$b"; echo "rig busy: setup refused (FORCE=1 overrides)"; exit 3; }
+           push_clip "$2"; [ "$3" = master ] && sha=$OLD || sha=${4:?sha}; push_code "$2" "$sha"
            r "$2" "$3" <<<"$SETUP"; r "$2" "setup" <<<"$START" ;;
   swap)    push_code b1 "${2:?sha}"; r b1 "swap" <<<"$START" ;;
   status)  r "$2" "${3:-60}" "${4:-25}" <<<"$STATUS" ;;
