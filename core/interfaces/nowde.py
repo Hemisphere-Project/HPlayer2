@@ -505,6 +505,10 @@ class NowdeInterface(BaseInterface):
         'nowde-index-default': 0,           # master: index sent for un-numbered media (0 = slaves stop)
         'nowde-jumpfix':       500,         # slave: seek-latency compensation ms (300 RockPro64, ~1000 laptop)
         'nowde-dance':         False,       # slave: Drifter smart-join instead of blind seeks
+        # slave: the master's clock stepped this far (s) = a seek on its timeline -> ONE exact seek
+        # to it, never a chase (Biennale 15/09: a click on the master's timeline set every slave
+        # hunting, a JUMP every ~16 s, until power-cycled — hplayer2#t-062). 0 = off: the old chase.
+        'nowde-reseek':        2.0,
         'nowde-nodelog':       False,       # v2 node: stream its own log into ours (SET_LOG / LOG frames)
         # 2.0.4 master-driven volume. MASTER: 'off' | 'absolute' -- absolute puts this player's
         # `volume` in every MEDIA_SYNC, so the whole mesh runs at the master's level (a lost frame
@@ -629,9 +633,11 @@ class NowdeInterface(BaseInterface):
 
         # Chase-lock servo: the shared Drifter (ported from this very tracker).
         # nowde keeps the legacy asymmetric seek tolerance — ramp speed to catch
-        # up when behind (up to 10s), hard-seek only when >2s ahead.
+        # up when behind (up to 10s), hard-seek only when >2s ahead — for DRIFT. A step of the
+        # master's own clock is not drift: `nowde-reseek` closes it with one exact seek.
         self.drifter = Drifter(self.player, log=self.log, jumpFix=self.jumpFix,
-                               seekLateThreshold=10) if self.player else None
+                               seekLateThreshold=10,
+                               reseekThreshold=self._reseek_threshold()) if self.player else None
         if self.drifter:
             self.drifter.onStalled = self._restart_on_loop
 
@@ -1440,6 +1446,7 @@ class NowdeInterface(BaseInterface):
                     except (TypeError, ValueError):
                         pass
                     self.drifter.danceMode = bool(self._cfg('nowde-dance'))
+                    self.drifter.reseekThreshold = self._reseek_threshold()
                     self.drifter.arm()  # reset the servo grace for the new media
                 self.lastPattern = pattern  # Remember this pattern
             else:
@@ -1456,6 +1463,10 @@ class NowdeInterface(BaseInterface):
             return max(0.0, float(self._cfg(key) or 0))
         except (TypeError, ValueError):
             return 0.0
+
+    def _reseek_threshold(self):
+        """`nowde-reseek` as the Drifter takes it: seconds, or None (0 = off, the old chase)."""
+        return self._cfg_seconds('nowde-reseek') or None
 
     def _node_soft_reset(self, reason, now=None):
         """Reboot the node from here: SET_LR with the value it already carries (2.0.3+ restarts on

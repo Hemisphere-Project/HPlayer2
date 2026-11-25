@@ -28,6 +28,15 @@ POS_STALE = object()
 
 class Drifter():
 
+    # Re-seek (opt-in, reseekThreshold): the CLOCK itself stepped — the master moved its timeline.
+    RESEEK_CONFIRM = 3      # fresh readings after the step before acting: their median outvotes one
+                            # garbled quarter-frame assembly, ~0.25 s at the MTC cadence
+    RESEEK_SEEKS = 2        # exact seeks per step. The second, aimed with the latency the first
+                            # measured, only for a landing the chase handles badly: AHEAD beyond
+                            # the threshold (a 0.2x crawl) or late beyond seekLateThreshold. A late
+                            # landing inside it is chased: it is late BY the seek's cost, so a
+                            # second seek costs about what it saves (mmal, single keyframe: ~4 s).
+
     def __init__(self, player, log=None,
                     deadZoneEnter=0.025,    # s - enter dead zone (+-0.75 frame @30fps)
                     deadZoneExit=0.08,      # s - exit dead zone (hysteresis)
@@ -37,7 +46,8 @@ class Drifter():
                     smoothingWindow=3,      # speed weighted-moving-average window
                     kickStartGrace=20,      # ticks of grace after (re)play
                     danceMode=False,        # jump-ahead + pause + timed resume instead of blind jumps
-                    danceMargin=2.0):       # s - wait budget ahead of the estimated seek landing
+                    danceMargin=2.0,        # s - wait budget ahead of the estimated seek landing
+                    reseekThreshold=None):  # s - clock step that is a seek on the master; None = off
 
         self.player = player
         self.log = log if log else print
@@ -110,6 +120,20 @@ class Drifter():
         # measurement stays a single fresh sample.
         self._diffWindow = deque(maxlen=5)
 
+        # ── Re-seek on a clock step (opt-in; the Nowde slave turns it on) ──
+        # A source that runs at 1x moves, between two ticks, by the time elapsed between them. A
+        # step beyond reseekThreshold is the master moving its timeline, not drift — and the
+        # servo must not treat it as drift: a late gap up to seekLateThreshold (10 s on Nowde)
+        # was CHASED at up to 2x, a larger one met a keyframe seek landing a GOP away, then chased
+        # again (Biennale 15/09: one click on the master's timeline, every slave hunting until
+        # power-cycled — hplayer2#t-062). On a step: the pre-step diffs are dropped (another
+        # epoch), and once RESEEK_CONFIRM fresh readings agree the gap is beyond the threshold,
+        # ONE exact seek to the clock + learned latency closes it. Off (None) = the servo as it
+        # was: the wallclock keeps its own seek handling.
+        self.reseekThreshold = reseekThreshold
+        self._clockAnchor = None    # (clock, monotonic) of the previous tick
+        self._reseek = None         # exact seeks left for the current step; None = no step in flight
+
     # Reset servo state + grace period: call on every new play
     def arm(self):
         self.kickStart = self.kickStartGrace
@@ -119,6 +143,8 @@ class Drifter():
         self.lastPos = -1
         self.lastSpeed = 1.0
         self._diffWindow.clear()
+        self._clockAnchor = None    # a new play starts a new clock: nothing to step from
+        self._reseek = None
         # Keep a FRESH in-flight jump measurement: mpv emits 'playing'
         # (core-idle flip) right after the play that triggered the jump,
         # and profiles re-arm on that event — wiping the measurement here
@@ -137,6 +163,8 @@ class Drifter():
         self.lastPos = -1
         self.kickStart = 0
         self._diffWindow.clear()
+        self._clockAnchor = None
+        self._reseek = None
         # A pending jump measurement survives freewheel: brief clock
         # dropouts (RF churn) must not lose the seek-latency learning.
 
@@ -160,12 +188,39 @@ class Drifter():
         self.didJump = True
         return {'diff': diff, 'speed': self.lastSpeed, 'jumped': True, 'locked': False}
 
+    # ── Clock step (reseekThreshold) ────────────────────────────────────
+    def _watchClock(self, clock, duration):
+        now = time.monotonic()
+        anchor, self._clockAnchor = self._clockAnchor, (clock, now)
+        if anchor is None:
+            return
+        step = clock - (anchor[0] + (now - anchor[1]))
+        if duration and duration > 3:           # the master's loop point is not a step
+            step = ((step + duration / 2) % duration) - duration / 2
+        if abs(step) <= self.reseekThreshold:
+            return
+        self._diffWindow.clear()                # pre-step diffs measure another epoch
+        self._pendingJump = None                # a landing cannot be measured against a moved clock
+        self._reseek = self.RESEEK_SEEKS
+        if self.lastSpeed != 1.0:               # no chase while the step is confirmed
+            self.player.speed(1.0)
+            self.lastSpeed = 1.0
+        self.speedHistory = []
+        self.inDeadZone = False
+        if self.doLog:
+            self.log("clock stepped %+.2fs: the master moved its timeline -> exact seek, no chase" % step)
+
     # One servo step against the estimated master clock (s, media timeline).
     # duration (s): enables wrap arithmetic on looping media (0 = unknown).
     # Returns telemetry dict, or None if the tick was dropped.
     def tick(self, clock, duration=0):
 
         clock = clock + self.offset
+
+        if self.reseekThreshold:
+            self._watchClock(clock, duration)
+        elif self._reseek is not None:          # turned off mid-step
+            self._reseek = None
 
         pos = self.player.position()
 
@@ -232,6 +287,20 @@ class Drifter():
             if self.doLog:
                 self.log("JUMP landed %+.2fs off, seekLat now %.2fs" % (landing, self._seekLatEst))
             self._pendingJump = None
+
+        # A clock step in flight: hands off the speed until RESEEK_CONFIRM fresh readings (or a
+        # seek's landing) are in. Then: the gap beyond the threshold -> an exact seek; after one,
+        # only a landing the chase handles badly earns the second (RESEEK_SEEKS). On the clock
+        # already (or the step was one bad reading) -> the servo takes over, nothing seeked.
+        if self._reseek is not None:
+            if self._pendingJump is not None or len(self._diffWindow) < self.RESEEK_CONFIRM:
+                return None
+            first = self._reseek == self.RESEEK_SEEKS
+            if self._reseek > 0 and (abs(diff) > self.reseekThreshold if first else
+                                     (diff < -self.reseekThreshold or diff > self.seekLateThreshold)):
+                self._reseek -= 1
+                return self._smartJump(clock, diff, duration)
+            self._reseek = None
 
         # Hard seek: desync beyond servo reach. Asymmetric: a late player
         # (diff > 0) is tolerated up to seekLateThreshold; ahead uses seekThreshold.
