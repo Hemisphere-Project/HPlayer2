@@ -78,7 +78,7 @@ systemctl stop t062 2>/dev/null || true; systemctl reset-failed t062 2>/dev/null
 sleep 7   # >= 5 s of host silence, or a 2.4 node never HELLOs this start (hplayer2#t-108)
 P=$T/hp2/profiles/t062.py; cp $T/hp2/profiles/biennale.py $P
 sed -i -e "s#^mediaPath = .*#mediaPath = ['$T/media']#" -e "s#'/data/hplayer2-biennale.cfg'#'$T/hp2.cfg'#" \
-       -e 's#return (s is None) or s.isOpen()#return True  # t062: schedule forced open#' $P
+       -e 's|return (s is None) or s.isOpen()|return True  # t062: schedule forced open|' $P
 grep -q "^mediaPath = \['$T/media'\]" $P && grep -q "$T/hp2.cfg" $P && grep -q 't062: schedule' $P \
   || { echo "profile seds did not all apply"; exit 1; }
 systemd-run --unit=t062 --property=WorkingDirectory=$T/hp2 --setenv=LD_LIBRARY_PATH=/usr/local/lib \
