@@ -176,8 +176,10 @@ push_code() {   # $1 = host key, $2 = sha → /tmp/t062/hp2 on the box (old tree
 push_clip() {   # the 10-min clip, made on the box (no media in git, no ffmpeg on dev37)
   r "$1" <<'EOF'
 mkdir -p /tmp/t062/media; C=/tmp/t062/media/03_t062.mp4
-[ -s $C ] || ffmpeg -hide_banner -loglevel error -y -f lavfi -i testsrc2=size=480x270:rate=25 -t 600 \
-  -c:v libx264 -preset ultrafast -crf 38 -pix_fmt yuv420p -g 50 -movflags +faststart $C
+# the boxes' ffmpeg is the /usr/local build: without its own libs it segfaults (system libavcodec), and
+# it has no x264 -> mpeg4 part 2, 2 s GOP (~25 MB: bench-01's /tmp holds ~85 MB)
+[ -s $C ] || LD_LIBRARY_PATH=/usr/local/lib ffmpeg -hide_banner -loglevel error -y -f lavfi \
+  -i testsrc2=size=480x270:rate=25 -t 600 -c:v mpeg4 -q:v 20 -g 50 -pix_fmt yuv420p -movflags +faststart $C 2>/dev/null
 ls -l $C
 EOF
 }
