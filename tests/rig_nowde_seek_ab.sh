@@ -161,15 +161,16 @@ S=$(journalctl -t t062 --no-pager -o short-unix | grep "click 1 run $1 START" | 
 [ "$S" != "@" ] || { echo "no run $1 markers"; exit 1; }
 { journalctl -t t062 --since "$S" --no-pager -o short-precise; journalctl -u t062 --since "$S" --no-pager -o short-precise; } \
  | sed 's/\x1b\[[0-9;]*m//g' | sort -s -k1,3 \
- | grep -E 't062|clock stepped|JUMP|timedelay|CC#100|stopped|Video ended|Traceback' | cut -c1-210 > /tmp/t062/run-$1.log
-grep -vE 'timedelay' /tmp/t062/run-$1.log
-echo "== per click, run $1: exact seeks · keyframe JUMPs · clock-step · chase ticks (servo |d|>0.1) · last servo |timedelay|"
+ | grep -E 't062|clock (stepped|settled)|JUMP|timedelay|CC#100|stopped|Video ended|Traceback' | cut -c1-240 > /tmp/t062/run-$1.log
+awk '!/timedelay/ || /JUMP/' /tmp/t062/run-$1.log     # a seek's line starts with its timedelay: keep it in view
+echo "== per click, run $1: exact seeks · keyframe JUMPs · clock-step (+ steps folded into it) · chase ticks (servo |d|>0.1) · last servo |timedelay|"
 awk '/t062.*click [0-9]+ run .* START/{for(i=1;i<=NF;i++) if($i=="click") k=$(i+1)}
      /t062.*run .* END/{k=""}
      k!="" && /JUMP exact/{e[k]++} k!="" && /JUMP \(fix/{j[k]++} k!="" && /clock stepped/{c[k]++}
+     k!="" && match($0,/settled after [0-9]+/){f[k]+=substr($0,RSTART+14,RLENGTH-14)}
      k!="" && !/JUMP/ && match($0,/timedelay=-?[0-9.]+/){d=substr($0,RSTART+10,RLENGTH-10)+0; if(d<0)d=-d; if(d>0.1)t[k]++; last[k]=d}
      k!=""{seen[k]=1}
-     END{for(x in seen) printf "click %s: exact %d · keyframe %d · step %d · chase-ticks %d · last %.2fs\n", x, e[x], j[x], c[x], t[x], last[x]}' \
+     END{for(x in seen) printf "click %s: exact %d · keyframe %d · step %d (+%d folded) · chase-ticks %d · last %.2fs\n", x, e[x], j[x], c[x], f[x], t[x], last[x]}' \
   /tmp/t062/run-$1.log | sort
 EOF
 )
