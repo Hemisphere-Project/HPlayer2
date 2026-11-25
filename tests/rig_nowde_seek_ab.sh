@@ -10,11 +10,14 @@
 # default (0x7F) at restore, usbfix is re-armed if we inhibited it, the units found active restart.
 # One ssh at a time (the hmini25 jump drops bursts). Steps, read between each:
 #   pre | setup b2 master | setup b1 slave <sha> | status <b1|b2> [secs] | clicks <A|B> | collect <A|B>
-#   | swap <sha> | restore b1 | restore b2
+#   | swap <sha> | restore b1 | restore b2   (+ restart <b1|b2>: the player again, after the silence below)
 # Run A = setup b1 slave "$OLD"; run B = swap "$FIX". Expected: A chases/hunts, B = 1 exact seek a click.
 # The rig is shared (interactive sessions use the same boxes and nodes): `pre` prints BUSY and exits 3,
 # and `setup` refuses, while another test's /data overlay is up, usbfix is inhibited by someone else, or
 # a key other than ours (rig37) logged in during the last QUIET minutes (20). FORCE=1 overrides `setup`.
+# Nowde 2.4 nodes answer the player's probe with HELLO only after >= 5 s of host silence (hplayer2#t-108):
+# every start waits 7 s after the stop / the SET_ROLE, and `clicks` refuses (exit 4) unless the master's
+# current instance logged `role: MASTER` — a master fallen to « v1 slave » leaves the mesh with no master.
 set -euo pipefail
 cd "$(dirname "$0")/.."
 OLD=${OLD:-$(git rev-parse origin/master)}; FIX=${FIX:-$(git rev-parse HEAD)}
@@ -72,6 +75,7 @@ START=$(cat <<'EOF'
 set -euo pipefail
 T=/tmp/t062
 systemctl stop t062 2>/dev/null || true; systemctl reset-failed t062 2>/dev/null || true
+sleep 7   # >= 5 s of host silence, or a 2.4 node never HELLOs this start (hplayer2#t-108)
 P=$T/hp2/profiles/t062.py; cp $T/hp2/profiles/biennale.py $P
 sed -i -e "s#^mediaPath = .*#mediaPath = ['$T/media']#" -e "s#'/data/hplayer2-biennale.cfg'#'$T/hp2.cfg'#" \
        -e 's#return (s is None) or s.isOpen()#return True  # t062: schedule forced open#' $P
@@ -120,6 +124,16 @@ EOF
 )
 
 MARK='logger -t t062 "$1"'
+
+# on the master: the last role line since its current start must be MASTER
+ROLECHK=$(cat <<'EOF'
+S=$(journalctl -t t062 --no-pager -o short-unix | grep 'start master on' | tail -1 | awk '{print $1}'); S="@${S%%.*}"
+[ "$S" != "@" ] || { echo "$(hostname): no t062 master start"; exit 1; }
+l=$(journalctl -u t062 --since "$S" --no-pager -o cat | sed 's/\x1b\[[0-9;]*m//g' | grep -o 'role: [A-Z]* ([^)]*)' | tail -1)
+echo "$(hostname) t062: ${l:-no role line yet}"
+case $l in "role: MASTER"*) ;; *) exit 1;; esac
+EOF
+)
 
 # on the slave: $1 = run label → per click: seeks, chase speed lines, last |timedelay|
 COLLECT=$(cat <<'EOF'
@@ -176,8 +190,10 @@ case ${1:-} in
            push_clip "$2"; [ "$3" = master ] && sha=$OLD || sha=${4:?sha}; push_code "$2" "$sha"
            r "$2" "$3" <<<"$SETUP"; r "$2" "setup" <<<"$START" ;;
   swap)    push_code b1 "${2:?sha}"; r b1 "swap" <<<"$START" ;;
+  restart) r "${2:?host}" "restart" <<<"$START" ;;
   status)  r "$2" "${3:-60}" "${4:-25}" <<<"$STATUS" ;;
-  clicks)  k=0; for off in 60 -90 8 40; do k=$((k+1))
+  clicks)  r b2 <<<"$ROLECHK" || { echo "master is not MASTER: run void (restart b2, or restore)"; exit 4; }
+           k=0; for off in 60 -90 8 40; do k=$((k+1))
              r b1 "click $k run $2 START (${off}s)" <<<"$MARK"; r b2 "$off" <<<"$SEEK"; sleep 25; done
            r b1 "run $2 END" <<<"$MARK" ;;
   collect) r b1 "$2" <<<"$COLLECT" ;;
