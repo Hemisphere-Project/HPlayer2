@@ -529,8 +529,9 @@ if nowde:
 				doPlay(default_pattern())    # the role arrived after app-run: same start as boot
 		elif args[0] == 'slave':
 			# from here on the master's CC#100 drives this player: drop what boot started
-			# (the role lands ~2 s after app-run), the master's state follows within 1 s
-			if player.isPlaying() and nowde.lastCC is None:
+			# (the role lands ~2 s after app-run), the master's state follows within 1 s.
+			# A relink is not a boot: what plays is the master's clip, keep it (hplayer2#t-050).
+			if player.isPlaying() and nowde.lastCC is None and not nowde.relinking():
 				player.stop()
 
 	@hplayer.on('player.playing')
