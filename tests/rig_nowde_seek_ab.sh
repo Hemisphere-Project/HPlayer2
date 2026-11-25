@@ -7,7 +7,7 @@
 # NOTHING persists on either card: /data is overlaid by tmpfs; the code runs from a /tmp tree
 # (`git archive`) as a transient unit `t062`; media and cfg live in /tmp/t062 (the profile copy's
 # mediaPath points there); no checkout, no rw. Lasting: none — the node roles go back to the board
-# default (0x7F) at restore, usbfix is re-armed if we inhibited it, the units found active restart.
+# default (0x7F) at restore, the slave node's layer (set to 'hplayer2' at setup) back to the factory '-', usbfix is re-armed if we inhibited it, the units found active restart.
 # One ssh at a time (the hmini25 jump drops bursts). Steps, read between each:
 #   pre | setup b2 master | setup b1 slave <sha> | status <b1|b2> [secs] | clicks <A|B> | collect <A|B>
 #   | swap <sha> | restore b1 | restore b2   (+ restart <b1|b2>: the player again, after the silence below)
@@ -55,6 +55,7 @@ EOF
 SETUP=$(cat <<'EOF'
 set -euo pipefail
 T=/tmp/t062; ROLE=$1; [ "$ROLE" = master ] && RB=01 || RB=00
+LAYERHEX="68 70 6C 61 79 65 72 32"   # 'hplayer2', the master's layer (SET_LOCAL_LAYER 0x09, stored in the node's NVS)
 findmnt -no FSTYPE /data | grep -q overlay && { echo "already set up"; exit 1; }
 [ -s $T/media/03_t062.mp4 ] || { echo "no clip in $T/media"; exit 1; }
 grep -qw overlay /proc/filesystems || modprobe overlay
@@ -66,6 +67,9 @@ mount --bind /data $T/lower && mount -o remount,bind,ro $T/lower
 mount -t overlay t062 -o lowerdir=$T/lower,upperdir=$T/up,workdir=$T/work /data
 P=$(amidi -l | awk '/Nowde/{print $2; exit}'); [ -n "$P" ] || { echo "no Nowde MIDI port"; exit 1; }
 amidi -p "$P" -S "F0 7D 08 $RB F7"; echo "node $P role <- $RB"
+# a never-layered slave (factory layer '-') drops the master's MEDIA_SYNC before it can lock, and so never
+# takes the master's layer over the air (Nowde receiver_mode.cpp / esp_now_handlers.cpp): its host sets it
+if [ "$ROLE" = slave ]; then amidi -p "$P" -S "F0 7D 09 $LAYERHEX F7"; touch $T/layer.ours; echo "node $P layer <- hplayer2"; fi
 if [ ! -f /run/usbfix.inhibit ]; then touch /run/usbfix.inhibit $T/inhibit.ours; echo "usbfix inhibited"; fi
 echo "$ROLE" > $T/role
 EOF
@@ -175,6 +179,7 @@ set -uo pipefail
 T=/tmp/t062
 systemctl stop t062 2>/dev/null; systemctl reset-failed t062 2>/dev/null
 P=$(amidi -l | awk '/Nowde/{print $2; exit}'); [ -n "$P" ] && amidi -p "$P" -S 'F0 7D 08 7F F7' && echo "node $P role <- board default"
+[ -n "$P" ] && [ -f $T/layer.ours ] && amidi -p "$P" -S 'F0 7D 09 2D F7' && echo "node $P layer <- '-' (factory)"
 [ -f $T/inhibit.ours ] && rm -f /run/usbfix.inhibit && echo "usbfix re-armed"
 if findmnt -no FSTYPE /data | grep -q overlay; then umount /data || umount -l /data; umount $T/lower || umount -l $T/lower; fi
 [ -f $T/units.before ] && while read -r u; do [ -n "$u" ] && systemctl start "$u"; done < $T/units.before
