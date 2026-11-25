@@ -323,3 +323,23 @@ def test_kxkm_example_changes_nothing_until_an_iface_is_named():
     assert c.mesh_iface(None, lambda i: True) is None
     assert c.schedule(False, runs=False) is False
     assert c.errors == []
+
+
+def test_nowde_link_and_serial(tmp_path):
+    c = bootconf.load(write(tmp_path, """
+[nowde]
+link   = Serial
+serial = /dev/serial/by-id/usb-Silicon_Labs_CP2102-if00-port0   ; the node
+"""))
+    assert c.errors == []
+    assert c.nowde_link() == 'serial'
+    assert c.nowde_serial() == '/dev/serial/by-id/usb-Silicon_Labs_CP2102-if00-port0'
+
+
+def test_nowde_link_defaults_and_bad_values(tmp_path):
+    assert bootconf.load(str(tmp_path / 'nope.conf')).nowde_link() == 'auto'
+    assert bootconf.load(str(tmp_path / 'nope.conf')).nowde_serial() is None
+    c = bootconf.load(write(tmp_path, "[nowde]\nlink = usb\nserial = ttyUSB0\n"))
+    assert c.nowde_link() == 'auto'
+    assert c.nowde_serial() is None
+    assert len(c.errors) == 2

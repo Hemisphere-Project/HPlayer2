@@ -1,5 +1,6 @@
 from .base import BaseInterface
 from ..engine.drifter import Drifter
+import errno
 import importlib
 import os
 import re
@@ -22,6 +23,9 @@ try:
     Timecode = getattr(_timecode_module, "Timecode", None)
 except ImportError as err:
     _TIMECODE_IMPORT_ERROR = err
+
+# pyserial, as the serial interfaces load it (optional: only the serial link needs it, hplayer2#t-105)
+from .serialbase import serial as _serial, list_ports as _list_ports, _SERIAL_IMPORT_ERROR, SerialBase
 
 _PatternType = type(re.compile(""))
 
@@ -289,6 +293,220 @@ def media_index_of(path):
     return n if 1 <= n <= 127 else 0
 
 
+# ---- Nowde over serial (hplayer2#t-105): the same bytes, without the USB-MIDI packets ----
+
+SERIAL_SYSEX_MAX = 512          # F0 .. F7 inclusive; a longer frame is noise, never a Nowde frame
+_CHANNEL_DATA = {0x80: 2, 0x90: 2, 0xA0: 2, 0xB0: 2, 0xC0: 1, 0xD0: 1, 0xE0: 2}
+_SYSTEM_DATA = {0xF1: 1, 0xF2: 2, 0xF3: 1, 0xF6: 0}     # F4/F5 are undefined: dropped
+
+
+class NowdeStreamParser:
+    """A MIDI byte stream -> complete messages, each a list of bytes.
+
+    Over serial the node writes the bytes it puts inside its USB-MIDI packets: SysEx `F0 7D .. F7`
+    and plain MIDI (CC#100, CC#7, MTC quarter-frames `F1 xx`, Start/Stop). A USB-MIDI packet
+    arrives whole; a tty hands over bytes in any slicing, so this reassembles them:
+      - SysEx up to SERIAL_SYSEX_MAX bytes; a longer one is dropped whole (`oversize`)
+      - channel and system-common messages by their data length
+      - real-time bytes (F8-FF) at any point, even inside a SysEx or a channel message
+      - running status: the node never sends it, it is accepted anyway
+    A byte that belongs to nothing (data before any status: the tail of a frame cut by the
+    open, or a SysEx cut by a new status) is dropped and counted in `dropped`, never raised."""
+
+    def __init__(self, sysex_max=SERIAL_SYSEX_MAX):
+        self.sysex_max = sysex_max
+        self.dropped = 0
+        self.oversize = 0
+        self._sysex = None      # bytes of the SysEx being read, F0 included
+        self._skip = False      # inside an oversize SysEx: drop until its F7
+        self._status = None     # status of the message being read
+        self._need = 0          # its data length
+        self._data = []
+        self._running = None    # running status: the last channel status
+
+    def feed(self, chunk):
+        out = []
+        for b in chunk:
+            if b >= 0xF8:                               # real-time: never interrupts anything
+                out.append([b])
+                continue
+            if self._sysex is not None or self._skip:
+                if b < 0x80:
+                    if self._skip:
+                        self.dropped += 1
+                    elif len(self._sysex) >= self.sysex_max - 1:   # no room left for the F7
+                        self.dropped += len(self._sysex) + 1
+                        self._sysex, self._skip = None, True
+                    else:
+                        self._sysex.append(b)
+                    continue
+                if b == 0xF7:
+                    if self._skip:
+                        self.oversize += 1
+                        self.dropped += 1
+                    else:
+                        out.append(self._sysex + [b])
+                    self._sysex, self._skip = None, False
+                    continue
+                # any other status ends a SysEx that never saw its F7: drop it, then read the status
+                if self._sysex is not None:
+                    self.dropped += len(self._sysex)
+                elif self._skip:
+                    self.oversize += 1
+                self._sysex, self._skip = None, False
+            if b >= 0x80:
+                if self._status is not None:            # a message cut short by a new status
+                    self.dropped += 1 + len(self._data)
+                self._status, self._data = None, []
+                if b == 0xF0:
+                    self._sysex = [b]
+                    self._running = None
+                elif b < 0xF0:
+                    self._status = self._running = b
+                    self._need = _CHANNEL_DATA[b & 0xF0]
+                else:
+                    self._running = None                # system common cancels running status
+                    n = _SYSTEM_DATA.get(b)
+                    if n is None:                       # stray F7, undefined F4/F5
+                        self.dropped += 1
+                    elif n == 0:
+                        out.append([b])
+                    else:
+                        self._status, self._need = b, n
+                continue
+            if self._status is None:
+                if self._running is None:
+                    self.dropped += 1
+                    continue
+                self._status, self._need = self._running, _CHANNEL_DATA[self._running & 0xF0]
+            self._data.append(b)
+            if len(self._data) == self._need:
+                out.append([self._status] + self._data)
+                self._status, self._data = None, []
+        return out
+
+    def messages(self, chunk):
+        """feed() as mido messages: the very objects the USB-MIDI callback receives."""
+        out = []
+        for raw in self.feed(chunk):
+            try:
+                out.append(mido.Message.from_bytes(raw))
+            except (ValueError, TypeError):
+                self.dropped += len(raw)
+        return out
+
+
+class NowdeSerialLink:
+    """One Nowde on a tty: opened without resetting the node, read as a byte stream into mido
+    messages, written raw. It stands in for both mido ports the interface holds -- `send(message)`
+    like the output, `close()` like either (idempotent: the interface closes `port` and `out`)."""
+
+    BAUD = 921600
+
+    def __init__(self, device, on_message, log=print, baud=BAUD):
+        self.device = device
+        self.on_message = on_message
+        self.log = log
+        self.baud = baud
+        self.parser = NowdeStreamParser()
+        self.serial = None
+        self.opened_at = None           # time.monotonic() of the open: the reset-on-open check
+        self.broken = False             # the reader lost the tty (unplug, I/O error)
+        self._stop = threading.Event()
+        self._wlock = threading.Lock()
+        self._reader = None
+
+    def open(self):
+        if _serial is None:
+            raise RuntimeError("pyserial is required for the Nowde serial link") from _SERIAL_IMPORT_ERROR
+        s = _serial.Serial()
+        s.port = self.device
+        s.baudrate = self.baud
+        s.timeout = 0.05
+        # DevKit-style boards wire DTR/RTS to EN/IO0 (the esptool auto-reset): EN is pulled low,
+        # i.e. the node RESETS, only while RTS is asserted and DTR is not. The kernel asserts both
+        # on open (EN high, IO0 high); pyserial then applies dtr, THEN rts, inside open(). So dtr
+        # is kept high through open() and rts dropped there -> (DTR 1, RTS 0): IO0 low, EN high,
+        # harmless outside a reset; then dtr drops -> both low. Never through (DTR 0, RTS 1).
+        # (pyserial ignores both on a pty.) Whether a board survives is booted_after_open()'s call.
+        s.dtr = True
+        s.rts = False
+        s.open()
+        try:
+            s.dtr = False
+        except OSError as err:                  # a pty, a bridge without modem lines: as open() does
+            if err.errno not in (errno.EINVAL, errno.ENOTTY):
+                s.close()
+                raise
+        self.serial = s
+        self.opened_at = time.monotonic()
+        self._reader = threading.Thread(target=self._read_loop, name='nowde-serial-rx', daemon=True)
+        self._reader.start()
+        return self
+
+    def booted_after_open(self, uptime_ms, now=None):
+        """A HELLO uptime shorter than the time since our open: the node started after it, so the
+        open reset it. A node plugged in boots before its tty even appears, so a plain new plug-in
+        reads False."""
+        if self.opened_at is None:
+            return False
+        now = time.monotonic() if now is None else now
+        return uptime_ms < (now - self.opened_at) * 1000.0
+
+    def _read_loop(self):
+        while not self._stop.is_set():
+            s = self.serial
+            if s is None:
+                return
+            try:
+                chunk = s.read(s.in_waiting or 1)
+            except Exception as err:        # SerialException on unplug, OSError, a close under us
+                if not self._stop.is_set():
+                    self.broken = True
+                    self.log(f"serial link {self.device} lost: {err}")
+                return
+            if not chunk:
+                continue
+            for msg in self.parser.messages(chunk):
+                try:
+                    self.on_message(msg)
+                except Exception as err:
+                    self.log(f"serial message handler error: {err}")
+
+    def send(self, message):
+        """The mido output's call: the message's own bytes, raw on the wire."""
+        self.write(message.bin())
+        return True
+
+    def write(self, data):
+        s = self.serial
+        if s is None or self.broken:
+            raise OSError(f"serial link {self.device} is closed")
+        with self._wlock:
+            s.write(bytes(data))
+
+    def close(self):
+        self._stop.set()
+        s, self.serial = self.serial, None
+        if s is not None:
+            try:
+                s.close()
+            except Exception:
+                pass
+        r = self._reader
+        if r is not None and r is not threading.current_thread():
+            r.join(1.0)
+
+
+# USB VID:PID of the bridges a Nowde board carries: CP210x, CH340, CH343, FTDI, Espressif USB-Serial-JTAG
+NOWDE_SERIAL_IDS = {(0x10C4, 0xEA60), (0x1A86, 0x7523), (0x1A86, 0x55D3), (0x0403, 0x6001), (0x303A, 0x1001)}
+
+
+def serial_candidates(ports):
+    """list_ports entries -> those whose VID:PID a Nowde board carries."""
+    return [p for p in ports if (getattr(p, 'vid', None), getattr(p, 'pid', None)) in NOWDE_SERIAL_IDS]
+
+
 class NowdeInterface(BaseInterface):
 
     PORT_LOOKUP_INTERVAL = 5.0
@@ -334,7 +552,8 @@ class NowdeInterface(BaseInterface):
     HELLO_SILENCE = 30.0            # slave: no HELLO for this long = the node is not answering (probe is 2 s)
     HEARTBEAT_INTERVAL = 60.0       # both roles: one summary line a minute (see _heartbeat)
 
-    def __init__(self, hplayer, player=None, port_name=None, max_retry=0, mode='auto'):
+    def __init__(self, hplayer, player=None, port_name=None, max_retry=0, mode='auto',
+                 link='auto', serial=None):
         if _MIDO_IMPORT_ERROR:
             raise RuntimeError("mido is required for NowdeInterface") from _MIDO_IMPORT_ERROR
         if mido is None:
@@ -372,6 +591,18 @@ class NowdeInterface(BaseInterface):
             raise RuntimeError("NowdeInterface mode must be auto, master or slave")
         self.mode = mode
         self.role = None if mode == 'auto' else mode
+        # Transport (hplayer2#t-105, /boot/hplayer2.conf [nowde]): 'midi' = the USB-MIDI ports,
+        # 'serial' = the node's tty (`serial` pins it, else _discover_serial), 'auto' = USB-MIDI
+        # first, the serial discovery only while no USB-MIDI node is there (_wait_for_port).
+        if link not in ('auto', 'midi', 'serial'):
+            raise RuntimeError("NowdeInterface link must be auto, midi or serial")
+        self.link = link
+        self.serial_device = serial
+        self._serialWaits = 0
+        self._notNowde = {}             # tty -> identity: probed silent, or reset on open twice
+        self._resetStrikes = {}         # tty -> identity, after one open that looked like a reset
+        self._serialFirstHello = None   # the link whose first HELLO is still to be checked
+        self._autoSerial = None         # auto: the tty _wait_for_port found instead of a MIDI node
         self.node = {}                  # last HELLO / CONFIG_STATE
         self.receivers = []             # master: slave table from RUNNING_STATE
         self._seq_client = None         # our ALSA sequencer client, for the subscription check
@@ -412,6 +643,7 @@ class NowdeInterface(BaseInterface):
         self.isStopped = False   # Flag to ignore MTC when stopped
         self.lastCC = None       # Track last CC#100 value to avoid redundant commands
         self.lastPattern = None  # Remember last pattern for auto-restart on loop
+        self._relinkCC = None    # index the master had us playing when the link dropped (hplayer2#t-050)
 
         # Chase-lock servo: the shared Drifter (ported from this very tracker).
         # nowde keeps the legacy asymmetric seek tolerance — ramp speed to catch
@@ -643,6 +875,13 @@ class NowdeInterface(BaseInterface):
             info = parse_hello(d)
             if not info:
                 return
+            if self._serialFirstHello is not None and self._serialFirstHello is self.port:
+                link, self._serialFirstHello = self._serialFirstHello, None
+                if link.booted_after_open(info['uptime']):
+                    self._reset_on_open(link.device)
+                    link.broken = True          # the session loop drops it and relinks
+                    return
+                self._resetStrikes.pop(link.device, None)
             self.node.update(info)
             self._lastHelloAt = self._lastHeardAt
             self._hellosHeard += 1
@@ -719,6 +958,7 @@ class NowdeInterface(BaseInterface):
             slaves_locked = None
         self.emit('status', {
             'linked': self.isLinked(), 'role': self.role, 'port': self._resolved_port_name,
+            'link': ('serial' if isinstance(self.port, NowdeSerialLink) else 'midi') if self.isLinked() else None,
             'node': {k: v for k, v in self.node.items() if k in ('version', 'role', 'board', 'layer', 'lr')},
             'mesh_synced': self.mesh_synced, 'slaves': len(self.receivers),
             'sync_quality': own_quality,
@@ -767,45 +1007,54 @@ class NowdeInterface(BaseInterface):
                 self.log(colored(f"emitter error: {err}", 'red'))
             self.stopped.wait(0.02)
 
+    def _on_message(self, message):
+        """Every message from the node, whichever transport carried it: the mido input's
+        callback, or the serial link's reader (hplayer2#t-105). One handler, no second copy."""
+        # SysEx (HELLO, CONFIG_STATE, RUNNING_STATE, LOG...) is parsed at any time: the node
+        # answers our first probe before app-run, and a HELLO dropped there left the role
+        # to the 6 s "assuming v1 node" fallback (a Pi master would take the wrong leg).
+        if message.type == 'sysex':
+            data = message.data
+            if len(data) >= 2 and data[0] == SYSEX_MANUFACTURER_ID:
+                self._handle_sysex(data)
+            elif self.hplayer.appRunning and len(data) == 8 and data[0:4] == (127, 127, 1, 1):
+                tc = mtc_decode(data[4:])
+                self.emit('ff', tc)
+            return
+
+        # Player-driving messages wait for the app to be running
+        if not self.hplayer.appRunning:
+            return
+
+        if message.type == 'quarter_frame':
+            self.quarter_frames[message.frame_type] = message.frame_value
+            if message.frame_type == 7:
+                tc = mtc_decode_quarter_frames(self.quarter_frames)
+                self.emit('qf', tc)
+        elif message.type == 'control_change':
+            if message.control == 100 and not self.isMaster():
+                self.handle_media_selection(message.value)
+            elif message.control == 7 and not self.isMaster() and self._cfg('nowde-volume-follow'):
+                self.handle_linked_volume(message.value)
+        # 'start' / 'stop' real-time messages from v2 nodes: CC#100 already carries the
+        # transition, nothing to do here.
+
     # MTC receiver THREAD
     def listen(self):
         self.log(f"starting listener (mode={self.mode}) with auto-reconnect")
         threading.Thread(target=self._emitter_loop, name='nowde-emitter', daemon=True).start()
 
-        def clbck(message):
-            # SysEx (HELLO, CONFIG_STATE, RUNNING_STATE, LOG...) is parsed at any time: the node
-            # answers our first probe before app-run, and a HELLO dropped there left the role
-            # to the 6 s "assuming v1 node" fallback (a Pi master would take the wrong leg).
-            if message.type == 'sysex':
-                data = message.data
-                if len(data) >= 2 and data[0] == SYSEX_MANUFACTURER_ID:
-                    self._handle_sysex(data)
-                elif self.hplayer.appRunning and len(data) == 8 and data[0:4] == (127, 127, 1, 1):
-                    tc = mtc_decode(data[4:])
-                    self.emit('ff', tc)
-                return
-
-            # Player-driving messages wait for the app to be running
-            if not self.hplayer.appRunning:
-                return
-
-            if message.type == 'quarter_frame':
-                self.quarter_frames[message.frame_type] = message.frame_value
-                if message.frame_type == 7:
-                    tc = mtc_decode_quarter_frames(self.quarter_frames)
-                    self.emit('qf', tc)
-            elif message.type == 'control_change':
-                if message.control == 100 and not self.isMaster():
-                    self.handle_media_selection(message.value)
-                elif message.control == 7 and not self.isMaster() and self._cfg('nowde-volume-follow'):
-                    self.handle_linked_volume(message.value)
-            # 'start' / 'stop' real-time messages from v2 nodes: CC#100 already carries the
-            # transition, nothing to do here.
-
         # Main reconnection loop
         while not self.stopped.is_set():
             try:
+                if self.link == 'serial':
+                    self._serial_session()
+                    continue
                 target_port = self._wait_for_port()
+                if not target_port and self._autoSerial:
+                    device, self._autoSerial = self._autoSerial, None
+                    self._serial_session(device)
+                    continue
                 if not target_port:
                     if self.max_retry > 0:
                         self.log(f"no MIDI input matching {self._port_filter_label()} found; stopping")
@@ -817,7 +1066,7 @@ class NowdeInterface(BaseInterface):
 
                 self.log(f"connecting to '{target_port}'")
                 try:
-                    self.port = mido.open_input(target_port, callback=clbck)
+                    self.port = mido.open_input(target_port, callback=self._on_message)
                     self._resolved_port_name = target_port
                     self.log(f"successfully connected to '{target_port}'")
                 except OSError as err:
@@ -901,6 +1150,150 @@ class NowdeInterface(BaseInterface):
         self._close_ports()
         self.log("listener stopped")
 
+    def _serial_session(self, found=None):
+        """One serial link, from open to loss (hplayer2#t-105): the pinned tty, opened without
+        resetting the node, its messages into _on_message, `port` = `out` = the link, so `_send`,
+        the emitter and `_close_ports` (3 s deadline) run unchanged. Returns when the link is gone."""
+        device = found or self.serial_device or self._discover_serial()
+        if device and device in self._notNowde:                 # a pinned tty refused (reset on open)
+            if self._notNowde[device] == self._ident_of(device):
+                device = None
+            else:
+                del self._notNowde[device]                      # replugged: a fresh look
+        if not device or not os.path.exists(device):
+            self._serialWaits += 1
+            if self._serialWaits <= 3 or self._serialWaits % 60 == 0:     # as _wait_for_port
+                self.log(f"retry {self._serialWaits}: waiting for the node's tty "
+                         + (f"'{device}'" if device else "(no tty answered HELLO)"))
+            self.stopped.wait(self.PORT_LOOKUP_INTERVAL)
+            return
+        link = NowdeSerialLink(device, self._on_message, log=self.log)
+        try:
+            link.open()
+        except Exception as err:
+            self.log(f"failed to open '{device}': {err}")
+            link.close()
+            self.stopped.wait(self.PORT_LOOKUP_INTERVAL)
+            return
+        self._serialWaits = 0
+        self._serialFirstHello = link
+        self._claim(device)
+        self.port = self.out = link
+        self._resolved_port_name = device
+        self._seq_client = None
+        self._connected_at = time.time()
+        self._linkDownSince = None
+        self._lastSent = None
+        self.log(f"successfully connected to '{device}' (serial)")
+        self.emit('linked', device)
+        if self.mode == 'master':
+            self._handshake()
+        else:
+            self._probe()
+        while not self.stopped.is_set() and self.port is link:
+            if link.broken:
+                break                       # the reader logged why
+            if not os.path.exists(device):
+                self.log(colored(f"WARNING: serial port '{device}' disconnected!", 'red'))
+                break
+            self.stopped.wait(self.CONNECTION_CHECK_INTERVAL)
+        self._close_ports()
+        self._release(device)
+        self.emit('unlinked')
+        if not self.stopped.is_set():
+            self.log(colored("attempting to reconnect...", 'yellow'))
+            self.stopped.wait(self.PORT_LOOKUP_INTERVAL)
+
+    SERIAL_PROBE_TIMEOUT = 2.5
+
+    def _claim(self, device):
+        """Hold the tty against every SerialBase of the process (one reader per tty)."""
+        key = os.path.realpath(device)
+        with SerialBase._claimsLock:
+            if SerialBase._claims.get(key, self) is not self:
+                return False
+            SerialBase._claims[key] = self
+            return True
+
+    def _release(self, device):
+        key = os.path.realpath(device)
+        with SerialBase._claimsLock:
+            if SerialBase._claims.get(key) is self:
+                del SerialBase._claims[key]
+
+    def _discover_serial(self):
+        """The first candidate tty (NOWDE_SERIAL_IDS) that answers QUERY_RUNNING_STATE with a
+        HELLO -- never QUERY_CONFIG, which turns a v1.2 node into a sender. A tty another
+        interface holds is skipped; one that stayed silent is not probed again until it is
+        plugged in anew (SerialBase._identity): a player with no node must not write to a
+        foreign device every scan."""
+        if _list_ports is None:
+            return None
+        found = [(d.device, SerialBase._identity(d)) for d in serial_candidates(_list_ports.comports())]
+        self._notNowde = {p: i for p, i in self._notNowde.items() if (p, i) in found}
+        for device, ident in found:
+            if device in self._notNowde or not self._claim(device):
+                continue
+            try:
+                found_one = self._probe_tty(device)
+                if found_one:
+                    return device
+                if found_one is False:
+                    self.log(f"{device}: no HELLO, not a Nowde - not probed again until replugged")
+                    self._notNowde[device] = ident
+            finally:
+                self._release(device)
+        return None
+
+    @staticmethod
+    def _ident_of(device):
+        """SerialBase._identity of the tty now on `device`: changes when it is replugged."""
+        for d in (_list_ports.comports() if _list_ports is not None else []):
+            if d.device == device:
+                return SerialBase._identity(d)
+        try:
+            return (None, os.stat(device).st_ino)
+        except OSError:
+            return None
+
+    def _probe_tty(self, device):
+        hello, uptime = threading.Event(), []
+
+        def on_msg(m):
+            if m.type == 'sysex' and len(m.data) >= 2 and m.data[0] == SYSEX_MANUFACTURER_ID and m.data[1] == CMD_HELLO:
+                info = parse_hello(list(m.data[2:]))
+                if info:
+                    uptime.append(info['uptime'])
+                    hello.set()
+        link = NowdeSerialLink(device, on_msg, log=self.log)
+        try:
+            link.open()
+            link.write([0xF0] + build_simple(CMD_QUERY_RUNNING_STATE) + [0xF7])
+            if not hello.wait(self.SERIAL_PROBE_TIMEOUT):
+                return False
+            if link.booted_after_open(uptime[0]):
+                self._reset_on_open(device)
+                return None             # a Nowde, but not on this open: neither linked nor forgotten
+            return True
+        except Exception as err:
+            self.log(f"probe of {device} failed: {err}")
+            return False
+        finally:
+            link.close()
+
+    def _reset_on_open(self, device):
+        """The node's first HELLO says it booted after our open. Once can be a node plugged in at
+        the very moment of the scan; twice on the same plug-in is a board whose DTR/RTS wiring
+        resets it on open: refuse that tty until it is replugged."""
+        ident = self._ident_of(device)
+        if self._resetStrikes.get(device, object()) == ident:
+            self.log(colored(f"{device}: the node reset when its port opened, twice - refused until replugged", 'red'))
+            self._notNowde[device] = ident
+            self._resetStrikes.pop(device, None)
+        else:
+            self.log(colored(f"{device}: the node booted after our open - relinking to check it", 'yellow'))
+            self._resetStrikes[device] = ident
+
     PORT_CLOSE_TIMEOUT = 3.0
 
     def _close_ports(self):
@@ -932,6 +1325,8 @@ class NowdeInterface(BaseInterface):
         self._resolved_port_name = None
         self.receivers = []
         self.mesh_synced = False
+        if self.lastCC is not None:     # carried over the gap: a relink must not replay it (relinking())
+            self._relinkCC = self.lastCC if self.lastCC > 0 else None
         self.lastCC = None          # the next node's first CC#100 must act, even if it repeats ours
         self.isStopped = False
         self._lastHelloAt = 0.0     # a new link starts its own silence clocks (`_guardStopped` survives:
@@ -949,6 +1344,10 @@ class NowdeInterface(BaseInterface):
             match = self._resolve_port_from(available)
             if match:
                 return match
+            if self.link == 'auto':                 # no USB-MIDI node: is one on a serial port?
+                self._autoSerial = self._discover_serial()
+                if self._autoSerial:
+                    return None
 
             attempts += 1
             ports_display = ", ".join(available) if available else "none"
@@ -1033,15 +1432,43 @@ class NowdeInterface(BaseInterface):
         except (TypeError, ValueError):
             self.hplayer.settings.set('volume', v)
 
+    def relinking(self):
+        """True from a link loss until the new link's first CC#100, when the master had this player
+        on a clip before the loss. A node relink (USB reset: 5-8 a day on a storming garden slave)
+        is not a boot: what plays is still the master's clip, so nothing may stop it (hplayer2#t-050)."""
+        return self.lastCC is None and self._relinkCC is not None
+
+    def _playing_index(self):
+        """Numeric prefix of the clip the player is actually playing, else 0."""
+        if not self.player:
+            return 0
+        try:
+            st = self.player.status()
+        except Exception:
+            return 0
+        if not st.get('isPlaying') or st.get('isPaused'):
+            return 0
+        return media_index_of(st.get('media'))
+
     def handle_media_selection(self, cc_value):
         """Handle CC#100 for media selection"""
         # Only process if CC value changed
         if cc_value == self.lastCC:
             return
 
+        carried, self._relinkCC = self._relinkCC, None
         self.lastCC = cc_value
         self._guardStopped = False      # the master spoke: whatever it says, we are no longer in doubt
         self._silentSince = None
+
+        # First CC#100 after a relink, naming the clip we never stopped: keep playing, the MTC chase
+        # corrects the position (one seek at most). Replaying it restarted it from 0 and cost two
+        # JUMPs per relink (W4, 19/10). Only the master's own clip qualifies -- the playlist must be
+        # the one its CC#100 built, so a boot play still goes through playlist.play below.
+        if (cc_value != 0 and cc_value == carried and self.lastPattern is not None
+                and not self.isStopped and self._playing_index() == cc_value):
+            self.log(f"CC#100={cc_value} after a relink: already playing it -> keep playing, MTC chase corrects")
+            return
 
         if cc_value == 0:
             # Stop playback
@@ -1150,6 +1577,7 @@ class NowdeInterface(BaseInterface):
                 self.isStopped = True
                 self.lastCC = 0
                 self.lastPattern = None
+                self._relinkCC = None
                 self._guardStopped = True
                 self._sqZeroSince = None
                 self._silentSince = now

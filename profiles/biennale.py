@@ -515,7 +515,9 @@ dmx = hplayer.addInterface('dmx')
 # the slaves; 1_ alone is the one-shot set), same index = same cue, same duration if the
 # master loops a single file seamlessly. Distinct from the wifi wall (wallclock).
 # /boot/hplayer2.conf [interfaces] nowde = no leaves it out (hplayer2#t-101; default: loaded).
-nowde = hplayer.addInterface('nowde', player) if BOOTCONF.interface('nowde', True) else None
+# [nowde] link / serial: how it reaches its node -- USB-MIDI (default) or the node's tty (hplayer2#t-105).
+nowde = hplayer.addInterface('nowde', player, link=BOOTCONF.nowde_link(), serial=BOOTCONF.nowde_serial()) \
+	if BOOTCONF.interface('nowde', True) else None
 
 if nowde:
 	# Seek-latency compensation for the 7.x image (kernel 6.18 mpv): the interface default
@@ -533,8 +535,9 @@ if nowde:
 				doPlay(default_pattern())    # the role arrived after app-run: same start as boot
 		elif args[0] == 'slave':
 			# from here on the master's CC#100 drives this player: drop what boot started
-			# (the role lands ~2 s after app-run), the master's state follows within 1 s
-			if player.isPlaying() and nowde.lastCC is None:
+			# (the role lands ~2 s after app-run), the master's state follows within 1 s.
+			# A relink is not a boot: what plays is the master's clip, keep it (hplayer2#t-050).
+			if player.isPlaying() and nowde.lastCC is None and not nowde.relinking():
 				player.stop()
 
 	@hplayer.on('player.playing')

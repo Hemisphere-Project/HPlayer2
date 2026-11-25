@@ -96,7 +96,7 @@ To run it: `./hplayer2 your-project`
 
 ### /boot/hplayer2.conf
 
-One image, roles by file: `biennale`, `26-anna` and `25-kxkm` read their sync interface and
+One image, roles by file: `biennale`, `26-anna`, `25-kxkm` and `27-kxkm` read their sync interface and
 role, WALL_SYNC, playback window and optional interfaces from `/boot/hplayer2.conf`, and
 `./hplayer2 auto` (`hplayer2@auto`) takes the profile itself from it. No file = the profile's
 old behaviour. Keys and rules: `core/engine/bootconf.py`; one example per role in

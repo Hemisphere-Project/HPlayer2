@@ -12,7 +12,7 @@ re-roled by editing /boot, never by shipping code.
     iface = eth0                ; eth0 | wlan0 | wlan1 | wint | auto (wireless) | none
     role  = master              ; master | slave | elected | none
     wall  = yes                 ; WALL_SYNC: continuous frame-lock (wallclock + chase)
-                                ; a mesh profile (25-kxkm) reads iface alone: mesh_iface()
+                                ; a mesh profile (25-/27-kxkm) reads iface alone: mesh_iface()
 
     [schedule]
     enabled     = yes           ; no = no playback window and no daily reboot at all
@@ -26,6 +26,10 @@ re-roled by editing /boot, never by shipping code.
     keypad  = no
     teleco2 = no
     nowde   = no
+
+    [nowde]
+    link   = auto               ; auto | midi | serial: how the player reaches its node
+    serial = /dev/serial/by-id/usb-Silicon_Labs_CP2102_...   ; pin one tty (serial link)
 
 An ABSENT file is not an error: `present` is False and every accessor returns the
 default the caller passes, so a profile that asks keeps its old behaviour on a card
@@ -63,7 +67,9 @@ KNOWN = {
     'sync': ('iface', 'role', 'wall'),
     'schedule': ('enabled', 'require_rtc', 'open', 'close', 'days', 'reboot'),
     'interfaces': INTERFACES,
+    'nowde': ('link', 'serial'),
 }
+NOWDE_LINKS = ('auto', 'midi', 'serial')
 _HM = re.compile(r'([01]?[0-9]|2[0-3]):([0-5][0-9])')
 _DAYS = re.compile(r'[01]{7}')
 
@@ -168,7 +174,7 @@ class BootConf:
         return self.flag('sync', 'wall', default)
 
     def mesh_iface(self, default=None, has_interface=None):
-        """[sync] iface for a profile whose sync is a peer mesh (Zyre) with no role: 25-kxkm.
+        """[sync] iface for a profile whose sync is a peer mesh (Zyre) with no role: 25-kxkm, 27-kxkm.
 
         The iface key alone decides — absent = `default` (a role never implies `auto`
         here), `none` = None (Zyre binds its own choice: the mesh still runs), `auto` and
@@ -204,6 +210,29 @@ class BootConf:
             self._report('schedule.enabled: not run by this profile', 'no schedule')
             return False
         return on
+
+    def nowde_link(self, default='auto'):
+        """[nowde] link: 'auto' | 'midi' | 'serial' (hplayer2#t-105). An unknown value is
+        reported and reads as `default`."""
+        v = self.get('nowde', 'link')
+        if v is None or v == '':
+            return default
+        v = v.lower()
+        if v in NOWDE_LINKS:
+            return v
+        self._report('nowde.link: not one of %s: %r' % ('|'.join(NOWDE_LINKS), v), default)
+        return default
+
+    def nowde_serial(self, default=None):
+        """[nowde] serial: the tty that IS the node (a /dev/serial/by-id/... path), or `default`.
+        A value that is not an absolute path is reported and ignored."""
+        v = self.get('nowde', 'serial')
+        if not v:
+            return default
+        if not v.startswith('/'):
+            self._report('nowde.serial: not a device path: %r' % v, 'ignored')
+            return default
+        return v
 
     def schedule_require_rtc(self, default=True):
         return self.flag('schedule', 'require_rtc', default)
