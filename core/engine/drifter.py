@@ -36,6 +36,12 @@ class Drifter():
                             # the threshold (a 0.2x crawl) or late beyond seekLateThreshold. A late
                             # landing inside it is chased: it is late BY the seek's cost, so a
                             # second seek costs about what it saves (mmal, single keyframe: ~4 s).
+    RESEEK_QUIET = 0.5      # s the clock must hold still after its LAST step before the seek. A
+                            # slave node dropping and re-picking its master (CC#100 0 then N) feeds
+                            # two clocks for a moment -- its restart at 0 and the master's -- and
+                            # every reading read as a step: 13 alternating +-78 s steps in 250 ms on
+                            # the rig (25/11). Each step re-armed the seek, so the player chased
+                            # every flip. One disturbance = one seek, to the clock it settles on.
 
     def __init__(self, player, log=None,
                     deadZoneEnter=0.025,    # s - enter dead zone (+-0.75 frame @30fps)
@@ -133,6 +139,9 @@ class Drifter():
         self.reseekThreshold = reseekThreshold
         self._clockAnchor = None    # (clock, monotonic) of the previous tick
         self._reseek = None         # exact seeks left for the current step; None = no step in flight
+        self._stepAt = None         # monotonic of the last step (RESEEK_QUIET counts from it)
+        self._stepFresh = False     # a step since the last seek: the next decision aims at a new clock
+        self._burst = 0             # further steps folded into the one in flight (logged on settle)
 
     # Reset servo state + grace period: call on every new play
     def arm(self):
@@ -145,6 +154,7 @@ class Drifter():
         self._diffWindow.clear()
         self._clockAnchor = None    # a new play starts a new clock: nothing to step from
         self._reseek = None
+        self._stepAt, self._stepFresh, self._burst = None, False, 0
         # Keep a FRESH in-flight jump measurement: mpv emits 'playing'
         # (core-idle flip) right after the play that triggered the jump,
         # and profiles re-arm on that event — wiping the measurement here
@@ -165,6 +175,7 @@ class Drifter():
         self._diffWindow.clear()
         self._clockAnchor = None
         self._reseek = None
+        self._stepAt, self._stepFresh, self._burst = None, False, 0
         # A pending jump measurement survives freewheel: brief clock
         # dropouts (RF churn) must not lose the seek-latency learning.
 
@@ -201,7 +212,11 @@ class Drifter():
             return
         self._diffWindow.clear()                # pre-step diffs measure another epoch
         self._pendingJump = None                # a landing cannot be measured against a moved clock
-        self._reseek = self.RESEEK_SEEKS
+        self._stepAt, self._stepFresh = now, True
+        if self._reseek is not None:            # a step still unresolved: the same disturbance
+            self._burst += 1                    # (a node restart flip-flops): no new budget
+            return
+        self._reseek, self._burst = self.RESEEK_SEEKS, 0
         if self.lastSpeed != 1.0:               # no chase while the step is confirmed
             self.player.speed(1.0)
             self.lastSpeed = 1.0
@@ -293,9 +308,13 @@ class Drifter():
         # only a landing the chase handles badly earns the second (RESEEK_SEEKS). On the clock
         # already (or the step was one bad reading) -> the servo takes over, nothing seeked.
         if self._reseek is not None:
-            if self._pendingJump is not None or len(self._diffWindow) < self.RESEEK_CONFIRM:
+            if (self._pendingJump is not None or len(self._diffWindow) < self.RESEEK_CONFIRM
+                    or time.monotonic() - self._stepAt < self.RESEEK_QUIET):
                 return None
-            first = self._reseek == self.RESEEK_SEEKS
+            if self._burst and self.doLog:
+                self.log("clock settled after %d more step(s): one seek for the lot" % self._burst)
+            self._burst = 0
+            first, self._stepFresh = self._stepFresh, False
             if self._reseek > 0 and (abs(diff) > self.reseekThreshold if first else
                                      (diff < -self.reseekThreshold or diff > self.seekLateThreshold)):
                 self._reseek -= 1

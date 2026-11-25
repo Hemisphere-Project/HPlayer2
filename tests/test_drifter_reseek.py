@@ -310,3 +310,48 @@ def test_nowde_reseek_zero_is_the_old_chase(slave, monkeypatch):
     slave.clock += 8.0
     mtc(slave, 2)
     assert slave.fp.seeks == [] and max(slave.fp.rates) >= 2.0
+
+
+# ---- a node restart: two clocks for a moment (rig 25/11, run B)
+
+def restart_burst(desk, by, steps=13, run=1, every=0.006):
+    """The master clicks `by`; the slave's node drops and re-picks it: CC#100=0 then N, the player
+    replays from 0 (arm), and for a quarter second the readings alternate, `run` at a time, between
+    the node's restart clock (from 0) and the master's: `steps` steps, each against the run before."""
+    desk.master_seek(by)
+    desk.player.pos = 0.0
+    desk.drifter.arm()
+    desk.drifter.kickStart = 0
+    restart = 0.0
+    for i in range((steps + 1) * run):
+        desk.sim.t += every
+        desk.clock = (desk.clock + every) % desk.player.duration
+        restart += every
+        desk.player.advance(every)
+        desk.drifter.tick(desk.clock if (i // run) % 2 else restart, desk.player.duration)
+
+
+# run 3 + a seek that lands at once (mpv reports its target): the old rule seeked every confirmed
+# flip -- 5 seeks, 83 / 0 / 83 / 1 / 84 s on this desk, the rig's opposite jumps.
+@pytest.mark.parametrize('run,cost', [(1, 0.3), (3, 0.3), (3, 0.01)])
+def test_a_node_restart_flip_flop_is_one_seek_to_the_master(monkeypatch, run, cost):
+    desk = Desk(monkeypatch, start=160.0, exactCost=cost)
+    settle(desk)
+    restart_burst(desk, -82.0, run=run)
+    assert desk.player.seeks == []                     # no seek while the two clocks alternate
+    t = desk.locked_after(10)
+    assert [s[2] for s in desk.player.seeks] == ['exact']
+    assert abs(desk.player.seeks[0][1] - desk.clock) < 15     # aimed at the master, not the restart's 0
+    assert t is not None and t < 3.0
+    assert not [r for r in desk.player.rates if r > 1.0]       # never chased
+    assert any('clock settled after 12 more step(s)' in line for line in desk.lines)
+
+
+def test_a_flip_flop_that_ends_on_the_restart_clock_seeks_nothing(monkeypatch):
+    """A burst may end on a clock the player already sits on: then nothing to seek, the servo keeps it."""
+    desk = Desk(monkeypatch, start=160.0)
+    settle(desk)
+    restart_burst(desk, 0.0, steps=12)
+    desk.clock = desk.player.pos
+    desk.run(3)
+    assert desk.player.seeks == [] and abs(desk.gap()) < 0.1
