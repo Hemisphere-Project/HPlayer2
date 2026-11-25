@@ -507,6 +507,10 @@ dmx = hplayer.addInterface('dmx')
 #    node, which relays it over ESP-NOW. The index is the numeric prefix of the current file.
 #  - slave node (AtomS3 Lite): CC#100 picks the clip by numeric prefix, MTC drives the
 #    Drifter chase-lock. play0 above is skipped on a slave; the master's CC#100 drives it.
+#  - a Nowde 3 node may change role while linked (election): its HELLO switches the leg on the
+#    spot, and `standby` (a sender that yielded) runs the slave leg (hplayer2#t-106).
+# In a Millumin show the interface is added with mode='slave' -- a Pi must never drive a
+# Millumin mesh, whatever its node says (auto would follow a node that turned master).
 # Content contract: zero-padded numeric prefixes on every unit (01_xxx.mp4 on the master and
 # the slaves; 1_ alone is the one-shot set), same index = same cue, same duration if the
 # master loops a single file seamlessly. Distinct from the wifi wall (wallclock).
