@@ -625,6 +625,7 @@ class NowdeInterface(BaseInterface):
         self.isStopped = False   # Flag to ignore MTC when stopped
         self.lastCC = None       # Track last CC#100 value to avoid redundant commands
         self.lastPattern = None  # Remember last pattern for auto-restart on loop
+        self._relinkCC = None    # index the master had us playing when the link dropped (hplayer2#t-050)
 
         # Chase-lock servo: the shared Drifter (ported from this very tracker).
         # nowde keeps the legacy asymmetric seek tolerance — ramp speed to catch
@@ -1261,6 +1262,8 @@ class NowdeInterface(BaseInterface):
         self._resolved_port_name = None
         self.receivers = []
         self.mesh_synced = False
+        if self.lastCC is not None:     # carried over the gap: a relink must not replay it (relinking())
+            self._relinkCC = self.lastCC if self.lastCC > 0 else None
         self.lastCC = None          # the next node's first CC#100 must act, even if it repeats ours
         self.isStopped = False
         self._lastHelloAt = 0.0     # a new link starts its own silence clocks (`_guardStopped` survives:
@@ -1366,15 +1369,43 @@ class NowdeInterface(BaseInterface):
         except (TypeError, ValueError):
             self.hplayer.settings.set('volume', v)
 
+    def relinking(self):
+        """True from a link loss until the new link's first CC#100, when the master had this player
+        on a clip before the loss. A node relink (USB reset: 5-8 a day on a storming garden slave)
+        is not a boot: what plays is still the master's clip, so nothing may stop it (hplayer2#t-050)."""
+        return self.lastCC is None and self._relinkCC is not None
+
+    def _playing_index(self):
+        """Numeric prefix of the clip the player is actually playing, else 0."""
+        if not self.player:
+            return 0
+        try:
+            st = self.player.status()
+        except Exception:
+            return 0
+        if not st.get('isPlaying') or st.get('isPaused'):
+            return 0
+        return media_index_of(st.get('media'))
+
     def handle_media_selection(self, cc_value):
         """Handle CC#100 for media selection"""
         # Only process if CC value changed
         if cc_value == self.lastCC:
             return
 
+        carried, self._relinkCC = self._relinkCC, None
         self.lastCC = cc_value
         self._guardStopped = False      # the master spoke: whatever it says, we are no longer in doubt
         self._silentSince = None
+
+        # First CC#100 after a relink, naming the clip we never stopped: keep playing, the MTC chase
+        # corrects the position (one seek at most). Replaying it restarted it from 0 and cost two
+        # JUMPs per relink (W4, 19/10). Only the master's own clip qualifies -- the playlist must be
+        # the one its CC#100 built, so a boot play still goes through playlist.play below.
+        if (cc_value != 0 and cc_value == carried and self.lastPattern is not None
+                and not self.isStopped and self._playing_index() == cc_value):
+            self.log(f"CC#100={cc_value} after a relink: already playing it -> keep playing, MTC chase corrects")
+            return
 
         if cc_value == 0:
             # Stop playback
@@ -1481,6 +1512,7 @@ class NowdeInterface(BaseInterface):
                 self.isStopped = True
                 self.lastCC = 0
                 self.lastPattern = None
+                self._relinkCC = None
                 self._guardStopped = True
                 self._sqZeroSince = None
                 self._silentSince = now

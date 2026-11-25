@@ -12,7 +12,7 @@ re-roled by editing /boot, never by shipping code.
     iface = eth0                ; eth0 | wlan0 | wlan1 | wint | auto (wireless) | none
     role  = master              ; master | slave | elected | none
     wall  = yes                 ; WALL_SYNC: continuous frame-lock (wallclock + chase)
-                                ; a mesh profile (25-kxkm) reads iface alone: mesh_iface()
+                                ; a mesh profile (25-/27-kxkm) reads iface alone: mesh_iface()
 
     [schedule]
     enabled     = yes           ; no = no playback window and no daily reboot at all
@@ -174,7 +174,7 @@ class BootConf:
         return self.flag('sync', 'wall', default)
 
     def mesh_iface(self, default=None, has_interface=None):
-        """[sync] iface for a profile whose sync is a peer mesh (Zyre) with no role: 25-kxkm.
+        """[sync] iface for a profile whose sync is a peer mesh (Zyre) with no role: 25-kxkm, 27-kxkm.
 
         The iface key alone decides — absent = `default` (a role never implies `auto`
         here), `none` = None (Zyre binds its own choice: the mesh still runs), `auto` and
