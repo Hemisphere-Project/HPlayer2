@@ -15,7 +15,7 @@
 set -euo pipefail
 cd "$(dirname "$0")/.."
 OLD=${OLD:-$(git rev-parse origin/master)}; FIX=${FIX:-$(git rev-parse HEAD)}
-SSHO=(-o BatchMode=yes -o ConnectTimeout=10 -o ServerAliveInterval=15)
+SSHO=(-o BatchMode=yes -o ConnectTimeout=10 -o ServerAliveInterval=15 -o UpdateHostKeys=no)
 host() { case $1 in b1) echo bench-01;; b2) echo bench-02;; *) echo "$1";; esac; }
 r() { local h; h=$(host "$1"); shift; sleep 1; ssh "${SSHO[@]}" "$h" bash -s -- "$@"; }   # script on stdin
 
@@ -28,7 +28,7 @@ echo "/data: $(findmnt -no SOURCE,FSTYPE,OPTIONS /data)  /tmp: $(df -h /tmp | ta
 grep -qw overlay /proc/filesystems && echo "overlay: yes" || echo "overlay: NOT loaded"
 echo "usbfix: timer $(systemctl is-active usbfix.timer 2>/dev/null) inhibit $([ -f /run/usbfix.inhibit ] && echo SET || echo none)"
 echo "ffmpeg: $(command -v ffmpeg || echo none)"
-ls -d /tmp/t062 2>/dev/null && echo "WARNING: /tmp/t062 already exists"
+ls -d /tmp/t062 2>/dev/null && echo "WARNING: /tmp/t062 already exists"; true
 EOF
 )
 
@@ -147,8 +147,8 @@ push_code() {   # $1 = host key, $2 = sha → /tmp/t062/hp2 on the box (old tree
 push_clip() {   # the 10-min clip, made on the box (no media in git, no ffmpeg on dev37)
   r "$1" <<'EOF'
 mkdir -p /tmp/t062/media; C=/tmp/t062/media/03_t062.mp4
-[ -s $C ] || ffmpeg -hide_banner -loglevel error -y -f lavfi -i testsrc2=size=640x360:rate=25 -t 600 \
-  -c:v libx264 -preset veryfast -crf 35 -pix_fmt yuv420p -g 50 -movflags +faststart $C
+[ -s $C ] || ffmpeg -hide_banner -loglevel error -y -f lavfi -i testsrc2=size=480x270:rate=25 -t 600 \
+  -c:v libx264 -preset ultrafast -crf 38 -pix_fmt yuv420p -g 50 -movflags +faststart $C
 ls -l $C
 EOF
 }
