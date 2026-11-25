@@ -2,7 +2,7 @@
 # rig_nowde_seek_ab.sh — hplayer2#t-062 seek A/B on the player rig, run from dev37 (ssh bench-01/02).
 #   bench-02 = Nowde MASTER (node B): plays the 10-min test clip; a "click" is the http2 seekbar's own
 #     event (Engine.IO `seek`, absolute ms) sent from the box itself.
-#   bench-01 = Nowde SLAVE under test (node A): run A on the old code (origin/master), run B on the fix.
+#   bench-01 = Nowde SLAVE under test (node A): run A on the old code (the fix's base on master), run B on the fix.
 #     (bench-01 is the slave because two `player-000` on the LAN kill its http2 thread: no seekbar.)
 # NOTHING persists on either card: /data is overlaid by tmpfs; the code runs from a /tmp tree
 # (`git archive`) as a transient unit `t062`; media and cfg live in /tmp/t062 (the profile copy's
@@ -20,7 +20,7 @@
 # current instance logged `role: MASTER` — a master fallen to « v1 slave » leaves the mesh with no master.
 set -euo pipefail
 cd "$(dirname "$0")/.."
-OLD=${OLD:-$(git rev-parse origin/master)}; FIX=${FIX:-$(git rev-parse HEAD)}
+OLD=${OLD:-$(git merge-base HEAD origin/master)}   # A = the fix's own base: A/B differ by the fix alone; FIX=${FIX:-$(git rev-parse HEAD)}
 RIG37=${RIG37:-$(ssh-keygen -lf ~/.ssh/rig37 2>/dev/null | awk '{print $2}')}; QUIET=${QUIET:-20}
 SSHO=(-o BatchMode=yes -o ConnectTimeout=10 -o ServerAliveInterval=15 -o UpdateHostKeys=no)
 host() { case $1 in b1) echo bench-01;; b2) echo bench-02;; *) echo "$1";; esac; }
@@ -78,8 +78,12 @@ systemctl stop t062 2>/dev/null || true; systemctl reset-failed t062 2>/dev/null
 sleep 7   # >= 5 s of host silence, or a 2.4 node never HELLOs this start (hplayer2#t-108)
 P=$T/hp2/profiles/t062.py; cp $T/hp2/profiles/biennale.py $P
 sed -i -e "s#^mediaPath = .*#mediaPath = ['$T/media']#" -e "s#'/data/hplayer2-biennale.cfg'#'$T/hp2.cfg'#" \
-       -e 's|return (s is None) or s.isOpen()|return True  # t062: schedule forced open|' $P
+       -e 's|return (s is None) or s.isOpen()|return True  # t062: schedule forced open|' \
+       -e 's|^SYNC_IFACE, SYNC_ROLE = bootconf.resolve_sync(.*|SYNC_IFACE, SYNC_ROLE = None, None  # t062: no zyre|' $P
+# the garden's shape: no zyre/wallclock — the bench boxes' /boot sync marker made the master a WALL
+# slave (`doPlay: sync slave.. do nothing`: stopped), and a wallclock drifter would fight the Nowde one
 grep -q "^mediaPath = \['$T/media'\]" $P && grep -q "$T/hp2.cfg" $P && grep -q 't062: schedule' $P \
+  && grep -q 't062: no zyre' $P \
   || { echo "profile seds did not all apply"; exit 1; }
 systemd-run --unit=t062 --property=WorkingDirectory=$T/hp2 --setenv=LD_LIBRARY_PATH=/usr/local/lib \
   --setenv=HOME=/root --setenv=TMPDIR=/run --setenv=PYTHONUNBUFFERED=1 \
