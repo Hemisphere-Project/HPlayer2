@@ -25,7 +25,7 @@ OLD=${OLD:-$(git merge-base HEAD origin/master)}   # A = the fix's own base: A/B
 RIG37=${RIG37:-$(ssh-keygen -lf ~/.ssh/rig37 2>/dev/null | awk '{print $2}')}; QUIET=${QUIET:-20}
 SSHO=(-o BatchMode=yes -o ConnectTimeout=10 -o ServerAliveInterval=15 -o UpdateHostKeys=no)
 host() { case $1 in b1) echo bench-01;; b2) echo bench-02;; *) echo "$1";; esac; }
-r() { local h; h=$(host "$1"); shift; sleep 1; ssh "${SSHO[@]}" "$h" bash -s -- "$@"; }   # script on stdin
+r() { local h; h=$(host "$1"); shift; sleep 1; ssh "${SSHO[@]}" "$h" bash -s -- $(printf '%q ' "$@"); }   # script on stdin; args re-quoted: ssh joins them into one remote command line ('(60s)' broke it)
 
 PRE=$(cat <<'EOF'
 echo "== $(hostname) up $(uptime -p)"
