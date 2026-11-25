@@ -151,11 +151,17 @@ def gap_cancel():
 # PLAY action
 debounceLastTime = 0
 debounceLastMedia = ""
+resumePlayed = False                     # hplayer2#t-079: the resuming master's one local boot play went out
+
+def wall_resuming():
+	# hplayer2#t-079: health restarted this master and the slaves still play on their model of it
+	wc = hplayer.interface('wallclock') if WALL else None
+	return bool(wc and wc.resuming())
 
 def doPlay(media, debounce=0):
 
 	# DEBOUNCE media
-	global debounceLastTime, debounceLastMedia
+	global debounceLastTime, debounceLastMedia, resumePlayed
 	now = int(round(time.time() * 1000))
 	if debounce > 0 and debounceLastMedia == media and (now - debounceLastTime) < debounce:
 		return
@@ -164,7 +170,17 @@ def doPlay(media, debounce=0):
 
 	# PLAY SYNC -> forward to peers
 	if SYNC:
-		if SYNC_MASTER:
+		if SYNC_MASTER and wall_resuming():
+			# a stop/play to the slaves would replay them from 0: play here, once - the wallclock
+			# seeks this player to where their model of it already is. "Once" is a flag, not
+			# player.isPlaying(): the resume's exact seek reads as stopped (mpv core-idle) while
+			# it decodes - about 1 s into a 1080p film on a Pi 3B+ - and the second boot play
+			# (sync_init2, 1 s after app-run) landed inside it and replayed the file from 0 (rig 20/11)
+			if not resumePlayed:
+				resumePlayed = True
+				hplayer.playlist.play(media)
+			print('doPlay: sync master resuming after a self-restart.. local play, no broadcast')
+		elif SYNC_MASTER:
 			zbroadcast('stop')
 			zbroadcast('play', media, SYNC_BUFFER)
 			print('doPlay: sync master.. broadcast')
@@ -178,8 +194,8 @@ def doPlay(media, debounce=0):
 # SYNC_MASTER INIT: let slaves join zyre before the first broadcast
 @hplayer.on('app-run')
 def sync_init(ev, *args):
-	if SYNC_MASTER:
-		time.sleep(10)
+	if SYNC_MASTER and not wall_resuming():
+		time.sleep(10)                       # (a resume broadcasts nothing: no one to wait for)
 
 # DEFAULT File
 @hplayer.on('app-run')
@@ -215,6 +231,10 @@ def play0(ev, *args):
 	# playlist loop flag: seamless (2) for a WALL/solo set with no gap — a WALL slave starts
 	# there too and the wallclock mirrors the master's mode live; 0 = end -> playlist.end ->
 	# play0 (the 2024 sync trigger, and the gap)
+	if slave and WALL and ev == 'playlist.end':
+		return                               # past its start the wallclock holds a WALL slave's flag
+		                                     # (every packet): a 2 here at each end only made them fight,
+		                                     # one cfg write each (hplayer2#t-052)
 	if (WALL or not SYNC) and (gap <= 0 or (slave and WALL)):
 		hplayer.settings.set('loop', 2) # blackless loop (wall: mpv loop=inf below)
 	else:

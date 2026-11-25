@@ -6,9 +6,10 @@ import time
 import random
 from time import sleep
 import json
-from threading import Timer, Lock, Thread
+from threading import Timer, Lock, RLock, Thread, Event, get_ident
 import queue
 import sys
+import functools
 
 from ctypes import string_at, create_string_buffer
 from sys import getsizeof
@@ -72,28 +73,87 @@ PING_PEER = 1000
 #  samples and zyre's own heartbeats: during a link-flap storm (Kouagou01-64, 2026-09-25 05:49,
 #  hundreds of ENTER/EXIT a minute for kouagou03) each teardown made the next flap likelier and
 #  starved every slave's clock sync. One long-lived worker, a queue, never a thread per peer.
+#
+#  The same worker is the ONE thread that ends a czmq actor and frees its ctypes callback
+#  (hplayer2#t-077). Dropping both in place inside stop() (0d13c87, 2026-09-29) crashed kouagou03
+#  twice inside a peer storm: two threads in one stop(), the first blocked in zactor_destroy while
+#  the callback had not returned yet, the second freeing the libffi closure the C thread was still
+#  executing -> SIGSEGV. And an object whose last reference died on its own actor's thread would
+#  have run zactor_destroy there and waited for itself. Now an owner hands (actor, callback,
+#  sockets) over exactly once, under its own lock (retire); the reaper calls zactor_destroy, which
+#  returns once the actor's shim has signalled — the callback has returned — then destroys the
+#  sockets the actor was polling, and only then drops the callback. A stopped client, subscriber
+#  or node keeps no cycle through its callback and dies by refcount, fds included, instead of
+#  waiting for health's 10-min gc.collect().
 _reapQ = queue.Queue()
 _reaper = [None]
+_reaperLock = Lock()
+_kept = []          # callbacks whose actor could not be proven finished: a leak, never a free under C
 
 def _reapLoop():
     while True:
-        peer = _reapQ.get()
+        job = _reapQ.get()
         try:
-            peer.stop()
+            job()
         except Exception as e:
-            safe_print('peer teardown error (ignored):', e)
+            safe_print('zyre teardown error (ignored):', e)
+        job = None      # hold nothing while waiting: what was torn down dies by refcount now
 
-def reap(peer):
-    peer.active = False             # out of every lookup right now, torn down in the background
-    if _reaper[0] is None or not _reaper[0].is_alive():
+def _startReaper():
+    with _reaperLock:
+        if _reaper[0] is not None and _reaper[0].is_alive():
+            return True
         t = Thread(target=_reapLoop, name='zyre-reaper', daemon=True)
         try:
             t.start()
-            _reaper[0] = t
         except RuntimeError:
-            peer.stop()             # no thread to spare: tear down inline, as before
+            return False
+        _reaper[0] = t
+        return True
+
+def _endActor(actor, fn, socks, done):
+    try:
+        try:
+            destroy = getattr(actor, '__del__', None)
+            if destroy:
+                destroy()       # zactor_destroy: $TERM if still running, then the shim's last signal
+        except Exception as e:
+            _kept.append(fn)    # not proven finished: keep its callback alive for good
+            safe_print('zyre actor teardown error (callback kept):', e)
             return
-    _reapQ.put(peer)
+        for s in socks:         # what the actor polled: only now that it has returned
+            try:
+                s.__del__()
+            except Exception as e:
+                safe_print('zyre socket teardown error (ignored):', e)
+    finally:
+        done.set()
+
+def retire(actor, fn, *socks):
+    """Hand a czmq actor, its ctypes callback and the sockets it polls to the reaper, which ends
+    them in that order. The caller has already let go of all three (it cleared its own attributes
+    under its lock): from here the reaper is their only owner. Returns an Event set once done.
+    No thread to spare: the job waits in the queue — kept alive, ended by nobody else — until
+    the next retire() or reap() starts a reaper."""
+    done = Event()
+    if actor is None:
+        for s in socks:
+            try:
+                s.__del__()
+            except Exception:
+                pass
+        done.set()
+        return done
+    _reapQ.put(functools.partial(_endActor, actor, fn, socks, done))
+    _startReaper()
+    return done
+
+def reap(peer):
+    peer.active = False             # out of every lookup right now, torn down in the background
+    if not _startReaper():
+        peer.stop()                 # no thread to spare: tear down inline, as before
+        return
+    _reapQ.put(peer.stop)
 
 PRECISION = 1000000
 SAMPLER_SIZE = 100
@@ -147,7 +207,13 @@ class TimeClient():
         self.status = 0
         self._refresh = None
         self._terminated = False
-        self._actor_fn = zactor_fn(self.actor_fn_guarded) # ctypes function reference must live as long as the actor.
+        # start()/stop() run on the refresh Timer, the node's actor (Peer.sync), the reaper, the
+        # wallclock (re-arm) and a clock-step Timer: one at a time per client (hplayer2#t-077).
+        # stop() is final — a refresh Timer landing after it starts nothing.
+        self._lock = RLock()
+        self._closed = False
+        self.actor = None
+        self._actor_fn = None
         self.done = True
         self.failures = 0           # failed rounds in a row
         self.start()
@@ -162,13 +228,17 @@ class TimeClient():
                 self._arm(10)
 
     def start(self):
-        if not self.done: 
-            self.stop()
-        
-        self._terminated = False
-        self.actor = Zactor(self._actor_fn, create_string_buffer(b"Sync request"))
-        self.done = False
-        self._arm(120)
+        with self._lock:
+            if self._closed:
+                return
+            self._halt()
+            self._terminated = False
+            # One ctypes callback per actor: it must outlive the actor, so it is retired with it
+            # and freed by the reaper after zactor_destroy returned (see retire).
+            self._actor_fn = zactor_fn(self.actor_fn_guarded)
+            self.actor = Zactor(self._actor_fn, create_string_buffer(b"Sync request"))
+            self.done = False
+            self._arm(120)
 
     def _arm(self, delay):
         # Schedule the next round. A Timer that cannot start (`can't start new thread`) used to
@@ -176,29 +246,44 @@ class TimeClient():
         # while the actor just launched sampled for nobody: kouagou03 freewheeled ~60 h that way
         # (2026-09-21 23:28, a link-loss rebuild storm). Never raise: an unarmed client reports
         # stalled() and wallclock re-arms it.
-        if self._refresh:
-            self._refresh.cancel()
-        self._refresh = None
-        t = Timer(delay, self.start)
-        try:
-            t.start()
-            self._refresh = t
-        except RuntimeError as e:
-            safe_print("\t", "["+self.client_ip+"]", "refresh timer unavailable (" + str(e) + "): waiting for a re-arm")
+        with self._lock:
+            if self._closed:
+                return          # the round that ends after stop() schedules nothing
+            if self._refresh:
+                self._refresh.cancel()
+            self._refresh = None
+            t = Timer(delay, self.start)
+            try:
+                t.start()
+                self._refresh = t
+            except RuntimeError as e:
+                safe_print("\t", "["+self.client_ip+"]", "refresh timer unavailable (" + str(e) + "): waiting for a re-arm")
 
     def stalled(self):
         # round over, not stopped, and nothing scheduled to start the next one
         return self.done and not self._terminated and not (self._refresh and self._refresh.is_alive())
 
-    def stop(self):
+    def _halt(self):
+        # Under self._lock. Ask a running round to end (bounded 1 s), then let go of its actor and
+        # callback: the reaper ends the actor if it still runs, and frees the callback after.
         self._terminated = True
-        if not self.done:
-            self.actor.sock().send(b"s", b"$TERM")
+        if not self.done and self.actor is not None:
+            try:
+                self.actor.sock().send(b"s", b"$TERM")
+            except Exception:
+                pass
             retry = 0
             while not self.done and retry < 10:
                 sleep(0.1)
                 retry += 1
-        t, self._refresh = self._refresh, None      # a stopped client holds no finished Timer (3.13+: 8 MB each)
+        actor, fn, self.actor, self._actor_fn = self.actor, self._actor_fn, None, None
+        retire(actor, fn)
+
+    def stop(self):
+        with self._lock:
+            self._closed = True
+            self._halt()
+            t, self._refresh = self._refresh, None      # a stopped client holds no finished Timer (3.13+: 8 MB each)
         if t:
             t.cancel()
 
@@ -307,23 +392,28 @@ class Subscriber():
 
         self.sub = Zsock.new_sub(("tcp://"+ip+":"+port).encode(), topic.encode())
 
-        self._actor_fn = zactor_fn(self.actor_fn_guarded) # ctypes function reference must live as long as the actor.
+        self._lock = RLock()        # stop() from the reaper and the node's stop, one at a time (t-077)
+        self._closed = False
+        self.actor = None
+        self._actor_fn = None
         self.done = True
         self.start()
 
         # self.node.interface.log("Subscribing to", ip)
 
     def start(self):
-        if not self.done: 
-            self.stop()
-        
-        self.actor = Zactor(self._actor_fn, create_string_buffer(b"Subscriber"))
-        self.done = False
-        
-    def stop(self):
-        # Only a running actor gets $TERM: a send into a finished actor's pipe has no peer and can
-        # block (same trap as ZyreNode.stop, kmini-001 2026-09-04).
-        if not self.done:
+        with self._lock:
+            if self._closed:
+                return
+            self._halt()
+            self._actor_fn = zactor_fn(self.actor_fn_guarded)   # one per actor, retired with it (see retire)
+            self.actor = Zactor(self._actor_fn, create_string_buffer(b"Subscriber"))
+            self.done = False
+
+    def _halt(self, *socks):
+        # Under self._lock. Only a running actor gets $TERM: a send into a finished actor's pipe has
+        # no peer and can block (same trap as ZyreNode.stop, kmini-001 2026-09-04).
+        if not self.done and self.actor is not None:
             try:
                 self.actor.sock().send(b"s", b"$TERM")
             except Exception:
@@ -332,11 +422,25 @@ class Subscriber():
             while not self.done and retry < 10:
                 sleep(0.1)
                 retry += 1
-        self.sub.__del__()
+        actor, fn, self.actor, self._actor_fn = self.actor, self._actor_fn, None, None
+        retire(actor, fn, *socks)
+
+    def stop(self):
+        with self._lock:
+            if self._closed:
+                return              # the SUB socket is destroyed once
+            self._closed = True
+            # The SUB socket goes to the reaper with the actor: destroyed after the actor returned,
+            # never under its poller (it used to be destroyed here, running actor or not). The
+            # attribute stays: a running actor still compares against it until it reads $TERM.
+            self._halt(self.sub)
 
     def subscribe(self, topic):
-        Zsock.set_unsubscribe(self.sub, topic.encode())
-        Zsock.set_subscribe(self.sub, topic.encode())
+        with self._lock:
+            if self._closed:
+                return
+            Zsock.set_unsubscribe(self.sub, topic.encode())
+            Zsock.set_subscribe(self.sub, topic.encode())
 
     # SUB Zactor
     def actor_fn(self, pipe, args):
@@ -616,7 +720,9 @@ class ZyreNode ():
         self._clockPair = (time.time(), time.monotonic())
 
         # Start Poller
-        self._actor_fn = zactor_fn(self.actor_fn_guarded) # ctypes function reference must live as long as the actor.
+        self._stopping = False  # stop() runs once (t-077)
+        self._actorIdent = None # the actor's thread: never the one that ends it (see stop)
+        self._actor_fn = zactor_fn(self.actor_fn_guarded) # ctypes function reference must live as long as the actor (the reaper frees it after).
         if netiface:
             netiface = create_string_buffer(str.encode(netiface))
         self.actor = Zactor(self._actor_fn, netiface)
@@ -737,6 +843,7 @@ class ZyreNode ():
     # because the supervisor only watched for a broken poller. Now the node is flagged broken and
     # the supervisor rebuilds it in place.
     def actor_fn_guarded(self, pipe, netiface):
+        self._actorIdent = get_ident()
         try:
             self.actor_fn(pipe, netiface)
         except BaseException as e:
@@ -807,6 +914,8 @@ class ZyreNode ():
                 # ENTER: add to book for external contact (i.e. TimeSync)
                 if e.type() == b"ENTER":
                     self.enters += 1
+                    if self.closed:
+                        continue        # stop() is stopping every peer in the book: add none behind it (t-077)
                     self._flip(e.peer_name().decode(errors='replace'))
                     self._expireGone()
                     # The same process coming back (a link flap: EXIT then ENTER of one uuid, the
@@ -937,12 +1046,14 @@ class ZyreNode ():
         self.interface.log('node stopped')   # WEIRD: print helps the closing going smoothly..
         self.done = True
 
+    NODE_END_WAIT = 5.0     # s stop() waits for the reaper to end this node before a rebuild goes on
+
     def stop(self):
+        with self._pipe_lock:
+            if self._stopping:
+                return          # one stop per node: its actor, callback and sockets end once
+            self._stopping = True
         self.closed = True     # a local-first broadcast must not shout into a zyre being destroyed
-        self.interface.log('stopping peers')
-        for peer in list(self.book.values()) + [p for p, _ in list(self.gone.values())]:
-            peer.stop()
-        self.gone = {}
 
         self.interface.log('stopping node')
         # The actor usually leaves by itself (its loop breaks on `stopped`), and czmq
@@ -964,11 +1075,32 @@ class ZyreNode ():
             sleep(0.1)
             retry += 1
 
+        # Peers after the actor (t-077): once it has stopped, no ENTER adds a peer this loop misses.
+        # A stopped node keeps none — each one a client, a subscriber, timers and fds.
+        self.interface.log('stopping peers')
+        peers = list(self.book.values()) + [p for p, _ in list(self.gone.values())]
+        self.book = {}
+        self.gone = {}
+        for peer in peers:
+            peer.stop()
+        peers = None
+
+        # The actor, its callback and the sockets it polled end on the reaper, in that order:
+        # zyre only once the actor that polls it has returned (it used to be destroyed here after
+        # a bounded second, running actor or not). The time server's socket only if that thread
+        # is done. stop() waits for it, so the old zyre is gone before a rebuild starts a new one.
         # self.zyre.stop()        # HANGS !
-        self.zyre.__del__()
-        self.publisher.__del__()
-        self.timereply.__del__()
-            
+        with self._pipe_lock:
+            actor, fn, self.actor, self._actor_fn = self.actor, self._actor_fn, None, None
+        socks = [self.zyre, self.publisher] + ([self.timereply] if self._tsDone else [])
+        if self._tsDone:
+            self._tsThread = None
+        if not _startReaper() and get_ident() != self._actorIdent:
+            _endActor(actor, fn, socks, Event())      # no thread to spare: this thread is the owner
+            return
+        if not retire(actor, fn, *socks).wait(self.NODE_END_WAIT):
+            self.interface.log('node teardown still queued on the reaper after', self.NODE_END_WAIT, 's')
+
 
     def peer(self, uuid):
         if uuid in self.book and self.book[uuid].active:
@@ -998,6 +1130,8 @@ class ZyreNode ():
         msg.addstr(topic.encode())
         msg.addstr(json.dumps(args).encode())
         with self._pipe_lock:
+            if self.actor is None:
+                return          # handed to the reaper by stop(): never touch a retired actor
             Zmsg.send(msg, self.actor.sock())
 
     #

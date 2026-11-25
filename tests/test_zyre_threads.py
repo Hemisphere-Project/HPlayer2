@@ -255,7 +255,8 @@ def test_two_threads_publish_through_the_actor_pipe_one_at_a_time(node):
 
 
 def test_the_actor_sends_and_caches_every_publish(node):
-    actor = threading.Thread(target=node.actor_fn, args=(node.actor.sock(), None), name='actor')
+    pipe = node.actor.sock()                    # stop() hands the actor to the reaper (t-077): keep its pipe
+    actor = threading.Thread(target=node.actor_fn, args=(pipe, None), name='actor')
     actor.start()
 
     together(lambda t, i: node.publish('peer.status', {'t': t, 'i': i}))
@@ -270,9 +271,10 @@ def test_the_actor_sends_and_caches_every_publish(node):
     assert node.pub_cache[b'peer.status'].frames == [topic, uuid, payload]
     assert json.loads(payload)['i'] == 49
 
-    sent = len(node.actor.sock().frames)
+    assert node.actor is None                   # retired: no caller can reach the actor any more
+    sent = len(pipe.frames)
     node.publish('peer.status', {'late': True})  # after stop: dropped, not queued to a dead actor
-    assert len(node.actor.sock().frames) == sent
+    assert len(pipe.frames) == sent
 
 
 def test_zyre_actor_calls_never_overlap(node):

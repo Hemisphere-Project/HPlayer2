@@ -34,6 +34,28 @@ DRAIN_HOLD = 3
 # without the profile's 'unbuf_' prefix). Volume and the rest are not orders: they never move it.
 ORDER_EVENTS = ('play', 'playindex', 'playz', 'playpause', 'next', 'prev', 'stop', 'pause', 'resume')
 
+# A fixed master's timeline kept across health's self-restart (hplayer2#t-079). KOUAGOU 30/09: a
+# master restarted at the loop point played again from 0 ~25 s later, while its slaves chased their
+# model of it (last packet + elapsed, wrapped at the length) - they jumped back ~28 s when its clock
+# returned. health writes the wall time of the timeline's position 0 here before it exits; the next
+# process reads it once and plays where that model already is.
+RESUME = '/run/hplayer2-resume.json'
+RESUME_MAX_AGE = 300.0      # s: an older record is not this restart's
+RESUME_WINDOW = 120.0       # s from the start: no play of the file by then -> forgotten
+RESUME_SETTLE = 30.0        # s after the seek: the profile's other boot plays stay local (resuming())
+RESUME_HOLD = 5.0           # s after the start: the clock goes out even with the landing unconfirmed
+# The resume is a PRE-ROLL: pause, seek exactly to where the timeline will be RESUME_PREROLL s from
+# now, start there and then. mpv reports an exact seek's target the moment it starts, but a film
+# decodes from its keyframe before it moves - 1.8 then 4.1 s for 1080p on a Pi 3B+ (rig 20/11): a
+# clock sent off that first reading put the master 2 s behind its slaves, and a seek that leads by
+# the last lag overshot the next. Paused, the decode costs nothing on the timeline.
+RESUME_PREROLL = 6.0        # s: the first pre-roll's margin (doubled when the decode outran it)
+RESUME_PREROLLS = 3         # pre-rolls at most, then the clock goes out and the slaves trim the rest
+RESUME_START_EARLY = 0.02   # s: unpause this early (the send loop ticks every 50 ms)
+RESUME_RUN = 0.3            # s of latches that must advance with the wall clock to call it running
+RESUME_RUN_SLIP = 0.15      # s: how far position and wall may disagree over RESUME_RUN and still run
+RESUME_TOL = 0.15           # s: running this close to the timeline = landed
+
 
 def natural_key(name):
     """Name order for the leader tie-break: Anna-2 < Anna-10 (a plain string compare says the
@@ -300,6 +322,13 @@ class WallclockInterface (BaseInterface):
         self._posHold = 0               # > 0: the latch may be a drained OLD position (DRAIN_*)
         if self.player:
             self.hplayer.on(self.player.name + '.status')(self._onPlayerStatus)
+        # Self-restart resume (RESUME_*): a fixed master only - an elected leader is no leader after
+        # a restart, and a follower chases whoever leads.
+        self._resume = None             # the record, while it governs this start
+        self._resumeUntil = LONG_AGO    # mono: the record is forgotten past this
+        self._resumeSeek = None         # the pre-roll's state (dict, _resumePreroll) once it began
+        if self.master and not self.elected:
+            self._loadResume()
         if self.master or self.elected:
             self.drifter = None
         if not self.master:
@@ -695,6 +724,180 @@ class WallclockInterface (BaseInterface):
                 except (TypeError, ValueError):
                     pass
 
+    def saveResume(self, sample=None):
+        """health's _doRestart, just before the exit: where this master's timeline stands, as the
+        wall time of its position 0 - the line the slaves' model of us follows. A seamless one-file
+        loop only: a cue list moves to another file at its end. The latch first (the `at` the
+        slaves were sent), else health's own mpv reading `sample` (time-pos, duration, path, wall):
+        on a clock-silent restart the player's view is the frozen part."""
+        if not self.master or self.elected or not self.seamless or not self.player:
+            return None
+        media = self.player.status('media')
+        try:
+            dur = float(self.player.status('duration') or 0)
+        except (TypeError, ValueError):
+            dur = 0.0
+        latch = self._latch
+        if latch is not None and not self._posHold and time.monotonic() - latch[2] <= 1.0:
+            t0 = latch[1] / PRECISION - latch[0]
+        elif sample and sample.get('time-pos') is not None and sample.get('wall'):
+            t0 = float(sample['wall']) - float(sample['time-pos'])
+            media = media or sample.get('path')
+            dur = dur or float(sample.get('duration') or 0)
+        else:
+            return None
+        if not media or dur <= 3:
+            return None
+        rec = {'t0': t0, 'm': os.path.basename(media), 'dur': dur, 'at': time.time()}
+        try:
+            tmp = RESUME + '.tmp'
+            with open(tmp, 'w') as f:
+                json.dump(rec, f)
+            os.replace(tmp, RESUME)
+        except OSError as e:
+            self.log('resume record not written:', e)
+            return None
+        return rec
+
+    def _loadResume(self):
+        """Read health's record once, and remove it: one restart, one resume."""
+        try:
+            with open(RESUME) as f:
+                rec = json.load(f)
+        except (OSError, ValueError):
+            return
+        finally:
+            try:
+                os.unlink(RESUME)
+            except OSError:
+                pass
+        try:
+            age = time.time() - float(rec['at'])
+            float(rec['t0'])
+            ok = 0 <= age <= RESUME_MAX_AGE and float(rec['dur']) > 3 and bool(rec.get('m'))
+        except (KeyError, TypeError, ValueError, AttributeError):
+            ok, age = False, -1
+        if not ok:
+            self.log('resume record ignored (stale or malformed):', rec)
+            return
+        self._resume = rec
+        self._resumeUntil = time.monotonic() + RESUME_WINDOW
+        self.log('self-restart %d s ago: resuming %s on its timeline, not at 0' % (age, rec['m']))
+
+    def resuming(self):
+        """The profile asks before its boot play. True = health restarted this master and the
+        slaves still play on their model of it: play locally and broadcast no stop/play (they
+        would replay from 0) - the send loop seeks to the timeline."""
+        return self._resume is not None and time.monotonic() < self._resumeUntil
+
+    def _resumeGate(self):
+        """_runMaster, every tick while a resume record governs: True = the clock may go out. Until
+        the player is on the timeline nothing goes out, not even the stopped beat, which would
+        release the slaves' chase of their model."""
+        rec = self._resume
+        if rec is None:
+            return True
+        now = time.monotonic()
+        if now >= self._resumeUntil:
+            self._resume = None
+            if self._resumeSeek is None:
+                self.log('resume: no play of', rec['m'], 'within %d s: forgotten' % RESUME_WINDOW)
+            return True
+        dur = float(rec['dur'])
+        latch = self._latch
+        seek = self._resumeSeek
+        if seek is None:
+            if not self.player.isPlaying():
+                return False            # still booting: the slaves chase their model meanwhile
+            media = os.path.basename(self.player.status('media') or '')
+            if media and media != rec['m']:
+                self._resume = None
+                self.log('resume: playing', media, 'not', rec['m'], '- forgotten')
+                return True
+            try:
+                pdur = float(self.player.status('duration') or 0)
+            except (TypeError, ValueError):
+                pdur = 0.0
+            if not media or pdur <= 0 or latch is None or now - latch[2] > 1.0:
+                return False            # the file is loading: no position to seek from yet
+            if abs(pdur - dur) > self.durTolerance:
+                self._resume = None
+                self.log('resume: %s is %.2f s long, the record says %.2f - forgotten' % (media, pdur, dur))
+                return True
+            self._resumeUntil = now + RESUME_SETTLE
+            err = self._resumeErr(latch, rec, dur)
+            if abs(err) <= RESUME_TOL:
+                self._resumeSeek = {'phase': 'done', 'n': 0}
+                self.log('resume: already on the timeline (%+d ms, at its loop point): no seek' % (err * 1000))
+                return True
+            return self._resumePreroll(rec, dur, RESUME_PREROLL, 1, media)
+        if seek['phase'] == 'done':
+            return True
+        if seek['phase'] == 'preroll':
+            if time.time() < seek['start'] - RESUME_START_EARLY:
+                return False            # paused on the target frame until the timeline gets there
+            self.player.resume()
+            seek['phase'], seek['runAt'], seek['anchor'] = 'running', now, None
+            return False
+        # running: landed = moving with the wall clock (two latches RESUME_RUN apart), on the timeline
+        if now - seek['runAt'] > RESUME_HOLD:
+            seek['phase'] = 'done'
+            self.log('resume: landing unconfirmed %d s after the start: clock out anyway' % RESUME_HOLD)
+            return True
+        if latch is None or latch[2] <= seek['runAt']:
+            return False
+        if not (seek['target'] - 0.5 <= latch[0] <= seek['target'] + (latch[2] - seek['runAt']) + 0.5):
+            return False                # a position from before the pre-roll still in the pipe
+        anchor = seek['anchor']
+        if anchor is None:
+            seek['anchor'] = (latch[0], latch[2])
+            return False
+        span = latch[2] - anchor[1]
+        if span < RESUME_RUN:
+            return False
+        if abs((latch[0] - anchor[0]) - span) > RESUME_RUN_SLIP:
+            seek['anchor'] = (latch[0], latch[2])   # still frozen (the decode outran the pre-roll) or jerky
+            return False
+        err = self._resumeErr(latch, rec, dur)
+        if abs(err) <= RESUME_TOL:
+            seek['phase'] = 'done'
+            self.log('resume: on the timeline (%+d ms, running): clock out' % (err * 1000))
+            return True
+        if seek['n'] >= RESUME_PREROLLS:
+            seek['phase'] = 'done'
+            self.log('resume: still %+d ms off after %d pre-rolls: clock out, the slaves trim the rest'
+                     % (err * 1000, seek['n']))
+            return True
+        self.log('resume: started %+d ms off the timeline (the decode outran %.0f s): pre-roll again'
+                 % (err * 1000, seek['margin']))
+        return self._resumePreroll(rec, dur, seek['margin'] * 2, seek['n'] + 1, rec['m'])
+
+    @staticmethod
+    def _resumeErr(latch, rec, dur):
+        """How far the latched position sits from the record's timeline, wrapped to +-dur/2 (s)."""
+        err = latch[0] - (latch[1] / PRECISION - float(rec['t0'])) % dur
+        return ((err + dur / 2) % dur) - dur / 2
+
+    def _resumePreroll(self, rec, dur, margin, n, media):
+        """Pause, seek exactly to where the timeline will be `margin` s from now, and start there and
+        then: the film decodes from its keyframe while paused, so the start lands on the timeline
+        whatever that costs (rig 20/11: 1.8, then 4.1 s on a 1080p film on a Pi 3B+ - a seek-and-go
+        cannot aim at a lag that changes with every target)."""
+        t0 = float(rec['t0'])
+        start = time.time() + margin
+        target = (start - t0) % dur
+        if not (1.0 < target < dur - 1.0):
+            start += 2.0                # clear of the loop point: mpv wraps the file itself there
+            target = (start - t0) % dur
+        self.player.pause()
+        self.player.seekTo(target * 1000, exact=True)
+        self._resumeSeek = {'phase': 'preroll', 'target': target, 'start': start, 'margin': margin,
+                            'n': n, 'anchor': None, 'runAt': None}
+        self._resumeUntil = time.monotonic() + (start - time.time()) + RESUME_SETTLE
+        self.log('resume: pre-roll %d: paused at %.2f s of %s, starting in %.1f s on the timeline'
+                 ' (where the slaves model this master)' % (n, target, media, start - time.time()))
+        return False
+
     def _peerIps(self):
         ips = []
         z = self.hplayer.interface('zyre')
@@ -811,6 +1014,8 @@ class WallclockInterface (BaseInterface):
                     continue            # a follower: someone else emits
                 if self._dark:
                     continue            # leading with no media to play: silence, never a p=0 beat
+            elif self._resume is not None and not self._resumeGate():
+                continue                # a self-restart not yet on the slaves' timeline (RESUME_*)
 
             media = self.player.status('media')
             dur = self.player.status('duration')
@@ -979,6 +1184,25 @@ class WallclockInterface (BaseInterface):
         another length: then our file must END (shorter: stop and wait for the master;
         longer: the master's wrap seeks us back) instead of wrapping on its own."""
         return self._masterSeamless and (self._followIdx == 0 or self._sameDur)
+
+    def _mirrorLoop(self):
+        """Hold the slave's playlist loop flag to what the master's mode and our cue allow:
+        2 (wrap) only when mpv loops our file itself (oneLoop), else 0 — under a playlist-owned
+        loop our file must END and stay ended (the master's next play broadcast restarts us), and
+        a cue file of another length must end too (shorter: hold; longer: seeked back at the
+        master's wrap), never wrap to index 0 on its own. Every packet, not on a mode change only:
+        the profile writes the flag as well (biennale's play0 sets 2 on a WALL slave at each
+        playlist end), and one stale 2 lets a one-file cue playlist restart our file at 0 before
+        the hold can stop it (hplayer2#t-052, rig run 21/11: ③'s short file played from 0 while
+        the master sat at 33 s). A no-op while the flag already reads right."""
+        one = self.oneLoop()
+        want = 2 if one else 0
+        if self.hplayer.settings.get('loop') == want:
+            return
+        self.hplayer.settings.set('loop', want)
+        if self.player and self.player.isPlaying():
+            self.player._applyOneLoop(one)          # the settings' do-loop re-applied mpv's: ours wins
+            self._loopApplied = one
 
     def _startCue(self, idx, why):
         pattern = index_pattern(idx)
@@ -1506,16 +1730,12 @@ class WallclockInterface (BaseInterface):
             # its loop to the playlist (several cues, loop gap) never leaves a slave wrapping
             # seamlessly on its own — and the other way round.
             # (elected: off — the profile owns the loop, Anna runs loop=-1 and loops '_loop' tracks itself)
-            l = bool(pkt.get('l', 1))
-            if l != self._masterSeamless and not self.elected:
-                self._masterSeamless = l
-                self.log('master loops ' + ('seamlessly (mpv)' if l else 'through its playlist') + ' -> mirroring')
-                # playlist loop too: under a playlist-owned loop our file must END and stay
-                # ended (the master's next play broadcast restarts us), not wrap to index 0
-                self.hplayer.settings.set('loop', 2 if l else 0)
-                if self.player and self.player.isPlaying():
-                    self.player._applyOneLoop(self.oneLoop())
-                    self._loopApplied = self.oneLoop()
+            if not self.elected:
+                l = bool(pkt.get('l', 1))
+                if l != self._masterSeamless:
+                    self._masterSeamless = l
+                    self.log('master loops ' + ('seamlessly (mpv)' if l else 'through its playlist') + ' -> mirroring')
+                self._mirrorLoop()
 
             # Master not playing
             if not pkt.get('p', False):
@@ -1592,12 +1812,17 @@ class WallclockInterface (BaseInterface):
                     if want != self._loopApplied and self.player.isPlaying():
                         self.player._applyOneLoop(want)      # lengths differ / master not seamless: our file must end
                         self._loopApplied = want
+                    self._mirrorLoop()                       # ...and the playlist must not wrap it either
                     if not self._sameDur and clock >= self._myDur - 0.05:
                         if not self._holdEnd:
                             self._holdEnd = True
                             self.log('cue %d: our file ends at %.1fs, master is at %.1fs -> stopped, waiting for it' % (midx, self._myDur, clock))
-                            if self.player.isPlaying():
-                                self.player.stop()
+                        if self.player.isPlaying():
+                            # held means silent: whatever restarted our file meanwhile (the hold
+                            # can land in the instant between a restart's do-play and its
+                            # « playing »), stop it again — only the master's loop/cue change
+                            # (below / _startCue) brings it back
+                            self.player.stop()
                         self.drifter.release()
                         continue
                     if self._holdEnd:

@@ -1,10 +1,12 @@
 from core.engine.hplayer import HPlayer2        # Import base HPlayer2 class 
 
+MEDIA = ['/data/usb', '/data/media']            # media folders: a USB key, the card's own media partition
+
 
 # HPLAYER2
 hplayer = HPlayer2(                             # Initialize HPlayer2 object
-        basepath=['/data/usb', '/data/media'],  # basepath is a list of base directories for media collection search. 
-        settingspath="/data/hplayer2.cfg")      # settingspath is the path to persistent settings file. If ommited, no settings (like volume) will be kept between restarts.
+        mediaPath=MEDIA,                        # media folders searched for the collection
+        config="/data/hplayer2.cfg")            # persistent settings file (volume, ...) kept between restarts
 
 
 # PLAYERS
@@ -29,6 +31,22 @@ def voldec(ev, *args):
         hplayer.emit('voldec', 1)               
 
 
+
+
+# PLAY ON BOOT: a card with no role file (RastaOS: hplayer2@auto -> 'default') plays its media in a loop,
+# so a freshly burned card shows its clip (the image's 0_mire) on a screen with no laptop (hplayer2#t-104)
+def playAll():
+        hplayer.settings.set('loop', 2)                                 # loop all (a single file loops in mpv)
+        hplayer.playlist.play(MEDIA)                                    # a missing folder lists nothing
+
+@hplayer.on('app-run')                          # settings loaded, player ready -> play
+def playOnBoot(ev, *args):
+        playAll()
+
+@hplayer.on('files.filelist-updated')           # media arrived on a card that booted with none (upload, USB key)
+def playWhenMediaArrive(ev, *args):
+        if hplayer.appRunning and hplayer.playlist.size() == 0 and not player.isPlaying():
+                playAll()
 
 
 # RUN

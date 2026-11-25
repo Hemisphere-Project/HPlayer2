@@ -289,8 +289,26 @@ class HealthInterface (BaseInterface):
         st['restarts'] = [t for t in st.get('restarts', []) if now - t < 86400] + [now]
         st['last'] = {'at': now, 'reason': reason}
         self._saveState(st)
+        self._saveResume()
         self.log(colored('RESTARTING HPlayer2 (systemd brings it back): ' + reason, 'red'))
         self.hplayer.request_shutdown(exit_code=1, force_delay=10.0)
+
+    def _saveResume(self):
+        """A fixed wallclock master leaves its timeline to the next process, which plays on it
+        instead of from 0 (hplayer2#t-079; the record is wallclock's: RESUME there)."""
+        wc = self.hplayer.interface('wallclock')
+        if not wc or not hasattr(wc, 'saveResume'):
+            return
+        p = self._player()
+        sample = mpv_get(getattr(p, '_mpv_socketpath', None), ('time-pos', 'duration', 'path')) if p else {}
+        sample['wall'] = time.time()
+        try:
+            rec = wc.saveResume(sample)
+        except Exception as e:
+            self.log('timeline not kept:', e)
+            return
+        if rec:
+            self.log('timeline kept for the next start: %s, position 0 at %.3f' % (rec['m'], rec['t0']))
 
     def _rebuildZyre(self, why):
         z = self.hplayer.interface('zyre')
@@ -381,12 +399,26 @@ class HealthInterface (BaseInterface):
         # 4. summary (one line per 10 min: what an audit greps first)
         if now - self._lastSummary >= self.SUMMARY_EVERY:
             self._lastSummary = now
-            # 4a. a full collection first. CPython 3.14's incremental collector never reached the old
-            # generation on a quiet player: every reaped Peer/TimeClient sat in its own cycle for hours
-            # (Peer <-> linker Timer, TimeClient <-> refresh Timer and its ctypes actor thunk) — 24 of
-            # them after 3 h on kouagou02, each pinning a finished Timer's 8 MB stack and ~2 fds (the
-            # 1024-fd limit in ~45 h). One gc.collect() there freed 1871 objects, 43 stacks and 52 fds in
-            # 0.32 s (2026-09-29, hplayer2#t-075). Ten minutes of garbage is a handful of objects.
+            # 4a. a full collection first — no longer zyre's net, kept as the player's GAUGE.
+            # Why it came: CPython 3.14's incremental collector never reached the old generation on a
+            # quiet player: every reaped Peer/TimeClient sat in its own cycle for hours (Peer <-> linker
+            # Timer, TimeClient <-> refresh Timer and its ctypes actor thunk) — 24 of them after 3 h on
+            # kouagou02, each pinning a finished Timer's 8 MB stack and ~2 fds (the 1024-fd limit in
+            # ~45 h). One gc.collect() there freed 1871 objects, 43 stacks and 52 fds in 0.32 s
+            # (2026-09-29, hplayer2#t-075).
+            # Zyre no longer needs it: since the reaper (hplayer2#t-103) a stopped client, subscriber or
+            # node dies by refcount, fds included. A 2-box storm of 9 800 node rebuilds on the rig
+            # (2026-11-20, hplayer2#t-077) read a flat yield on both sides — 18 a minute on the node
+            # that stays up, 27 on the one rebuilding; what it still leaks there (~1 thread + 2 fds per
+            # 100 rebuilds) is below Python, out of any collect's reach. tests/test_zyre_teardown.py
+            # holds that line with the collector off.
+            # Why it stays: the whole player still yielded ~740 objects per 10 min with zyre's cycles
+            # already gone (KOUAGOU, 2026-09-29), garbage that would wait on the slow old-generation
+            # scan again; and `gc=<freed>/<ms>` is the summary's early alarm. <freed> climbing from one
+            # summary to the next = a new cycle with a holder to find; <ms> climbing = a heap that
+            # grows (262 -> 963 ms over six days on the KOUAGOU master before http2's queue was
+            # bounded, hplayer2#t-080). Its price is that walk, under the GIL: ~0.2 s on a 3B+ while
+            # the heap stays bounded.
             t0 = time.time()
             try:
                 gcn = gc.collect()
