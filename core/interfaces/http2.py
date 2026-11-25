@@ -23,9 +23,6 @@ close_room = None
 rooms = None
 disconnect = None
 secure_filename = None
-ServiceInfo = None
-Zeroconf = None
-zero_enable = False
 
 _HTTP2_IMPORT_ERRORS = []
 
@@ -59,16 +56,8 @@ try:
 except ImportError as err:
     _HTTP2_IMPORT_ERRORS.append(("werkzeug", err))
 
-try:
-    _zeroconf = importlib.import_module("zeroconf")
-    ServiceInfo = getattr(_zeroconf, "ServiceInfo", None)
-    Zeroconf = getattr(_zeroconf, "Zeroconf", None)
-    zero_enable = ServiceInfo is not None and Zeroconf is not None
-except ImportError:
-    zero_enable = False
-
-from ..engine.network import get_allip, get_hostname
-import socket
+from ..engine import mdns
+from ..engine.network import get_hostname
 
 
 class Http2Interface (BaseInterface):
@@ -100,34 +89,17 @@ class Http2Interface (BaseInterface):
 
     # HTTP receiver THREAD
     def listen(self):
-        # Advertize on ZeroConf
-        if zero_enable:
-            zeroconf = Zeroconf()
-            info = ServiceInfo(
-                "_http._tcp.local.",
-                "HPlayer2._"+get_hostname()+"._http._tcp.local.",
-                addresses=[socket.inet_aton(ip) for ip in get_allip()],
-                port=self._port,
-                properties={},
-                server=get_hostname()+".local.",
-            )
-            zeroconf.register_service(info)
+        # Advertise on ZeroConf — never fatal: a name already taken on the LAN (two players
+        # with one hostname) is renamed, any other failure only logs; the server starts anyway
+        advert = mdns.advertise([("_http._tcp.local.", "HPlayer2._"+get_hostname(), self._port)], self.log)
 
         # Start server
         self.log( "web interface on port", self._port)
         with ThreadedHTTPServer(self, self._port) as server:
             self.stopped.wait()
 
-        # Unregister ZeroConf — bounded: unregister/close can hang on a
-        # busy mdns stack, and this thread is non-daemon (a hang here
-        # held the whole process until systemd's 90s SIGKILL).
-        if zero_enable:
-            def _bye():
-                zeroconf.unregister_service(info)
-                zeroconf.close()
-            t = threading.Thread(target=_bye, daemon=True)
-            t.start()
-            t.join(3.0)
+        # Unregister ZeroConf (bounded, see mdns.withdraw)
+        mdns.withdraw(advert)
 
 
     # Effective config for a page: a None gate resolves against the players' capabilities
