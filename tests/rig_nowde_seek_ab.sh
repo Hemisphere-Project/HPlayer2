@@ -18,6 +18,7 @@
 # Nowde 2.4 nodes answer the player's probe with HELLO only after >= 5 s of host silence (hplayer2#t-108):
 # every start waits 7 s after the stop / the SET_ROLE, and `clicks` refuses (exit 4) unless the master's
 # current instance logged `role: MASTER` — a master fallen to « v1 slave » leaves the mesh with no master.
+# `clicks` also refuses (exit 5) unless the slave's last heartbeat shows its node following (sq 1|2).
 set -euo pipefail
 cd "$(dirname "$0")/.."
 OLD=${OLD:-$(git merge-base HEAD origin/master)}   # A = the fix's own base: A/B differ by the fix alone; FIX=${FIX:-$(git rev-parse HEAD)}
@@ -139,6 +140,17 @@ case $l in "role: MASTER"*) ;; *) exit 1;; esac
 EOF
 )
 
+# on the slave: its node must follow the master over the mesh (heartbeat sq 1|2) — 25/11 node A sat
+# at sq=0 (idx -, stopped) while node B's table counted it: clicks then measure nothing
+SLAVECHK=$(cat <<'EOF'
+S=$(journalctl -t t062 --no-pager -o short-unix | grep 'start slave on' | tail -1 | awk '{print $1}'); S="@${S%%.*}"
+[ "$S" != "@" ] || { echo "$(hostname): no t062 slave start"; exit 1; }
+l=$(journalctl -u t062 --since "$S" --no-pager -o cat | sed 's/\x1b\[[0-9;]*m//g' | grep -o 'HEARTBEAT slave: sq=[0-9?]*.*' | tail -1)
+echo "$(hostname) t062: ${l:-no slave heartbeat yet (one a minute)}"
+case $l in *"sq=1 "*|*"sq=2 "*) ;; *) exit 1;; esac
+EOF
+)
+
 # on the slave: $1 = run label → per click: seeks, chase speed lines, last |timedelay|
 COLLECT=$(cat <<'EOF'
 S=$(journalctl -t t062 --no-pager -o short-unix | grep "click 1 run $1 START" | tail -1 | awk '{print $1}'); S="@${S%%.*}"
@@ -199,6 +211,7 @@ case ${1:-} in
   restart) r "${2:?host}" "restart" <<<"$START" ;;
   status)  r "$2" "${3:-60}" "${4:-25}" <<<"$STATUS" ;;
   clicks)  r b2 <<<"$ROLECHK" || { echo "master is not MASTER: run void (restart b2, or restore)"; exit 4; }
+           r b1 <<<"$SLAVECHK" || { echo "slave node not following the master (sq 0): run void"; exit 5; }
            k=0; for off in 60 -90 8 40; do k=$((k+1))
              r b1 "click $k run $2 START (${off}s)" <<<"$MARK"; r b2 "$off" <<<"$SEEK"; sleep 25; done
            r b1 "run $2 END" <<<"$MARK" ;;
