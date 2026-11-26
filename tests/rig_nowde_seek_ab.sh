@@ -206,6 +206,18 @@ ls -l $C
 EOF
 }
 
+# nowde#t-054: the Ateliers rig's channel 1 goes dark ~15-20 s every 63.000 s (an emitter in the room, not
+# a node), and a devkit slave stops ~10 s in, until it re-links ~10 s after. DARK_GRID=<epoch of one
+# window's start> (DARK_PERIOD 63, DARK_CLEAR 28 = s after a start when the slave is locked again) makes
+# `clicks` wait for clear air before each click and mark its END after the 25 s, so `collect` counts the
+# click alone, not the next window's re-link. Unset: clicks as before.
+clear_air() {
+  [ -n "${DARK_GRID:-}" ] || return 0
+  local w; w=$(awk -v g="$DARK_GRID" -v p="${DARK_PERIOD:-63}" -v c="${DARK_CLEAR:-28}" -v n="$(date +%s.%N)" \
+    'BEGIN{ph=(n-g)-p*int((n-g)/p); w=(ph<=c)?c-ph:((ph<=c+4)?0:p-ph+c); printf "%.2f", w}')
+  echo "clicks: ${w}s to clear air (dark grid ${DARK_GRID}, every ${DARK_PERIOD:-63}s)"; sleep "$w"
+}
+
 case ${1:-} in
   pre)     out=$(for h in b1 b2; do r "$h" <<<"$PRE"; r "$h" "$RIG37" "$QUIET" <<<"$BUSY"; done); echo "$out"
            ! grep -q '^BUSY' <<<"$out" || { echo "rig busy: no run now"; exit 3; } ;;
@@ -219,7 +231,8 @@ case ${1:-} in
   clicks)  r b2 <<<"$ROLECHK" || { echo "master is not MASTER: run void (restart b2, or restore)"; exit 4; }
            r b1 <<<"$SLAVECHK" || { echo "slave node not following the master (sq 0): run void"; exit 5; }
            k=0; for off in 60 -90 8 40; do k=$((k+1))
-             r b1 "click $k run $2 START (${off}s)" <<<"$MARK"; r b2 "$off" <<<"$SEEK"; sleep 25; done
+             clear_air; r b1 "click $k run $2 START (${off}s)" <<<"$MARK"; r b2 "$off" <<<"$SEEK"; sleep 25
+             [ -z "${DARK_GRID:-}" ] || r b1 "click $k run $2 END" <<<"$MARK"; done
            r b1 "run $2 END" <<<"$MARK" ;;
   collect) r b1 "$2" <<<"$COLLECT" ;;
   restore) r "$2" <<<"$RESTORE" ;;
