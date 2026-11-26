@@ -1,6 +1,5 @@
 from .base import BaseInterface
 import importlib
-import sys
 import subprocess
 import time
 
@@ -73,18 +72,33 @@ class KeyboardInterface (BaseInterface):
 
     # Bind to interface
     def bind(self, iface):
-        if iface and not isinstance(iface, str):
+        # No keyboard at start: detect() found nothing. Say so plainly — opening
+        # InputDevice(None) here used to raise a TypeError that the catch-all below
+        # logged as « Keyboard not found », the same line a real keyboard failing
+        # to open printed.
+        if not iface:
+            self.log("No keyboard attached ...")
+            return
+        if not isinstance(iface, str):
             iface = iface.src_path
         if iface != self.detect(): return
 
+        device = None
         try:
-            self.remote = InputDevice(iface)
-            self.remote.grab()
-            self.log("Keyboard connected ...")
-        except:
-            e = sys.exc_info()[0]
+            device = InputDevice(iface)
+            device.grab()
+            self.remote = device
+            self.log("Keyboard connected ...", iface)
+        except Exception as e:
+            # A keyboard IS there and could not be taken (busy, permissions, gone
+            # mid-open): name the device and the error, never only its class.
             self.remote = None
-            self.log("Keyboard not found ...", e)
+            if device is not None:
+                try:
+                    device.close()
+                except Exception:
+                    pass
+            self.log("Keyboard found but not opened ...", iface, "%s: %s" % (type(e).__name__, e))
 
     def unbind(self, iface):
         if not isinstance(iface, str):
