@@ -81,6 +81,8 @@ CMD_LOG = 0x31
 ROLE_NAMES = {0: 'slave', 1: 'master', 2: 'legacy', 3: 'standby'}    # 3: Nowde 3
 BOARD_NAMES = {0: 'unknown', 1: 'devkit', 2: 'atoms3', 3: 'atoms3-lite', 4: 'atom', 5: 'esp32'}
 LR_NAMES = {0: 'off', 1: '250k', 2: '500k'}     # HELLO [19] / SET_LR: 2.0.3 sent 0/1, 2.4 adds 2
+SYNC_AGE_CAP = 0x3FFF          # HELLO [21..22]: 16.4 s and over, or no MEDIA_SYNC ever accepted
+HELLO_LINK_KEYS = ('link_lost', 'ms_since_sync', 'watchdog_restarts', 'sync_gaps')
 ERROR_NAMES = {0x01: 'CONFIG_INVALID', 0x02: 'SYSEX_PARSE_ERROR', 0x03: 'ESPNOW_SEND_FAILED',
                0x04: 'MESH_CLOCK_LOST_SYNC', 0x05: 'RECEIVER_TIMEOUT', 0xFF: 'UNKNOWN'}
 RESET_REASONS = {1: 'POWERON', 3: 'SW', 4: 'PANIC', 5: 'INT_WDT', 6: 'TASK_WDT', 7: 'WDT',
@@ -165,8 +167,13 @@ def parse_hello(d):
         info['sync_quality'] = d[18]       # 0 none, 1 coarse (following, mesh off), 2 locked
     if len(d) >= 20:                       # 2.0.3: long-range PHY switch as the node runs it
         info['lr'] = d[19]                 # 2.4: the mode, 0 off / 1 LR 250k / 2 LR 500k (LR_NAMES)
-    # [20..35] linkLost, stream age, watchdog restarts, syncGaps, buildId: not read here
-    # (nowde#t-031 owns the stream-age readers). 2.4 / Nowde 3 append, read by length:
+    if len(d) >= 24:                       # 2.0.5: the receive link as this node sees it
+        info['link_lost'] = bool(d[20])
+        info['ms_since_sync'] = (d[21] << 7) | d[22]   # SYNC_AGE_CAP = >= 16.4 s, or never (a master)
+        info['watchdog_restarts'] = d[23]  # radio watchdog restarts since power-on, cap 127
+    if len(d) >= 26:                       # v2.2: MEDIA_SYNC frames this node missed, 14-bit
+        info['sync_gaps'] = (d[24] << 7) | d[25]
+    # [26..35] buildId: not read here. 2.4 / Nowde 3 append, read by length:
     if len(d) >= 37:
         info['gen'] = d[36]                # protocol generation: 2 = the 2.x line, 3 = Nowde 3
     if len(d) >= 43:                       # the MAC's last 3 bytes as 6 hex chars = `Nowde - XXXXXX`
@@ -285,6 +292,25 @@ def fmt_age(seconds):
     if s < 7200:
         return '%dm' % (s // 60)
     return '%dh%02dm' % (s // 3600, (s % 3600) // 60)
+
+
+def fmt_link(info, master=False):
+    """The 2.0.5 / v2.2 HELLO tail for one log line: ` stream=0.3s gaps=12 wd=0`, ` LINK-LOST`
+    first when the node says so; '' from an older node. `stream` = how long ago the node accepted
+    its last MEDIA_SYNC, as it said it in that HELLO (`16s+` = 16.4 s and over, or never): a slave
+    whose node hears the master's position reads well under a second. A master's node is the
+    sender, it has no stream to age (it reports the cap): only its watchdog count is said."""
+    if 'ms_since_sync' not in info:
+        return ''
+    out = ''
+    if not master:
+        if info.get('link_lost'):
+            out += ' LINK-LOST'
+        ms = info['ms_since_sync']
+        out += ' stream=' + ('16s+' if ms >= SYNC_AGE_CAP else fmt_age(ms / 1000.0))
+        if 'sync_gaps' in info:
+            out += ' gaps=%d' % info['sync_gaps']
+    return out + ' wd=%d' % info['watchdog_restarts']
 
 
 def media_index_of(path):
@@ -953,6 +979,8 @@ class NowdeInterface(BaseInterface):
                     link.broken = True          # the session loop drops it and relinks
                     return
                 self._resetStrikes.pop(link.device, None)
+            for k in HELLO_LINK_KEYS:           # an older node's HELLO must not keep the last tail
+                self.node.pop(k, None)
             self.node.update(info)
             self._lastHelloAt = self._lastHeardAt
             self._hellosHeard += 1
@@ -962,7 +990,8 @@ class NowdeInterface(BaseInterface):
                      + (f" gen={info['gen']}" if 'gen' in info else "")
                      + (f" id={info['node_id']}" if 'node_id' in info else "")
                      + (f" lr={LR_NAMES.get(info['lr'], info['lr'])}" if info.get('lr') else "")
-                     + (f" rssi={info['rssi']}dBm" if info.get('rssi') is not None else ""))
+                     + (f" rssi={info['rssi']}dBm" if info.get('rssi') is not None else "")
+                     + fmt_link(info, master=info.get('role') == 'master'))
             self.emit('hello', info)
             if self._reasks and not self._nodeIntroduced:
                 self.log(f"role re-ask {self._reasks} answered: the node introduced itself")
@@ -1737,11 +1766,12 @@ class NowdeInterface(BaseInterface):
 
     def _heartbeat_line(self, now):
         """master: `slaves=4 locked=3 oldest=1.2s tables=60 heard=0.3s node-up=5h03m idx=3 playing`
-        slave:  `sq=2 hellos=30 heard=0.8s node-up=5h03m idx=3 playing`
+        slave:  `sq=2 hellos=30 heard=0.8s stream=0.1s gaps=12 wd=0 node-up=5h03m idx=3 playing`
         down:   `link DOWN 3m, node last heard 3m ago`
         `oldest` = the stalest slave the node lists (its own last-seen age); `tables`/`hellos` =
         frames heard since the last line (a master polls 1 Hz, a 2.0.1+ slave node answers each
-        2 s probe with a HELLO); `heard` = age of the last frame of any kind from the node."""
+        2 s probe with a HELLO); `heard` = age of the last frame of any kind from the node;
+        `stream`/`gaps`/`wd` = the last HELLO's 2.0.5 / v2.2 tail (fmt_link), absent from an older node."""
         role = self.role or ('slave' if self._wasSlave else 'role?')
         heard = fmt_age(now - self._lastHeardAt) if self._lastHeardAt else '-'
         if not self.isLinked():
@@ -1761,7 +1791,7 @@ class NowdeInterface(BaseInterface):
         if self._guardStopped:
             state += ' (silence guard)'
         return (f"HEARTBEAT {role}: sq={'?' if sq is None else sq} hellos={self._hellosHeard}"
-                f" heard={heard} node-up={up} {state}")
+                f" heard={heard}{fmt_link(self.node)} node-up={up} {state}")
 
     def handle_timecode(self, ev, *args):
         """Feed the external MTC/OSC clock to the shared chase-lock servo."""
