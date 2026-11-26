@@ -69,7 +69,12 @@ player.imagetime(15)
 player.doLog['events'] = True
 player.doLog['cmds'] = False
 
-PLAY_PATTERN = "[^1-9_]*.*"                  # the default loop: everything but the 1_..9_ one-shots
+# The default loop: every file except the 1_..9_ one-shots — exactly what RADAR_PATTERN does not
+# take. Files reads a pattern as a regex (`*` -> `.*`), so the old glob-style "[^1-9_]*.*" dropped
+# EVERY name starting with 1-9 or `_` (an artist's `4MONTHS_1080p25.mp4` never played from boot,
+# hplayer2#t-058). The lookahead leaves out the N_ prefix alone; it holds no `*`, so a slave on an
+# older build reads the broadcast pattern the same way. What a pattern leaves out is logged by name.
+PLAY_PATTERN = "(?![1-9]_).+"
 
 def default_pattern():
 	# same content at boot, at schedule-open and on a Nowde master (Thomas 2026-09-04): the

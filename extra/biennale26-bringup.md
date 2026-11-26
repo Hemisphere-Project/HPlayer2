@@ -40,9 +40,10 @@ ffmpeg -f lavfi -i color=c=black:s=1280x720:r=25:d=60 \
   -g 12 wall.mp4
 ```
 
-Naming is functional: `ambient.mp4` / `wall.mp4` match `PLAY_PATTERN
-[^1-9_]*.*` (default loop); `1_piece.mp4` matches `RADAR_PATTERN [1-9]_*.*`
-(radar play-out, invisible to the loop).
+Naming is functional: `1_piece.mp4` … `9_piece.mp4` match `RADAR_PATTERN [1-9]_*.*`
+(radar play-out, invisible to the loop); every other media — `ambient.mp4`, `wall.mp4`,
+`01_cue.mp4`, an artist's `4MONTHS_1080p25.mp4` — matches `PLAY_PATTERN (?![1-9]_).+`
+(default loop). The Files log names each media a pattern left out.
 
 ## Phase 0 — inventory + upgrade path (per player, one at a time)
 

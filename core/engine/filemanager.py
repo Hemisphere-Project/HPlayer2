@@ -303,6 +303,7 @@ class FileManager(Module):
                         # relative path file with WILDCARD
                         else:
                             globlist = []
+                            leftout = []
                             for root, dirs, files in os.walk(base, topdown=False):
                                 for name in files:
                                     fpath = os.path.join(root, name)
@@ -312,7 +313,13 @@ class FileManager(Module):
                                         self.log(f"Pattern '{pattern}' matched file: {fpath}")
                                     if not name.startswith('.') and match:
                                         globlist.append(fpath)
+                                    elif not name.startswith('.') and self.validExt(fpath):
+                                        leftout.append(os.path.relpath(fpath, base))
                             self.log(f"Globlist found {len(globlist)} files: {globlist}")
+                            # name every playable file the pattern dropped (hplayer2#t-058): a boot
+                            # loop whose pattern missed the card's one media said only "Play list empty"
+                            if leftout:
+                                self.log(f"Pattern '{entry}' left out {len(leftout)} media in {base}: {sorted(leftout)}")
                             for e in globlist:
                                 if os.path.isfile(e) and self.validExt(e):
                                     liste.append(e)
