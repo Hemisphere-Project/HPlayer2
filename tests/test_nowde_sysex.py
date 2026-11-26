@@ -158,6 +158,21 @@ def test_parse_running_state_empty_and_short():
     assert parse_running_state([0] * 9) == (None, [])
 
 
+def test_parse_running_state_reads_the_alone_byte_on_the_empty_chunk_only():
+    """Nowde 2.4 (v2.1 wire, sysex.cpp sendRunningState): the empty-table chunk appends a raw
+    `alone` byte after the 10-byte header -- 15 bytes on the wire, was 14. A chunk carrying a
+    record never has it, and a pre-2.4 empty chunk stops at the header: alone stays unknown."""
+    head = encode7([0, 0, 0x27, 0x10])
+    lone, _ = parse_running_state(head + [0, 0, 0, 1, 0] + [1])
+    assert lone['alone'] is True and lone['synced'] is False
+    lost, _ = parse_running_state(head + [0, 0, 0, 1, 0] + [0])
+    assert lost['alone'] is False
+    old, _ = parse_running_state(head + [0, 0, 0, 1, 0])
+    assert 'alone' not in old
+    meta, receivers = parse_running_state(head + [1, 1, 0, 1, 1] + encode7(_running_state_record(0x01, 4, [2])))
+    assert 'alone' not in meta and len(receivers) == 1
+
+
 def test_media_index_of():
     assert media_index_of('/data/media/7_intro.mp4') == 7
     assert media_index_of('07_intro.mp4') == 7

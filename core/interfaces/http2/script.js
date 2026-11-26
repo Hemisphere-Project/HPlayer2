@@ -792,9 +792,13 @@ $(document).ready(function() {
                 var n = st['slaves'] || 0;
                 var lk = (st['slaves_locked'] != null) ? st['slaves_locked'] : n;
                 var allLocked = (n > 0 && lk >= n);
-                state.text(n + ' slave' + (n === 1 ? '' : 's') + ' · ' + lk + ' locked')
+                // Nowde 2.4 `alone` (hplayer2#t-111): no peer heard since boot = a lone master, a
+                // normal single-node rack -> neutral. Had peers and lost them (false), or an older
+                // node that cannot say (null) -> 0 slaves stays red.
+                var lone = (n === 0 && st['alone'] === true);
+                state.text(lone ? '0 slaves · alone' : n + ' slave' + (n === 1 ? '' : 's') + ' · ' + lk + ' locked')
                      .removeClass('badge-secondary badge-danger badge-warning badge-success')
-                     .addClass(allLocked ? 'badge-success' : (n > 0 ? 'badge-warning' : 'badge-danger'));
+                     .addClass(allLocked ? 'badge-success' : (n > 0 ? 'badge-warning' : lone ? 'badge-secondary' : 'badge-danger'));
             } else {
                 // 2.0.1: this node's own lock (from its HELLO), not the master-only mesh_synced.
                 var q = st['sync_quality'];

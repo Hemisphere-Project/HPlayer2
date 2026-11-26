@@ -219,3 +219,35 @@ def test_status_carries_the_hello_identity(monkeypatch):
     st = [e[1] for e in i.events if e[0] == 'status'][-1]
     assert st['ident'] == {'gen': 2, 'node_id': 'CD83FC', 'lr': 1, 'rssi': None}
     assert st['weakest_rssi'] == -81
+
+
+def empty_table(tail):
+    """The master's empty-table RUNNING_STATE chunk; tail = [alone] on Nowde 2.4, [] before."""
+    return [0x7D, CMD_RUNNING_STATE] + encode7([0, 0, 0x27, 0x10]) + [0, 0, 0, 1, 0] + tail
+
+
+def test_status_says_alone_so_the_card_paints_a_lone_master_neutral(monkeypatch):
+    """hplayer2#t-111: the card reads `alone` -- True = no peer since boot (neutral), False = had
+    peers, lost them (red), None = a node too old to say (red, as before) or not the master leg."""
+    def status(i):
+        i._lastStatus = 0.0
+        i._push_status()
+        return [e[1] for e in i.events if e[0] == 'status'][-1]
+
+    i = make(monkeypatch)
+    i._handle_sysex(hello(role=1))
+    assert i.isMaster() and status(i)['alone'] is None          # no table heard yet
+    i._handle_sysex(empty_table([1]))
+    assert status(i)['alone'] is True and status(i)['slaves'] == 0
+    for f in running_state([record(1)]):
+        i._handle_sysex(f)
+    assert status(i)['alone'] is False and status(i)['slaves'] == 1
+    i._handle_sysex(empty_table([0]))
+    assert status(i)['alone'] is False and status(i)['slaves'] == 0
+    i._handle_sysex(empty_table([]))
+    assert status(i)['alone'] is None                           # pre-2.4 node: unknown
+
+    s = make(monkeypatch)
+    s._handle_sysex(hello(role=0))
+    s._handle_sysex(empty_table([1]))                           # never shown off the master leg
+    assert not s.isMaster() and status(s)['alone'] is None

@@ -239,13 +239,18 @@ def parse_running_state(d):
     """One chunk. Returns (meta, [receiver dicts]).
     The firmware only ever grows a record by appending a trailer (2.0.1 syncQuality: 37 raw ->
     43 encoded; v2.2 syncGaps: 39 -> 45), so the record size is read off the chunk, never
-    assumed: a fixed 43 dropped every pre-2.0.1 record whole and the slave table read empty."""
+    assumed: a fixed 43 dropped every pre-2.0.1 record whole and the slave table read empty.
+    Nowde 2.4 (v2.1 wire): the EMPTY-table chunk appends a raw `alone` byte -- 1 = no slave and
+    the mesh clock never heard a peer since boot (a lone master, a normal rack), 0 = had peers,
+    lost them. meta['alone'] is set only when the chunk carries it: absent = unknown (pre-2.4)."""
     if len(d) < 10:
         return None, []
     up = decode7(d[0:5])
     meta = {'uptime': (up[0] << 24) | (up[1] << 16) | (up[2] << 8) | up[3],
             'synced': bool(d[5]), 'total': d[6], 'chunk': d[7], 'chunks': d[8]}
     n = d[9]
+    if n == 0 and len(d) > 10:
+        meta['alone'] = bool(d[10])
     receivers = []
     idx = 10
     size = (len(d) - idx) // n if n else 0
@@ -621,6 +626,7 @@ class NowdeInterface(BaseInterface):
         self.receivers = []             # master: slave table from RUNNING_STATE
         self._seq_client = None         # our ALSA sequencer client, for the subscription check
         self.mesh_synced = False
+        self.mesh_alone = None          # master, Nowde 2.4: no peer heard since boot; None = unknown
         self._connected_at = 0.0
         self._lastSyncSend = 0.0
         self._lastPoll = 0.0
@@ -727,6 +733,7 @@ class NowdeInterface(BaseInterface):
         self.receivers = []
         self._chunkbuf = []
         self.mesh_synced = False
+        self.mesh_alone = None
         self._assigned.clear()
         self._lastSent = None
         self._stopSince = None
@@ -976,6 +983,7 @@ class NowdeInterface(BaseInterface):
                 # yesterday's slaves until the next RUNNING_STATE lands
                 self.receivers = []
                 self.mesh_synced = False
+                self.mesh_alone = None
                 self.emit('receivers', self.receivers)
         elif cmd == CMD_CONFIG_STATE:
             info = parse_config_state(d)
@@ -991,6 +999,9 @@ class NowdeInterface(BaseInterface):
                 self._senderHeard = True
                 self.log("a sender's table, no HELLO: going quiet so the node re-introduces itself")
             self.mesh_synced = meta['synced']
+            # Nowde 2.4: only the empty-table chunk says it; a chunk with a record means a slave
+            # is listed (not alone), an older node never says it (None: the card keeps its red)
+            self.mesh_alone = meta.get('alone', False if receivers else None)
             self._nodeUptime = meta['uptime']
             if meta['chunk'] == 0:
                 self._chunkbuf = []
@@ -1035,6 +1046,9 @@ class NowdeInterface(BaseInterface):
             'link': ('serial' if isinstance(self.port, NowdeSerialLink) else 'midi') if self.isLinked() else None,
             'node': {k: v for k, v in self.node.items() if k in ('version', 'role', 'board', 'layer', 'lr')},
             'mesh_synced': self.mesh_synced, 'slaves': len(self.receivers),
+            # master, Nowde 2.4: True = no peer heard since boot (a lone master: neutral, not a
+            # fault); False = had peers, lost them; None = an older node, or not the master leg
+            'alone': self.mesh_alone if self.isMaster() else None,
             'sync_quality': own_quality,
             'locked': (own_quality == 2) if own_quality is not None else None,
             'slaves_locked': slaves_locked,
@@ -1394,6 +1408,7 @@ class NowdeInterface(BaseInterface):
         self._resolved_port_name = None
         self.receivers = []
         self.mesh_synced = False
+        self.mesh_alone = None
         if self.lastCC is not None:     # carried over the gap: a relink must not replay it (relinking())
             self._relinkCC = self.lastCC if self.lastCC > 0 else None
         self.lastCC = None          # the next node's first CC#100 must act, even if it repeats ours
