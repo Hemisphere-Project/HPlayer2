@@ -1,16 +1,9 @@
 from .base import BaseInterface
-from ..engine.network import get_allip, get_hostname
+from ..engine import mdns
+from ..engine.network import get_hostname
 from http.server import BaseHTTPRequestHandler, HTTPServer
 import threading
-import socket
 import pprint
-
-try:
-    from zeroconf import ServiceInfo, Zeroconf 
-    zero_enable = True
-except:
-    print("import error: zeroconf is missing")
-    zero_enable = False
 
 class HttpInterface (BaseInterface):
 
@@ -20,18 +13,8 @@ class HttpInterface (BaseInterface):
 
     # HTTP receiver THREAD
     def listen(self):
-        # Advertize on ZeroConf
-        if zero_enable:
-            zeroconf = Zeroconf()
-            info = ServiceInfo(
-                "_api-http._tcp.local.",
-                "HPlayer2._"+get_hostname()+"._api-http._tcp.local.",
-                addresses=[socket.inet_aton(ip) for ip in get_allip()],
-                port=self._port,
-                properties={},
-                server=get_hostname()+".local.",
-            )
-            zeroconf.register_service(info)
+        # Advertise on ZeroConf — never fatal (a name taken on the LAN is renamed, see mdns)
+        advert = mdns.advertise([("_api-http._tcp.local.", "HPlayer2._"+get_hostname(), self._port)], self.log)
 
         # Start server
         self.log( "listening on port", self._port)
@@ -39,10 +22,8 @@ class HttpInterface (BaseInterface):
             server.handler.httpinterface = self
             self.stopped.wait()
 
-        # Unregister ZeroConf
-        if zero_enable:
-            zeroconf.unregister_service(info)
-            zeroconf.close()
+        # Unregister ZeroConf (bounded, see mdns.withdraw)
+        mdns.withdraw(advert)
 
 
 

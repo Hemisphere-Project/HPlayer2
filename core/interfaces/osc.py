@@ -2,7 +2,6 @@ from .base import BaseInterface
 from core.engine import network
 import random, time
 from sys import getsizeof
-import socket
 from threading import Thread
 
 try:
@@ -12,12 +11,8 @@ except ImportError:  # pragma: no cover - optional dependency
     OSC_DEPENDENCIES_AVAILABLE = False
     udp_client = dispatcher = osc_server = None
 
-try:
-    from ..engine.network import get_allip, get_hostname
-    from zeroconf import ServiceInfo, Zeroconf
-    ZERO_AVAILABLE = True
-except ImportError:  # pragma: no cover - zeroconf optional
-    ZERO_AVAILABLE = False
+from core.engine import mdns
+from core.engine.network import get_hostname
 
 current_milli_time = lambda: int(round(time.time() * 1000))
 
@@ -62,29 +57,11 @@ class OscInterface(BaseInterface):
         self.log("input  = udp://*:" + str(self._portIn))
         self.log("output = udp://" + str(self.hostOut) + ":" + str(self._portOut))
 
-        zeroconf = None
-        info = info2 = None
-        if ZERO_AVAILABLE:
-            zeroconf = Zeroconf()
-            info = ServiceInfo(
-                "_osc._udp.local.",
-                "OSC input._" + get_hostname() + "._osc._udp.local.",
-                addresses=[socket.inet_aton(ip) for ip in get_allip()],
-                port=self._portIn,
-                properties={},
-                server=get_hostname() + ".local.",
-            )
-            zeroconf.register_service(info)
-            if self._portOut != self._portIn:
-                info2 = ServiceInfo(
-                    "_osc._udp.local.",
-                    "OSC output._" + get_hostname() + "._osc._udp.local.",
-                    addresses=[socket.inet_aton(ip) for ip in get_allip()],
-                    port=self._portOut,
-                    properties={},
-                    server=get_hostname() + ".local.",
-                )
-                zeroconf.register_service(info2)
+        # Advertise on ZeroConf — never fatal (a name taken on the LAN is renamed, see mdns)
+        services = [("_osc._udp.local.", "OSC input._" + get_hostname(), self._portIn)]
+        if self._portOut != self._portIn:
+            services.append(("_osc._udp.local.", "OSC output._" + get_hostname(), self._portOut))
+        advert = mdns.advertise(services, self.log)
 
         server_thread = Thread(target=server.serve_forever)
         server_thread.start()
@@ -95,12 +72,7 @@ class OscInterface(BaseInterface):
         server.shutdown()
         server_thread.join()
 
-        if ZERO_AVAILABLE and zeroconf:
-            if info:
-                zeroconf.unregister_service(info)
-            if info2:
-                zeroconf.unregister_service(info2)
-            zeroconf.close()
+        mdns.withdraw(advert)
 
     def burst(self, address, *args):
         if len(args) < 2:

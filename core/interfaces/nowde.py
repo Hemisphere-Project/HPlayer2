@@ -517,6 +517,16 @@ class NowdeInterface(BaseInterface):
     POLL_INTERVAL = 1.0              # master: QUERY_RUNNING_STATE
     PROBE_INTERVAL = 2.0             # slave/auto: keepalive + role probe (silent on v1.2 nodes)
     PROBE_TIMEOUT = 6.0              # auto: no HELLO after this -> assume a legacy (v1.2) slave node
+    # hplayer2#t-108 -- a 2.x node answers a probe with its HELLO only when the host speaks after
+    # >= 5 s of silence (Nowde HOST_LINK_TIMEOUT_MS, `hostResumed`); a master node otherwise answers
+    # with its slave table. A player that missed that one HELLO (started within 5 s of the previous
+    # instance's last probe, or the node rebooted while our input was not read yet) went on probing
+    # every 2 s, never left the node its 5 s, and stayed « v1 slave » for good: a garden with no
+    # master (rig 25/11, 2 starts in 4). So in auto, while the node never said who it is and either
+    # answered with a sender's table or had its role assumed, we go quiet, then ask once again.
+    REASK_QUIET = 6.0                # silence before a re-ask (the node needs 5 s)
+    REASK_BACKOFF = (0.0, 30.0, 120.0)   # wait before re-ask 1, 2, then every later one
+    REASK_LOGGED = 3                 # re-asks logged; past them a v1.2 node's would fill the journal
 
     DEFAULTS = {
         'nowde-layer':         'hplayer2',  # master: layer we sync on
@@ -615,6 +625,7 @@ class NowdeInterface(BaseInterface):
         self._lastSyncSend = 0.0
         self._lastPoll = 0.0
         self._lastProbe = 0.0
+        self._reset_reask()             # hplayer2#t-108: role re-ask state, per link
         self._lastStatus = 0.0
         self._lastSent = None           # (index, playing, volume) of the last MEDIA_SYNC
         self._volRaw = None             # master: the slider's current value (may still be moving)
@@ -770,6 +781,53 @@ class NowdeInterface(BaseInterface):
         # slave table by a sender. Doubles as the host-link keepalive the node's LED shows.
         self._send(build_simple(CMD_QUERY_RUNNING_STATE))
 
+    # ------------------------------------------------------------------ role re-ask (#t-108)
+
+    def _reset_reask(self):
+        self._nodeIntroduced = False    # a HELLO came on this link: the node said who it is
+        self._roleAssumed = False       # auto: the role is the PROBE_TIMEOUT guess, not the node's word
+        self._senderHeard = False       # auto: a sender's table came before any HELLO
+        self._quietUntil = 0.0          # while set: no probe at all, the node counts our silence
+        self._reaskAt = 0.0             # when the next quiet window may start
+        self._lastReask = 0.0           # when the last re-ask probe went
+        self._reasks = 0
+
+    def _reask_wanted(self):
+        return (self.mode == 'auto' and not self._nodeIntroduced
+                and (self._roleAssumed or self._senderHeard))
+
+    def _probe_tick(self, now):
+        """Slave / auto, every emitter pass: the 2 s probe, the v1 fallback, and the quiet re-ask
+        while the node has not said who it is (hplayer2#t-108)."""
+        if self._quietUntil:
+            if now < self._quietUntil:
+                return                              # say nothing: the node is counting
+            self._quietUntil = 0.0
+            self._lastProbe = self._lastReask = now
+            self._reasks += 1
+            self._reaskAt = now + self.REASK_BACKOFF[min(self._reasks, len(self.REASK_BACKOFF) - 1)]
+            if self._reasks <= self.REASK_LOGGED:
+                self.log(f"role re-ask {self._reasks}: {self.REASK_QUIET:.0f} s quiet, one probe "
+                         f"(a 2.x node answers it with HELLO)"
+                         + (f"; next ones every {self.REASK_BACKOFF[-1]:.0f} s, not logged"
+                            if self._reasks == self.REASK_LOGGED else ''))
+            self._probe()
+            return
+        if now - self._lastProbe >= self.PROBE_INTERVAL:
+            self._lastProbe = now
+            self._probe()
+        if self.mode != 'auto':
+            return
+        # the v1 guess waits for a re-ask's answer, so a master is not flipped to slave and back
+        if (self.role is None
+                and now - self._connected_at > self.PROBE_TIMEOUT
+                and now - self._lastReask > self.PROBE_INTERVAL):
+            self._set_role('slave', 'no HELLO, assuming v1 node')
+            if not self._nodeIntroduced:
+                self._roleAssumed = True
+        if self._reask_wanted() and now >= self._reaskAt:
+            self._quietUntil = now + self.REASK_QUIET
+
     def set_node_role(self, role):
         """Store a role on the node (v2): 'master', 'slave' or 'auto'."""
         code = {'slave': 0, 'master': 1, 'auto': 0x7F}.get(role)
@@ -899,6 +957,11 @@ class NowdeInterface(BaseInterface):
                      + (f" lr={LR_NAMES.get(info['lr'], info['lr'])}" if info.get('lr') else "")
                      + (f" rssi={info['rssi']}dBm" if info.get('rssi') is not None else ""))
             self.emit('hello', info)
+            if self._reasks and not self._nodeIntroduced:
+                self.log(f"role re-ask {self._reasks} answered: the node introduced itself")
+            self._nodeIntroduced = True         # any HELLO, a v1 one too: no more re-asks (#t-108)
+            self._roleAssumed = self._senderHeard = False
+            self._quietUntil = 0.0
             if self.mode == 'auto' and 'role' in info:
                 self._set_role(info['role'], 'HELLO')
             if 'role' in info and self._cfg('nowde-nodelog'):
@@ -922,6 +985,11 @@ class NowdeInterface(BaseInterface):
             meta, receivers = parse_running_state(d)
             if meta is None:
                 return
+            if self.mode == 'auto' and not self._nodeIntroduced and not self._senderHeard:
+                # a sender answers the probe with its table, not its HELLO: we spoke within its
+                # last 5 s (a previous instance, a fast restart); go quiet and ask again (#t-108)
+                self._senderHeard = True
+                self.log("a sender's table, no HELLO: going quiet so the node re-introduces itself")
             self.mesh_synced = meta['synced']
             self._nodeUptime = meta['uptime']
             if meta['chunk'] == 0:
@@ -994,14 +1062,9 @@ class NowdeInterface(BaseInterface):
                             self._probe()
                         self._master_watch(now)
                     else:
-                        if now - self._lastProbe >= self.PROBE_INTERVAL:
-                            self._lastProbe = now
-                            self._probe()
+                        self._probe_tick(now)          # probe, v1 fallback, quiet re-ask (#t-108)
                         self._volume_persist_tick()   # 2.0.4: commit a settled linked volume
                         self._slave_watch(now)
-                        if (self.mode == 'auto' and self.role is None
-                                and now - self._connected_at > self.PROBE_TIMEOUT):
-                            self._set_role('slave', 'no HELLO, assuming v1 node')
                     self._push_status()
                 else:
                     # Link down (node re-enumerating, or gone for good): the guard must still run —
@@ -1339,6 +1402,7 @@ class NowdeInterface(BaseInterface):
         self._sqZeroSince = None    # a relink does not mean the master spoke)
         self._silentSince = None
         self._tableEmptySince = None
+        self._reset_reask()         # the next node introduces itself again (#t-108)
         if self.mode == 'auto':
             self.role = None        # the next node may be another role
 
