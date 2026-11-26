@@ -469,8 +469,11 @@ $(document).ready(function() {
     function seekableDuration(st) {
         return ((st['isPlaying'] || st['isPaused']) && st['duration'] > 0) ? st['duration'] : 0
     }
-    // every tick: whole percent, DOM touched only when it changes
+    // every tick: whole percent, DOM touched only when it changes. Only full.html
+    // has the bar: on simple/mini a throw here killed the whole status handler,
+    // 10x a second (caught by tests/test_http2_page_smoke.py, hplayer2#t-048)
     function seekbarTick(st) {
+        if (!seekFill) return
         var d = seekableDuration(st)
         var pct = d > 0 ? Math.round(Math.max(0, Math.min(1, st['time'] / d)) * 100) : 0
         if (pct === seekPct) return
